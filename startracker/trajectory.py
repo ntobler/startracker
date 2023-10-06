@@ -1,4 +1,4 @@
-# %%
+import dataclasses
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -243,6 +243,76 @@ def astro_rotation_matrix(
         @ np.array((1, 0, 0))[:, None]
     )[:, 0]
 
-    return scipy.spatial.transform.Rotation.from_rotvec(
+    roll = np.asarray(roll)[..., None]
+
+    rot_matrix = scipy.spatial.transform.Rotation.from_rotvec(
         az_el_axis * roll, degrees=degrees
     ).as_matrix()
+    return rot_matrix
+
+
+def seconds_to_degrees(seconds: float):
+    return seconds * (360 / (24 * 60 * 60))
+
+
+@dataclasses.dataclass
+class PolynomTrajectory:
+    position_coeffs: np.ndarray
+    start: float
+    stop: float
+
+
+def find_continuous_zero_slice(x: np.ndarray, mid_index: int) -> slice:
+    assert 0 <= mid_index <= len(x)
+    start_index = mid_index - x[mid_index::-1].argmax().item()
+    if x[start_index] == 0:
+        start_index = 0
+    else:
+        start_index += 1
+    stop_index = mid_index + x[mid_index:].argmax().item()
+    if x[stop_index] == 0:
+        stop_index = len(x)
+    return slice(start_index, stop_index)
+
+
+class TrajectoryCalculator:
+    def __init__(
+        self,
+        max_seconds: float,
+        max_dist: float,
+        motor_solver: MotorSolver,
+    ):
+        self._max_seconds = max_seconds
+        self._max_dist = max_dist
+        self._motor_solver = motor_solver
+
+    def __call__(self, azimuth: float, elevation: float):
+        seconds = np.linspace(-self._max_seconds / 2, self._max_seconds / 2, 100)
+        roll = seconds_to_degrees(seconds)
+
+        rot_matrices = astro_rotation_matrix(azimuth, elevation, roll, degrees=True)
+
+        print(rot_matrices.shape)
+
+        motor_dists = self._motor_solver.solve_motor_dists(rot_matrices)
+
+        dists_exceeds_neg_bound = motor_dists.min(axis=-1) < -self._max_dist
+        dists_exceeds_pos_bound = motor_dists.max(axis=-1) > self._max_dist
+
+        slc = find_continuous_zero_slice(
+            dists_exceeds_neg_bound + dists_exceeds_pos_bound, len(motor_dists) // 2
+        )
+
+        motor_dists = motor_dists[slc]
+        seconds = seconds[slc]
+
+        if len(seconds) == 0:
+            raise ValueError("Calculated trajectory has zero length")
+
+        poly = np.polyfit(seconds, motor_dists, 3)
+
+        return PolynomTrajectory(
+            position_coeffs=poly,
+            start=seconds.min().item(),
+            stop=seconds.max().item(),
+        )
