@@ -1,3 +1,5 @@
 .env
 .private
 .vscode
+
+test_images*
