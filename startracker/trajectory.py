@@ -19,7 +19,7 @@ def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
     Returns:
         (np.ndarray): fermat mid point shape=[..., xyz]
     """
-    a, b, c = np.swapaxes(points, -2, 0)
+    a, b, c = np.moveaxis(points, -2, 0)
 
     ba = a - b
     bc = c - b
@@ -253,6 +253,9 @@ def astro_rotation_matrix(
 
 def seconds_to_degrees(seconds: float):
     return seconds * (360 / (24 * 60 * 60))
+
+def degrees_to_seconds(degrees: float):
+    return degrees / (360 / (24 * 60 * 60))
 
 
 @dataclasses.dataclass

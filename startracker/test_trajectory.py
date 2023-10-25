@@ -17,6 +17,7 @@ def test_fermat_point():
     rng = np.random.default_rng(42)
     _test_fermat_point(rng.normal(size=(3, 3)))
     _test_fermat_point(rng.normal(size=(10, 3, 3)))
+    _test_fermat_point(rng.normal(size=(7, 4, 3, 3)))
 
 
 def test_motor_solver():
@@ -33,6 +34,7 @@ def test_motor_solver():
         "XYZ", rng.normal(size=(100, 3)), degrees=True
     )
     _test(desired_rot.as_matrix())
+    _test(desired_rot.as_matrix().reshape((10, 10, 3, 3)))
 
 
 def test_find_continuous_zero_slice():
