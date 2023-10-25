@@ -5,11 +5,13 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.spatial
 
 import trajectory
 
 # %%
 # Polynom trajectory
+
 
 def plot_polynom_trajectory():
     """Plot a polynom trajectory example."""
@@ -93,6 +95,44 @@ def max_motor_dists():
 max_motor_dists()
 
 
+def max_stepper_error(step_size=5e-3):
+    """Plot histogram of error, if the stepper has discrete steps of a given step size."""
+
+    azimuths, elevations, rolls = np.meshgrid(
+        np.arange(0, 121, 2), np.arange(1, 90, 2), [-1.875, 1.875], indexing="ij"
+    )
+    motor_dists = calc_motor_dists(azimuths, elevations, rolls, theta=np.radians(90))
+
+    m = trajectory.MotorSolver(theta=np.radians(90))
+    rots = []
+    for a, e, r in zip(azimuths.ravel(), elevations.ravel(), rolls.ravel()):
+        rots.append(
+            trajectory.astro_rotation_matrix(float(a), float(e), float(r), degrees=True)
+        )
+    rots = np.array(rots)
+    rots = rots.reshape(azimuths.shape + rots.shape[1:])
+    motor_dists = m.solve_motor_dists(rots, plot=False)
+    motor_dists = np.round(motor_dists / step_size) * step_size
+    effective_rots = m.get_rotm(motor_dists)
+
+    rots = rots.reshape((-1, 3, 3))
+    effective_rots = effective_rots.reshape((-1, 3, 3))
+    errors = scipy.spatial.transform.Rotation.from_matrix(
+        rots @ np.swapaxes(effective_rots, -1, -2)
+    ).magnitude()
+
+    plt.figure(figsize=(9, 7))
+    plt.hist(trajectory.degrees_to_seconds(np.degrees(errors)), bins=20)
+    plt.xlabel("Error (seconds)")
+    plt.yticks([])
+    plt.title(f"Error distribution assuming stepper step of {step_size*1000}um")
+    plt.grid()
+    plt.show()
+
+
+max_stepper_error()
+
+
 def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
     thetas, phis = np.meshgrid(theta_range, phi_range, indexing="ij")
 
@@ -124,7 +164,7 @@ def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
     fig, axs = plt.subplots(2, figsize=(9, 7), sharex=True, sharey=True)
     contourplot = axs[0].contourf(thetas, phis, max_motor_ranges)
     cbar = plt.colorbar(contourplot, shrink=0.6, pad=0.08)
-    cbar.ax.set_ylabel('Millimeters')
+    cbar.ax.set_ylabel("Millimeters")
     axs[0].grid()
 
     mins = roll_angle * 2 / 360 * 24 * 60
@@ -136,7 +176,7 @@ def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
 
     contourplot = axs[1].contourf(thetas, phis, min_motor_ranges)
     cbar = plt.colorbar(contourplot, shrink=0.6, pad=0.08)
-    cbar.ax.set_ylabel('Millimeters')
+    cbar.ax.set_ylabel("Millimeters")
     axs[1].grid()
     axs[1].set_xlabel("Motor shaft azimuth (degrees)")
     axs[1].set_ylabel("Motor shaft elevation (degrees)")
@@ -145,6 +185,7 @@ def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
     )
     fig.tight_layout()
     plt.show()
+
 
 low_res = 2
 theta_range = np.arange(45, 136, 5 * low_res)
