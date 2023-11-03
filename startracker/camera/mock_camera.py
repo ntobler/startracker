@@ -15,10 +15,7 @@ class MockCamera:
         pass
 
     def capture_raw(self):
-        return np.zeros((300, 200), np.uint8)
+        return np.zeros((1080, 1920), np.uint16)
 
     def capture_stacked(self) -> np.ndarray:
-        return np.zeros((300, 200), np.uint8)
-
-    def capture_auto_brightness(self):
-        pass
+        return np.zeros((1080, 1920), np.uint16)

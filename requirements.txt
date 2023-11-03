@@ -1,4 +1,4 @@
-opencv-python
 numpy
-matplotlib
-tornado
+opencv-python
+flask
+flask-sock
