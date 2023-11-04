@@ -17,11 +17,11 @@ RevisionNamingSchemeGUID=
 [OutputGroup1]
 Name=
 Description=
-TargetOutputMedium=Testpoints
+TargetOutputMedium=Testpoint Report
 VariantName=[No Variations]
 VariantScope=1
 CurrentConfigurationName=Assembly
-TargetPrinter=Virtual Printer
+TargetPrinter=Brother DCP-1610W series
 PrinterOptions=Record=PrinterOptions|Copies=1|Duplex=1|TrueTypeOptions=3|Collate=1|PrintJobKind=1|PrintWhat=0
 OutputMedium1=Print Job
 OutputMedium1_Type=Printer
@@ -36,7 +36,7 @@ OutputName1=Documentation
 OutputCategory1=Documentation
 OutputDocumentPath1=
 OutputVariantName1=
-OutputEnabled1=1
+OutputEnabled1=0
 OutputEnabled1_OutputMedium1=0
 OutputEnabled1_OutputMedium2=1
 OutputEnabled1_OutputMedium3=0
@@ -77,13 +77,13 @@ OutputVariantName2=
 OutputEnabled2=0
 OutputEnabled2_OutputMedium1=0
 OutputEnabled2_OutputMedium2=0
-OutputEnabled2_OutputMedium3=1
+OutputEnabled2_OutputMedium3=0
 OutputDefault2=0
 Configuration2_Name1=OutputConfigurationParameter1
 Configuration2_Item1=AssyAdjacencyDistance=250000|AssyGenerateCSVFormat=True|AssyGenerateIPCFormat=False|AssyGenerateSpreadSheetFormat=False|AssyGenerateTextFormat=False|AssyOriginPosition=Absolute|AssyOutlineLayer=56|AssyOutputAdjancencies=False|AssyOutputBoardOutline=False|AssyOutputTraces=False|AssyReportBottomLayerTestpoints=True|AssyReportTopLayerTestpoints=True|AssyUnits=Metric|Record=TestPointView|DocumentPath=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\[ProjectName].PcbDoc
 
 [PublishSettings]
-OutputFilePath2=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\Test Engineering\XXXXXXXXA_SchematicTitle_Testpoints.PDF
+OutputFilePath2=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\XXXXXXXXA_Startracker_Testpoints.PDF
 ReleaseManaged2=1
 OutputBasePath2=
 OutputPathMedia2=
@@ -91,10 +91,10 @@ OutputPathMediaValue2=Test Engineering
 OutputPathOutputer2=[Output Type]
 OutputPathOutputerPrefix2=
 OutputPathOutputerValue2=
-OutputFileName2=[ProjectName]_Test-Eng.PDF
+OutputFileName2=Startracker_mainboard_Test-Eng.PDF
 OutputFileNameMulti2=
 UseOutputNameForMulti2=0
-OutputFileNameSpecial2==PCB_TP_DocumentNo++PCB_TP_Revision+_+Schematic_Title+_Testpoints
+OutputFileNameSpecial2==Schematic_Title+_+Revision+_Testpoints
 OpenOutput2=1
 PromptOverwrite2=0
 PublishMethod2=0
@@ -110,9 +110,9 @@ ShowComponentParameters2=1
 GlobalBookmarks2=1
 PDFACompliance2=Disabled
 PDFVersion2=Default
-OutputFilePath3=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\Test Engineering\
+OutputFilePath3=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 ReleaseManaged3=1
-OutputBasePath3=Project Outputs for ProjectTemplate-GPV
+OutputBasePath3=
 OutputPathMedia3=
 OutputPathMediaValue3=Test Engineering
 OutputPathOutputer3=
@@ -125,9 +125,9 @@ OutputFileNameSpecial3=
 OpenOutput3=0
 
 [GeneratedFilesSettings]
-RelativeOutputPath2=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\Test Engineering\XXXXXXXXA_SchematicTitle_Testpoints.PDF
+RelativeOutputPath2=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\XXXXXXXXA_Startracker_Testpoints.PDF
 OpenOutputs2=1
-RelativeOutputPath3=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\Test Engineering\
+RelativeOutputPath3=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 OpenOutputs3=0
 AddToProject3=0
 TimestampFolder3=0

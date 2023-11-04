@@ -69,7 +69,7 @@ ClassGenCCAutoRoomEnabled=0
 ClassGenNCAutoScope=None
 DItemRevisionGUID=
 GenerateClassCluster=0
-DocumentUniqueId=
+DocumentUniqueId=XURISNAD
 
 [Document2]
 DocumentPath=\\192.168.1.200\Storragepool\Datastorrage\CAE\Altium\Altium Library\Global Library.PcbLib
@@ -106,7 +106,7 @@ GenerateClassCluster=0
 DocumentUniqueId=HXRHRRYS
 
 [Document4]
-DocumentPath=Startracker_mainboard.SchDoc
+DocumentPath=Startracker_Mainboard.SchDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -207,6 +207,40 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
 
+[Document10]
+DocumentPath=Startracker_Power.SchDoc
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=0
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=YYTAAWTR
+
+[Document11]
+DocumentPath=Startracker_Stepper.SchDoc
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=2
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=0
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=JCGHFPAQ
+
 [ProjectVariant1]
 UniqueID=873E8F09-4BF2-420F-A642-D92220AFBA1F
 Description=951.xxxx
@@ -229,112 +263,84 @@ Name=_VariantRevision
 Value=A
 
 [Parameter1]
-Name=PCB_Assy_DrawnBy
-Value=A. P. Assy
+Name=Schematic_Title
+Value=Startracker
 
 [Parameter2]
-Name=PCB_Assy_DrawnDate
-Value=dd.mm.yyyy
-
-[Parameter3]
-Name=PCB_CheckedBy
-Value=C. PCB Checker
-
-[Parameter4]
-Name=PCB_CheckedDate
-Value=dd.mm.yyyy
-
-[Parameter5]
-Name=PCB_DrawnBy
-Value=D. Designer
-
-[Parameter6]
-Name=PCB_DrawnDate
-Value=dd.mm.yyyy
-
-[Parameter7]
-Name=PCB_PartNo
-Value=XXX.XXXX
-
-[Parameter8]
-Name=PCB_PartNo
-Value=XXX.XXXX
-
-[Parameter9]
-Name=PCB_Revision
-Value=A
-
-[Parameter10]
-Name=PCB_Title
-Value=PCB_Title
-
-[Parameter11]
-Name=PCB_Title
-Value=PCB_Title
-
-[Parameter12]
-Name=PCB_TP_DocumentNo
-Value=XXXXXXXX
-
-[Parameter13]
-Name=PCB_TP_Revision
-Value=A
-
-[Parameter14]
-Name=Project
-Value=
-
-[Parameter15]
-Name=Revision
-Value=A00
-
-[Parameter16]
-Name=Schematic_CheckedBy
-Value=C. Sch Checker
-
-[Parameter17]
-Name=Schematic_CheckedBy
-Value=C. Sch Checker
-
-[Parameter18]
-Name=Schematic_CheckedDate
-Value=dd.mm.yyyy
-
-[Parameter19]
-Name=Schematic_CheckedDate
-Value=dd.mm.yyyy
-
-[Parameter20]
-Name=Schematic_DocumentNo
-Value=XXXXXXXX
-
-[Parameter21]
-Name=Schematic_DrawnBy
-Value=E. Engineer
-
-[Parameter22]
-Name=Schematic_DrawnBy
-Value=E. Engineer
-
-[Parameter23]
-Name=Schematic_DrawnDate
-Value=dd.mm.yyyy
-
-[Parameter24]
-Name=Schematic_DrawnDate
-Value=dd.mm.yyyy
-
-[Parameter25]
 Name=Schematic_Revision
 Value=A00
 
-[Parameter26]
-Name=Schematic_Title
-Value=SchematicTitle
+[Parameter3]
+Name=Schematic_DrawnDate
+Value=dd.mm.yyyy
 
-[Parameter27]
-Name=Schematic_Title
-Value=SchematicTitle
+[Parameter4]
+Name=Schematic_DrawnBy
+Value=L. Barbisch
+
+[Parameter5]
+Name=Schematic_DocumentNo
+Value=XXXXXXXX
+
+[Parameter6]
+Name=Schematic_CheckedDate
+Value=dd.mm.yyyy
+
+[Parameter7]
+Name=Schematic_CheckedBy
+Value=L. Barbisch
+
+[Parameter8]
+Name=Revision
+Value=A00
+
+[Parameter9]
+Name=Project
+Value=Startracker
+
+[Parameter10]
+Name=PCB_TP_Revision
+Value=A
+
+[Parameter11]
+Name=PCB_TP_DocumentNo
+Value=XXXXXXXX
+
+[Parameter12]
+Name=PCB_Title
+Value=Startracker
+
+[Parameter13]
+Name=PCB_Revision
+Value=A
+
+[Parameter14]
+Name=PCB_PartNo
+Value=XXX.XXXX
+
+[Parameter15]
+Name=PCB_DrawnDate
+Value=dd.mm.yyyy
+
+[Parameter16]
+Name=PCB_DrawnBy
+Value=L. Barbisch
+
+[Parameter17]
+Name=PCB_CheckedDate
+Value=dd.mm.yyyy
+
+[Parameter18]
+Name=PCB_CheckedBy
+Value=L. Barbisch
+
+[Parameter19]
+Name=PCB_Assy_DrawnDate
+Value=dd.mm.yyyy
+
+[Parameter20]
+Name=PCB_Assy_DrawnBy
+Value=L. Barbisch
 
 [Configuration1]
 Name=Project Files

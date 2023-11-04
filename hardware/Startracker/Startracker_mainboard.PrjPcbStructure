@@ -1,1 +1,2 @@
-Record=TopLevelDocument|FileName=[ProjectName]_Topsheet.SchDoc|SheetNumber= 
+Record=TopLevelDocument|FileName=Startracker_mainboard.SchDoc|SheetNumber=1
+Record=NoMainPathDocument|SourceDocument=Startracker_mainboard.SchDoc|FileName=Startracker_Power.SchDoc|SheetNumber=2

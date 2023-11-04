@@ -15,13 +15,13 @@ LifeCycleDefinitionGUID=
 RevisionNamingSchemeGUID=
 
 [OutputGroup1]
-Name=[ProjectName]_ASSY.OutJob
+Name=
 Description=
-TargetOutputMedium=STEP
+TargetOutputMedium=Schematic
 VariantName=[No Variations]
 VariantScope=1
 CurrentConfigurationName=Assy Manufacturer Files
-TargetPrinter=\\chmesrvprt2001\CHLAPRT0013
+TargetPrinter=Virtual Printer
 PrinterOptions=Record=PrinterOptions|Copies=1|Duplex=1|TrueTypeOptions=3|Collate=1|PrintJobKind=1|PrintWhat=1
 OutputMedium1=Print Job
 OutputMedium1_Type=Printer
@@ -211,7 +211,7 @@ OutputName4=Export STEP
 OutputCategory4=Export
 OutputDocumentPath4=
 OutputVariantName4=
-OutputEnabled4=1
+OutputEnabled4=0
 OutputEnabled4_OutputMedium1=0
 OutputEnabled4_OutputMedium2=0
 OutputEnabled4_OutputMedium3=0
@@ -238,7 +238,7 @@ PageOptions5=Record=PageOptions|CenterHorizontal=True|CenterVertical=True|PrintS
 Configuration5_Name1=ColumnNameFormat
 Configuration5_Item1=CaptionAsName
 Configuration5_Name2=General
-Configuration5_Item2=OpenExported=True|AddToProject=False|ReportBOMViolationsInMessages=False|ForceFit=False|NotFitted=False|Database=False|DatabasePriority=False|IncludePcbData=False|IncludeVaultData=False|IncludeCloudData=False|IncludeDocumentData=True|IncludeAlternatives=False|ShowExportOptions=True|TemplateFilename=|TemplateVaultGuid=07B0DEFC-2ADD-40AA-869D-23505D5871CA|TemplateItemGuid=3FB95171-BBAA-4195-AF87-6E9A79D8A626|TemplateRevisionGuid=E139A48D-B4C1-4F70-A498-5FF6A2876A87|BatchMode=5|FormWidth=1724|FormHeight=768|SupplierProdQty=1|SupplierAutoQty=False|SupplierUseCachedPricing=False|SupplierCurrency=<none>|SolutionsPerItem=1|SuppliersPerSolution=1|ViewType=1|UseDirectApi=False|BomSetName=
+Configuration5_Item2=OpenExported=True|AddToProject=False|ReportBOMViolationsInMessages=False|ForceFit=False|NotFitted=False|Database=False|DatabasePriority=False|IncludePcbData=False|IncludeVaultData=False|IncludeCloudData=False|IncludeDocumentData=True|IncludeAlternatives=False|ShowExportOptions=True|TemplateFilename=|TemplateVaultGuid=07B0DEFC-2ADD-40AA-869D-23505D5871CA|TemplateItemGuid=051AF0E2-ADDC-4728-8DC8-7E93BCAE6BD7|TemplateRevisionGuid=CF80B44D-DBB5-40CC-9ACA-E6C7B5620A14|BatchMode=2|FormWidth=1724|FormHeight=768|SupplierProdQty=1|SupplierAutoQty=False|SupplierUseCachedPricing=False|SupplierCurrency=<none>|SolutionsPerItem=1|SuppliersPerSolution=1|ViewType=1|UseDirectApi=False|BomSetName=
 Configuration5_Name3=GroupOrder
 Configuration5_Item3=Description=True|GPV_Number=True
 Configuration5_Name4=OutputConfigurationParameter1
@@ -254,7 +254,7 @@ OutputName6=Schematic Prints
 OutputCategory6=Documentation
 OutputDocumentPath6=[Project Physical Documents]
 OutputVariantName6=
-OutputEnabled6=0
+OutputEnabled6=1
 OutputEnabled6_OutputMedium1=0
 OutputEnabled6_OutputMedium2=0
 OutputEnabled6_OutputMedium3=0
@@ -267,7 +267,7 @@ Configuration6_Name1=OutputConfigurationParameter1
 Configuration6_Item1=Record=SchPrintView|ShowNoERC=True|ShowParamSet=True|ShowProbe=True|ShowBlanket=True|NoERCSymbolsToShow="Thin Cross","Thick Cross","Small Cross",Checkbox,Triangle|ShowNote=True|ShowNoteCollapsed=True|ExpandDesignator=True|ExpandNetLabel=True|ExpandPort=True|ExpandSheetNum=True|ExpandDocNum=True|PrintArea=0|PrintAreaRect.X1=0|PrintAreaRect.Y1=0|PrintAreaRect.X2=0|PrintAreaRect.Y2=0|DocumentPath=[Project Physical Documents]
 
 [PublishSettings]
-OutputFilePath2=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\Assembly\XXXXXXXXA_PCB_Title_PCBA.PDF
+OutputFilePath2=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\Startracker_PCB_Assy_Revision_PCBA.PDF
 ReleaseManaged2=1
 OutputBasePath2=
 OutputPathMedia2=
@@ -275,10 +275,10 @@ OutputPathMediaValue2=Assembly
 OutputPathOutputer2=[Output Type]
 OutputPathOutputerPrefix2=
 OutputPathOutputerValue2=
-OutputFileName2=[ProjectName]_ASSY.PDF
+OutputFileName2=Startracker_mainboard_ASSY.PDF
 OutputFileNameMulti2=
 UseOutputNameForMulti2=0
-OutputFileNameSpecial2==PCB_Assy_DocumentNo++PCB_Assy_Revision+_+PCB_Title+_+PCBA
+OutputFileNameSpecial2==PCB_Title+_+Revision+_+PCBA
 OpenOutput2=1
 PromptOverwrite2=0
 PublishMethod2=0
@@ -294,46 +294,46 @@ ShowComponentParameters2=1
 GlobalBookmarks2=1
 PDFACompliance2=Disabled
 PDFVersion2=Default
-OutputFilePath3=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\
+OutputFilePath3=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 ReleaseManaged3=1
-OutputBasePath3=Project Outputs for ProjectTemplate-GPV
+OutputBasePath3=Project Outputs for Startracker_mainboard
 OutputPathMedia3=
 OutputPathMediaValue3=Assembly
 OutputPathOutputer3=[Output Type]
 OutputPathOutputerPrefix3=
 OutputPathOutputerValue3=
 OutputFileName3=
-OutputFileNameMulti3==PCB_PartNo++PCB_Assy_Revision+_+PCB_Title
+OutputFileNameMulti3==Revision+_+PCB_Title
 UseOutputNameForMulti3=0
 OutputFileNameSpecial3=
 OpenOutput3=0
-OutputFilePath4=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\
+OutputFilePath4=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 ReleaseManaged4=1
-OutputBasePath4=Project Outputs for ProjectTemplate-GPV
+OutputBasePath4=Project Outputs for Startracker_mainboard
 OutputPathMedia4=
 OutputPathMediaValue4=
 OutputPathOutputer4=
 OutputPathOutputerPrefix4=
 OutputPathOutputerValue4=
 OutputFileName4=
-OutputFileNameMulti4==+VariantName++_VariantRevision+_+PCB_Title+_BOM
+OutputFileNameMulti4==PCB_Title+Revision+_BOM
 UseOutputNameForMulti4=0
 OutputFileNameSpecial4=
 OpenOutput4=1
-OutputFilePath5=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\
+OutputFilePath5=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 ReleaseManaged5=1
-OutputBasePath5=Project Outputs for ProjectTemplate-GPV
+OutputBasePath5=Project Outputs for Startracker_mainboard
 OutputPathMedia5=
 OutputPathMediaValue5=
 OutputPathOutputer5=
 OutputPathOutputerPrefix5=
 OutputPathOutputerValue5=Documentation
 OutputFileName5=
-OutputFileNameMulti5==PCB_PartNo++PCB_Assy_Revision+_+PCB_Title
+OutputFileNameMulti5==PCB_Title+_+Revision
 UseOutputNameForMulti5=0
 OutputFileNameSpecial5=
 OpenOutput5=1
-OutputFilePath6=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\XXXXXXXX_A00_SchematicTitle_SCH.PDF
+OutputFilePath6=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\XXXXXXXX_A00_Startracker_SCH.PDF
 ReleaseManaged6=1
 OutputBasePath6=
 OutputPathMedia6=
@@ -341,10 +341,10 @@ OutputPathMediaValue6=
 OutputPathOutputer6=[Output Type]
 OutputPathOutputerPrefix6=
 OutputPathOutputerValue6=
-OutputFileName6=[ProjectName]_ASSY.PDF
+OutputFileName6=Startracker_mainboard_ASSY.PDF
 OutputFileNameMulti6=
 UseOutputNameForMulti6=0
-OutputFileNameSpecial6==Schematic_DocumentNo+_+Schematic_Revision+_+Schematic_Title+_SCH
+OutputFileNameSpecial6==PCB_Title+_+Revision+_+SCH
 OpenOutput6=1
 PromptOverwrite6=1
 PublishMethod6=0
@@ -362,9 +362,9 @@ PDFACompliance6=Disabled
 PDFVersion6=Default
 
 [GeneratedFilesSettings]
-RelativeOutputPath2=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\Assembly\XXXXXXXXA_PCB_Title_PCBA.PDF
+RelativeOutputPath2=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\Startracker_PCB_Assy_Revision_PCBA.PDF
 OpenOutputs2=1
-RelativeOutputPath3=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\
+RelativeOutputPath3=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 OpenOutputs3=0
 AddToProject3=0
 TimestampFolder3=0
@@ -374,7 +374,7 @@ OpenGerberOutput3=0
 OpenNCDrillOutput3=0
 OpenIPCOutput3=0
 EnableReload3=0
-RelativeOutputPath4=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\
+RelativeOutputPath4=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 OpenOutputs4=1
 AddToProject4=1
 TimestampFolder4=0
@@ -384,7 +384,7 @@ OpenGerberOutput4=0
 OpenNCDrillOutput4=0
 OpenIPCOutput4=0
 EnableReload4=0
-RelativeOutputPath5=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\
+RelativeOutputPath5=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\
 OpenOutputs5=1
 AddToProject5=1
 TimestampFolder5=0
@@ -394,6 +394,6 @@ OpenGerberOutput5=0
 OpenNCDrillOutput5=0
 OpenIPCOutput5=0
 EnableReload5=0
-RelativeOutputPath6=C:\ProgramData\Altium\Altium Designer {0E4E1BA7-BB51-4A1F-880D-AD0C520AB478}\VaultEditCache\8DCA7ECE-FAC5-43E7-9EFB-209B2842E4C2\Released\Project Outputs for ProjectTemplate-GPV\XXXXXXXX_A00_SchematicTitle_SCH.PDF
+RelativeOutputPath6=C:\Users\Lukas\Desktop\Startracker\hardware\Startracker\Project Outputs for Startracker_mainboard\XXXXXXXX_A00_Startracker_SCH.PDF
 OpenOutputs6=1
 
