@@ -1,14 +1,15 @@
+# Flask web application to capture images using a smartphone browser or any other browser.
+
 import queue
 import threading
 import logging
-
 
 from flask import Flask, render_template, request, jsonify
 from flask_sock import Sock
 import numpy as np
 import cv2
 
-from camera import Camera
+import camera
 import image_processing
 import persistent
 
@@ -47,6 +48,9 @@ class IntrinsicCalibrator:
         cv2.imwrite(str(file), image)
         self._logger.info(f"Put image {file.name}")
         self.index += 1
+
+    def reset(self):
+        self.index = 0
 
 
 class Main:
@@ -88,8 +92,6 @@ class Main:
     def capture(
         self, exposure_ms: float, analog_gain: int, digital_gain: int, binning: int
     ):
-        image = np.random.uniform(0, 255, size=(640, 720)).astype(np.uint8)
-
         self._logger.info(f"Capture e={exposure_ms} g={analog_gain}")
         self._cam.exposure_ms = exposure_ms
         self._cam.gain = analog_gain
@@ -97,9 +99,9 @@ class Main:
         image = self._cam.capture_raw()
         self._logger.info(f"Raw bayer shape={image.shape} dtype={image.dtype}")
 
-        # Correct black level of 64
+        # Correct black level
         image = image.view(np.int16)
-        image -= 64
+        image -= 55
         np.clip(image, 0, 0x7FFF, out=image)
         image = image.view(np.uint16)
 
@@ -122,10 +124,14 @@ class Main:
         if image is not None:
             self._intrinsic_calibrator.put_image(image)
 
+    @singleton_interface
+    def reset_calibration(self):
+        self._intrinsic_calibrator.reset()
+
     def run(self):
         """Thread run method."""
         print("starting Main")
-        self._cam = Camera(exposure_ms=1)
+        self._cam = camera.Camera(exposure_ms=1)
         with self._cam:
             while True:
                 method, args, return_event = self.input_queue.get()
@@ -159,6 +165,12 @@ def capture():
 @app.post("/put_calibration_image")
 def put_calibration_image():
     d = main.put_calibration_image()
+    return jsonify(d)
+
+
+@app.post("/reset_calibration")
+def reset_calibration():
+    d = main.reset_calibration()
     return jsonify(d)
 
 

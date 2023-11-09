@@ -3,6 +3,7 @@
 
 <head>
     <title>WebSocket Image Display</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
 <body>
@@ -14,6 +15,7 @@
         Binning <input type="number" value="2" id="binning" name="binning"  size="4" />
         <button type="button" id="capture">Capture</button>
         <button type="button" id="put_calibration_image">Put to calibration</button>
+        <button type="button" id="reset_calibration">Reset calibration</button>
     </div>
     <style>
         body {
@@ -76,6 +78,16 @@
 
         document.getElementById('put_calibration_image').onclick = () => {
             fetch('/put_calibration_image', {
+                method: 'POST',
+            }).then(response => response.json()).then((data) => {
+                updateState(data)
+            }).catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        document.getElementById('reset_calibration').onclick = () => {
+            fetch('/reset_calibration', {
                 method: 'POST',
             }).then(response => response.json()).then((data) => {
                 updateState(data)
