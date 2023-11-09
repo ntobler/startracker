@@ -95,7 +95,7 @@ def max_motor_dists():
 max_motor_dists()
 
 
-def max_stepper_error(step_size=5e-3):
+def max_stepper_error(step_size=2.5e-3):
     """Plot histogram of error, if the stepper has discrete steps of a given step size."""
 
     azimuths, elevations, rolls = np.meshgrid(

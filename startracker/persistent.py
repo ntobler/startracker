@@ -19,5 +19,5 @@ class Persistent:
 
         self.repo_dir = pathlib.Path(__file__).parent.absolute().parent
 
-        self.calibration_dir = self.data_dir
+        self.calibration_dir = self.data_dir / "calibration"
         self.calibration_dir.mkdir(exist_ok=True)

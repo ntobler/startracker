@@ -1,7 +1,6 @@
 import dataclasses
 
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.spatial.transform
 
 
@@ -141,6 +140,9 @@ class MotorSolver:
         # assert np.all(sled_dists > 0)
 
         if (not np.all(sled_dists > 0)) or (plot and motor_dists.ndim == 1):
+
+            import matplotlib.pyplot as plt
+
             translation = solution[:3]
             shaft_vectors = shaft_directions * motor_dists[:, None]
 
