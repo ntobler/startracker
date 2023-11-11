@@ -9,9 +9,9 @@ from flask_sock import Sock
 import numpy as np
 import cv2
 
-import camera
-import image_processing
-import persistent
+from . import camera
+from . import image_processing
+from . import persistent
 
 
 class ImageData:
@@ -181,7 +181,7 @@ def image(ws):
         ws.send(image_data)
 
 
-if __name__ == "__main__":
+def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -190,3 +190,7 @@ if __name__ == "__main__":
     )
 
     app.run(debug=False, host="0.0.0.0")
+
+
+if __name__ == "__main__":
+    main()

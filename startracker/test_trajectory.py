@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.spatial.transform
 
-import trajectory
+from . import trajectory
 
 
 def test_fermat_point():

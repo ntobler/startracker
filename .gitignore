@@ -3,3 +3,5 @@
 .vscode
 
 test_images*
+build
+startracker.egg-info
