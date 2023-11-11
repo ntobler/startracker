@@ -4,8 +4,6 @@
  *  Created on: Mar 27, 2022
  *      Author: ftobler
  *
- *  SOFTWARE WRITTEN BY FLORIN TOBLER IN PRIVATE
- *  NORDSON MAY USE IT FOR THE PREHEATER.
  */
 
 #ifndef SCHEDULER_H_

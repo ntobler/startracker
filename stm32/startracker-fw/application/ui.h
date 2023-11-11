@@ -18,21 +18,19 @@ typedef enum {
 class AbstractUI {
 public:
 	virtual AbstractUI* update(Ui_event_en e);
-	virtual void show() {};
-	virtual void hide() {};
 };
 
 
 class Splash : public AbstractUI {
 	int timer = 0;
 public:
-	AbstractUI* update(Ui_event_en e) override ;
+	AbstractUI* update(Ui_event_en e) override;
 };
 
 
 class Home : public AbstractUI {
 public:
-	AbstractUI* update(Ui_event_en e) override ;
+	AbstractUI* update(Ui_event_en e) override;
 };
 
 

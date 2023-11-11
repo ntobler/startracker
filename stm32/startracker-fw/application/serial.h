@@ -9,7 +9,8 @@
 #define SERIAL_H_
 
 #include "stdint.h"
-#include "stm32f4xx_hal.h"
+#include "stm32_hal.h"
+
 
 enum {
 	BUFFER_LEN = 256

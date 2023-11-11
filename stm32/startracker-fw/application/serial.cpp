@@ -6,8 +6,7 @@
  */
 
 #include "serial.h"
-#include "stm32f4xx.h"
-#include "stm32f4xx_hal_def.h"
+#include "stm32_hal.h"
 
 
 
