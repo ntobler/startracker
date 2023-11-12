@@ -1,8 +1,8 @@
 """Main entrypoint for the startracker application."""
 
 import sys
-from dataclasses import dataclass
 import logging
+import pathlib
 
 import serial
 import numpy as np
@@ -15,83 +15,104 @@ from . import config
 from typing import Type
 
 
-@dataclass
-class Acknowledge(communication.Message):
-    okay: bool
-
-    @classmethod
-    def from_bytes(cls, payload: bytes):
-        return cls(bool(payload[0]))
-
-    def to_bytes(self) -> bytes:
-        return bytes([int(self.okay)])
+@communication.make_message
+class Acknowledge:
+    ack = communication.Field("uint8", "1 if acknowledge okay else 0")
 
 
+@communication.make_message
+class Settings:
+    min_matches = communication.Field(
+        "uint8", "Min matches required in the attitude estimation"
+    )
+    attitude_estimation_timeout_ms = communication.Field("uint8")
+    exposure_ms = communication.Field("uint16")
+    gain = communication.Field("uint8")
+
+
+@communication.make_message
+class Trajectory:
+    start = communication.Field("float32", "Start time in seconds")
+    stop = communication.Field("float32", "Stop time in seconds")
+    coeffs = communication.ArrayField("float32", (3, 4), "Polynomial coefficients")
+
+
+@communication.make_message
+class Quaternion:
+    x = communication.Field("float32", "x part of the quaternion")
+    y = communication.Field("float32", "y part of the quaternion")
+    z = communication.Field("float32", "z part of the quaternion")
+    w = communication.Field("float32", "w part of the quaternion")
+
+
+@communication.make_message
+class Status:
+    attitude_estimation_mode = communication.Field("uint8")
+    current_number_of_matches = communication.Field("uint16")
+    average_number_of_matches = communication.Field("uint16")
+    quaternion = communication.StructField(Quaternion, "curent quaternion")
+    estimation_id = communication.Field(
+        "uint16", "Id of the current attitude estimation sample"
+    )
+
+@communication.make_message
+class EmptyMessage:
+    pass
+
+def generate_code():
+    """Utility function to generate code for the STM projet"""
+    communication.gen_code_with_dependencies(
+        [Acknowledge, Settings, Trajectory, Status], pathlib.Path("out.h")
+    )
+
+
+# Instantiate, as they are used frequently
 ACK = Acknowledge(True)
 NACK = Acknowledge(False)
 
 
-@dataclass
-class Settings(communication.Message):
-    min_matches: int
-    attitude_estimation_timeout_ms: int
-    exposure_ms: int
-    gain: int
+class GetStatus(communication.Command):
+    """Get the application status."""
 
-    @classmethod
-    def from_bytes(cls, payload: bytes):
-        return cls(payload[0], payload[1], payload[2], payload[3])
+    cmd: int = 1
+    argument_type: Type[communication.Message] = Status
 
-    def to_bytes(self) -> bytes:
-        return bytes(
-            (
-                self.min_matches,
-                self.attitude_estimation_timeout_ms,
-                self.exposure_ms,
-                self.gain,
-            )
+    def __init__(
+        self,
+        attitude_filter: attitude_estimation.AttitudeFilter,
+        trajectory_calculator: trajectory.TrajectoryCalculator,
+    ):
+        self._attitude_filter = attitude_filter
+        self._trajectory_calculator = trajectory_calculator
+
+    def execute(self, payload: bytes) -> bytes:
+        status = Status(
+            attitude_estimation_mode=69, #TODO implement
+            current_number_of_matches=420,
+            average_number_of_matches=314,
+            quaternion=self._attitude_filter.attitude_quat,
+            estimation_id=self._attitude_filter.estimation_id,
         )
+        return status.to_bytes()
 
 
 class SetSettings(communication.Command):
     """Set star tracker settings."""
 
-    cmd: int = 1
-    payload_type: Type[communication.Message] = Settings
+    cmd: int = 2
+    argument_type: Type[communication.Message] = Settings
 
     def execute(self, payload: bytes) -> bytes:
-        settings = self.payload_type.from_bytes(payload)
+        settings = self.argument_type.from_bytes(payload)
         # TODO add logic
         return ACK.to_bytes()
-
-
-@dataclass
-class Trajectory(communication.Message):
-    start: float
-    stop: float
-    coeffs: np.ndarray
-
-    @classmethod
-    def from_bytes(cls, payload: bytes):
-        data = np.frombuffer(payload, dtype=np.float32)
-        return cls(data[0].item(), data[1].item(), data[2:])
-
-    def to_bytes(self) -> bytes:
-        data = np.concatenate(
-            (
-                np.asarray((self.start, self.stop), dtype=np.float32),
-                np.asarray(self.coeffs, dtype=np.float32).ravel(),
-            ),
-            axis=0,
-        )
-        return data.tobytes()
 
 
 class CalcTrajectory(communication.Command):
     """Calculate trajectory using current attitude."""
 
-    cmd: int = 2
-    payload_type: Type[communication.Message] = communication.EmptyMessage
+    cmd: int = 3
+    argument_type: Type[communication.Message] = EmptyMessage
 
     def __init__(
         self,
@@ -120,12 +141,16 @@ class CalcTrajectory(communication.Command):
 class Quit(communication.Command):
     """Quit the application."""
 
-    cmd: int = 3
-    payload_type: Type[communication.Message] = communication.EmptyMessage
+    cmd: int = 4
+    argument_type: Type[communication.Message] = EmptyMessage
 
     def execute(self, payload: bytes) -> bytes:
         raise KeyboardInterrupt()
 
+#TODO implement
+# class SetAttitudeEstimationMode(AttitudeEstimationMode) returns (Acknowledge)
+# class RecordDarkFrame(Empty) returns (Acknowledge)
+# class Shutdown(Empty) returns (Acknowledge)
 
 class App:
     """Production application class."""
@@ -137,8 +162,6 @@ class App:
 
         config.check_validation_errors()
 
-        # TODO pass parameters from config
-        # TODO use config manager e.g. dynaconf
         ms = trajectory.MotorSolver(
             s.hardware.motor_dists_from_center,
             np.radians(s.hardware.motor_theta).item(),
@@ -151,6 +174,7 @@ class App:
 
         # All available commands
         self._commands = [
+            GetStatus(af, tc),
             SetSettings(),
             CalcTrajectory(af, tc),
             Quit(),
@@ -169,7 +193,7 @@ class App:
         try:
             com_handler.run_indefinitely()
         except KeyboardInterrupt:
-            print("KeyboardInterrupt")
+            logging.info("KeyboardInterrupt")
             pass
         return 0
 

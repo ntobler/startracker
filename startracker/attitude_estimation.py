@@ -85,9 +85,11 @@ class AttitudeFilter:
     """Filter multliple attitude observations over time."""
 
     attitude_quat: Optional[np.ndarray]
+    estimation_id: int
 
     def __init__(self):
         self.attitude_quat = None
+        self.estimation_id = 0
 
     def put_quat(self, quat: np.ndarray, time: float):
         """
