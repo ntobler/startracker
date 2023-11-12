@@ -14,6 +14,7 @@
 #include "serial_vcp.h"
 #include "usbd_cdc_if.h"
 #include "ui.h"
+#include "motor.h"
 
 
 static uint32_t vpc_send_cb(uint8_t* buf, uint32_t len);
@@ -27,6 +28,8 @@ static void task2();
 
 extern uint32_t os_started;
 extern UART_HandleTypeDef huart1;
+extern TIM_HandleTypeDef htim4;
+
 
 Serial serial_rpi;
 SerialVCP serial_usb(vpc_send_cb);
@@ -65,20 +68,18 @@ static uint32_t vpc_send_cb(uint8_t* buf, uint32_t len) {
 static void task0() {
 	while (1) {
 		//IDLE TASK
-//		if (serial_usb.available()) {
-//			char c = serial_usb.read();
-//			serial_usb.write(c);
-//		}
+
 		int avail = serial_usb.available();
-		if (avail > 256) {
-			avail = 256;
-		}
 		if (avail) {
+			if (avail > 256) {
+				avail = 256;
+			}
 			static uint8_t buf[256];
 			serial_usb.readBuf(buf, avail);
 			serial_usb.writeBuf(buf, avail);
 			//scheduler_task_sleep(10);
 		}
+//		__WFI();
 	}
 }
 
@@ -92,8 +93,14 @@ static void task1() {
 
 
 static void task2() {
+	HAL_TIM_Base_Start_IT(&htim4);
+	motor_init();
 	while (1) {
-		scheduler_task_sleep(3000);
+//		scheduler_task_sleep(3000);
+		uint32_t event = scheduler_event_wait(0x01);
+		if (event & 0x01) {
+			motor_update();
+		}
 	}
 }
 

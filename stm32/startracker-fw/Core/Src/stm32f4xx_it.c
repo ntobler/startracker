@@ -58,6 +58,7 @@ uint32_t os_started = 0;
 
 /* External variables --------------------------------------------------------*/
 extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
+extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
 /* USER CODE BEGIN EV */
 
@@ -186,12 +187,15 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-
+//#if 0
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-  if (os_started)
+//#endif
+//  uwTick++;
+  if (os_started) {
 	  scheduler_systick_handler();
+  }
   /* USER CODE END SysTick_IRQn 1 */
 }
 
@@ -201,6 +205,22 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles TIM4 global interrupt.
+  */
+void TIM4_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM4_IRQn 0 */
+#if 0
+  /* USER CODE END TIM4_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim4);
+  /* USER CODE BEGIN TIM4_IRQn 1 */
+#endif
+  htim4.Instance->SR = 0;
+  scheduler_event_set(2, 0x01);
+  /* USER CODE END TIM4_IRQn 1 */
+}
 
 /**
   * @brief This function handles USART1 global interrupt.

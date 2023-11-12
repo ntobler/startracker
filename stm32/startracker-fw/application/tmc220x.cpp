@@ -37,7 +37,7 @@ typedef struct {
 
 
 TMC220X::TMC220X() {
-
+	_pos = 0;
 }
 
 void TMC220X::send_init() {

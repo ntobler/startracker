@@ -176,7 +176,7 @@ static void scheduler_task_time_update() {
 }
 
 void scheduler_systick_handler() {
-	uwTick++;
+//	uwTick++;
 	scheduler_task_time_update();
 	scheduler_work();
 }
