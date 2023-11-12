@@ -265,8 +265,13 @@ def degrees_to_seconds(degrees: Union[float, np.ndarray]):
 @dataclasses.dataclass
 class PolynomTrajectory:
     position_coeffs: np.ndarray
+    """Polynomial coefficients, in decreasing order (c_{n}, c_{n-1}, ... c_{0},
+    shape=[motor_count, order+1]
+    """
     start: float
+    """Start value in seconds to use for the polynomial evaluation."""
     stop: float
+    """Stop value in seconds to use for the polynomial evaluation."""
 
 
 def find_continuous_zero_slice(x: np.ndarray, mid_index: int) -> slice:
@@ -316,7 +321,7 @@ class TrajectoryCalculator:
         if len(seconds) == 0:
             raise ValueError("Calculated trajectory has zero length")
 
-        poly = np.polyfit(seconds, motor_dists, 3)
+        poly = np.polyfit(seconds, motor_dists, 3).T
 
         return PolynomTrajectory(
             position_coeffs=poly,

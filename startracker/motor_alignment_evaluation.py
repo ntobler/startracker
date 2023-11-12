@@ -14,14 +14,14 @@ import trajectory
 
 
 def plot_polynom_trajectory():
-    """Plot a polynom trajectory example."""
+    """Plot a polynomial trajectory example."""
     polytr = trajectory.TrajectoryCalculator(15 * 60, 3, trajectory.MotorSolver())(
         35, 47
     )
 
     times = np.linspace(polytr.start, polytr.stop, 1000)
     path_approx = []
-    for coeffs in polytr.position_coeffs.T:
+    for coeffs in polytr.position_coeffs:
         path_approx.append(np.polyval(coeffs, times))
     path_approx = np.array(path_approx).T
 
@@ -213,7 +213,7 @@ for i in range(3):
 plt.show()
 
 # %%
-# Test polynom fitting
+# Test polynomial fitting
 
 path = motor_dists[0, 0, :, 0]
 roll = rolls[0, 0, :]

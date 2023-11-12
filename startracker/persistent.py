@@ -14,10 +14,16 @@ class Persistent:
 
     def __init__(self):
         """Create the application directory `~/.startracker` if not already present."""
-        self.data_dir = pathlib.Path("~/.startracker").expanduser().absolute()
-        self.data_dir.mkdir(exist_ok=True)
+        self.user_data_dir = pathlib.Path("~/.startracker").expanduser().absolute()
+        self.user_data_dir.mkdir(exist_ok=True)
 
         self.repo_dir = pathlib.Path(__file__).parent.absolute().parent
 
-        self.calibration_dir = self.data_dir / "calibration"
+        self.calibration_dir = self.user_data_dir / "calibration"
         self.calibration_dir.mkdir(exist_ok=True)
+
+        self.conf_file = self.user_data_dir / "config.yml"
+
+        self.package_dir = pathlib.Path(__file__).parent.expanduser().absolute()
+
+        self.default_conf_file = self.package_dir / "default_config.yml"

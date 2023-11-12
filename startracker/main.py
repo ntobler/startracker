@@ -1,6 +1,8 @@
 """Main entrypoint for the startracker application."""
 
+import sys
 from dataclasses import dataclass
+import logging
 
 import serial
 import numpy as np
@@ -8,6 +10,7 @@ import numpy as np
 from . import trajectory
 from . import communication
 from . import attitude_estimation
+from . import config
 
 from typing import Type
 
@@ -128,10 +131,22 @@ class App:
     """Production application class."""
 
     def __init__(self):
+        logging.info("Starting application")
+
+        s = config.settings
+
+        config.check_validation_errors()
+
         # TODO pass parameters from config
         # TODO use config manager e.g. dynaconf
-        ms = trajectory.MotorSolver(50)
-        tc = trajectory.TrajectoryCalculator(150, 10, ms)
+        ms = trajectory.MotorSolver(
+            s.hardware.motor_dists_from_center,
+            np.radians(s.hardware.motor_theta).item(),
+            np.radians(s.hardware.motor_phi).item(),
+        )
+        tc = trajectory.TrajectoryCalculator(
+            s.trajectory.max_seconds, s.trajectory.max_dist, ms
+        )
         af = attitude_estimation.AttitudeFilter()
 
         # All available commands
@@ -142,7 +157,7 @@ class App:
         ]
 
         # Run communication handler to process incoming commands.
-        self._ser = serial.Serial()
+        self._ser = serial.Serial(config.settings.serial_port)
 
     def __call__(self) -> int:
         """Run main loop of the command handler."""
@@ -150,16 +165,29 @@ class App:
         com_handler = communication.CommandHandler(
             s, self._commands, Acknowledge(False)
         )
+        logging.info("Running")
         try:
             com_handler.run_indefinitely()
         except KeyboardInterrupt:
+            print("KeyboardInterrupt")
             pass
         return 0
 
 
 def main() -> int:
     """Run the application."""
-    return App()()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[logging.StreamHandler()],
+    )
+    e = None
+    try:
+        return App()()
+    except Exception as e:
+        logging.critical("Unhandled exception", exc_info=sys.exc_info())
+        return -1
 
 
 if __name__ == "__main__":
