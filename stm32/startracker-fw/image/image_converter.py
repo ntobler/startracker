@@ -23,15 +23,14 @@ def generate_bit_image(image_file: pathlib.Path, h_file: pathlib.Path, name: str
     data = ",".join([str(x) for x in res.ravel()])
 
     filecontent = f"""\
-#include "stdint.h"
 #include "image.h"
 
-static uint8_t {name}_symbol_data[] = {{{data}}};
+static uint8_t {name}_data[] = {{{data}}};
 
-Image_description_t {name}_symbol = {{
+Image_description_t {name} = {{
     .width = {width},
     .height = {height},
-    .data = {name}_symbol_data
+    .data = {name}_data
 }};
 """
 
