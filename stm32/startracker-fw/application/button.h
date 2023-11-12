@@ -31,6 +31,7 @@ class Button {
 		GPIO_TypeDef* _port;
         bool _oldState;
         bool _activeLevel;
+        bool _long_executed;
         unsigned long _lastRising;
     public:
         Button_state_en event;

@@ -15,6 +15,7 @@ Button::Button(GPIO_TypeDef* port, uint16_t pin, bool activeLevel) {
     _oldState = !activeLevel;
     _activeLevel = activeLevel;
     _lastRising = uwTick;
+    _long_executed = false;
     event = BTN_NOTHING;
 //    pinMode(_pin, INPUT_PULLUP);
 }
@@ -33,15 +34,19 @@ void Button::update() {
         _oldState = newState;
         if (newState) {
             _lastRising = uwTick;
+            _long_executed = false;
         }
-        if (!newState) {
-            if ((uwTick - _lastRising) > 1000) {
-                event = BTN_LONG;
-                return;
-            }
+        if (_long_executed == false) {
+            event = newState ? BTN_FALLING : BTN_RISING;
+            return;
         }
-        event = newState ? BTN_RISING : BTN_FALLING;
-        return;
+    }
+    if (newState && _long_executed == false) {
+    	if ((uwTick - _lastRising) > 1000) {
+			event = BTN_LONG;
+			_long_executed = true;
+			return;
+		}
     }
     event = BTN_NOTHING;
 }
