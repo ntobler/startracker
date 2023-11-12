@@ -24,12 +24,14 @@ print(data.shape, data.dtype, data.max(), data.min())
 
 data = image_processing.decode_sbggr12_1x12(data)
 
+
 def plot_channels(x):
     fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
     for i in range(2):
         for j in range(2):
             axs[i, j].imshow(x[i::2, j::2])
     fig.show()
+
 
 plot_channels(data)
 

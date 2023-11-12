@@ -1,7 +1,8 @@
-#TODO make baseclass to derive from
+"""Mock Camera implementation to replace the Raspberry Pi camera if not available"""
 import numpy as np
 
 
+# TODO make baseclass to derive from
 class MockCamera:
     exposure_ms: float
 

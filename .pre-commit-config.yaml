@@ -1,0 +1,30 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+-   repo: https://github.com/psf/black
+    rev: 22.10.0
+    hooks:
+    -   id: black
+# -   repo: https://github.com/pycqa/flake8 #TODO enable flake8 etc.
+#     rev: '6.0.0'
+#     hooks:
+#     -   id: flake8
+# -   repo: https://github.com/jsh9/pydoclint
+#     rev: '0.3.2'
+#     hooks:
+#     -   id: pydoclint
+#         args:
+#         -   "--config=pyproject.toml"
+#         -   "--allow-init-docstring=True"
+#         -   "--skip-checking-raises=True"
+# -   repo: https://github.com/pycqa/pydocstyle
+#     rev: '6.3.0'
+#     hooks:
+#     -   id: pydocstyle
+#         args:
+#         -   "--ignore=D100,D203,D405,D212,D105,D406,D407,D408,D409,D413"
+#         -   "--ignore-decorator=override"

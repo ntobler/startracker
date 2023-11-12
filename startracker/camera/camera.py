@@ -49,7 +49,10 @@ class Camera:
 
             self._logger.info("Set exposure")
             self._picam2.set_controls(
-                {"ExposureTime": int(self._exposure_ms * 1000), "AnalogueGain": int(self._gain)}
+                {
+                    "ExposureTime": int(self._exposure_ms * 1000),
+                    "AnalogueGain": int(self._gain),
+                }
             )
 
             self._picam2.start()
