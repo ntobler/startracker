@@ -3,6 +3,8 @@ import dataclasses
 import numpy as np
 import scipy.spatial.transform
 
+from typing import Union
+
 
 def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
     """
@@ -140,7 +142,6 @@ class MotorSolver:
         # assert np.all(sled_dists > 0)
 
         if (not np.all(sled_dists > 0)) or (plot and motor_dists.ndim == 1):
-
             import matplotlib.pyplot as plt
 
             translation = solution[:3]
@@ -223,7 +224,7 @@ class MotorSolver:
 def astro_rotation_matrix(
     azimuth: float,
     elevation: float,
-    roll: float,
+    roll: Union[float, np.ndarray],
     degrees: bool = False,
 ):
     """
@@ -253,10 +254,11 @@ def astro_rotation_matrix(
     return rot_matrix
 
 
-def seconds_to_degrees(seconds: float):
+def seconds_to_degrees(seconds: Union[float, np.ndarray]):
     return seconds * (360 / (24 * 60 * 60))
 
-def degrees_to_seconds(degrees: float):
+
+def degrees_to_seconds(degrees: Union[float, np.ndarray]):
     return degrees / (360 / (24 * 60 * 60))
 
 
@@ -291,7 +293,7 @@ class TrajectoryCalculator:
         self._max_dist = max_dist
         self._motor_solver = motor_solver
 
-    def __call__(self, azimuth: float, elevation: float):
+    def __call__(self, azimuth: float, elevation: float) -> PolynomTrajectory:
         seconds = np.linspace(-self._max_seconds / 2, self._max_seconds / 2, 100)
         roll = seconds_to_degrees(seconds)
 

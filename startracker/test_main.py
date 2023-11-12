@@ -1,16 +1,16 @@
 import threading
-import time
 import queue
+import inspect
 
 import serial
 
 from . import main
 from . import communication
 
-from typing import Sequence, Tuple, Optional
+from typing import Sequence, Tuple, Type, Union
 
 
-class TestSerial(serial.Serial):
+class MockSerial(serial.Serial):
     def __init__(self, replaces: serial.Serial):
         self.mosi_channel = queue.Queue()
         self.miso_channel = queue.Queue()
@@ -27,8 +27,8 @@ class TestSerial(serial.Serial):
             self.miso_channel.put(x)
 
 
-class TestSerialMaster(serial.Serial):
-    def __init__(self, test_serial: TestSerial):
+class MockSerialMaster(serial.Serial):
+    def __init__(self, test_serial: MockSerial):
         self.test_serial = test_serial
         self._timeout = test_serial._timeout
 
@@ -48,7 +48,7 @@ class MasterEmulator:
             Tuple[
                 communication.Command,
                 communication.Message,
-                Optional[communication.Message],
+                Union[None, communication.Message, Type[communication.Message]],
             ],
         ],
         ser: communication.PacketHandler,
@@ -70,11 +70,16 @@ class MasterEmulator:
                     f"Command {command} with arguments {tx_message} "
                     f"returned cmd id {cmd} instead of {command.cmd}"
                 )
-                rx_message = type(rx_expected).from_bytes(payload)
-                assert rx_message == rx_expected, (
-                    f"Command {command} with arguments {tx_message} "
-                    f"returned {rx_message} instead of {rx_expected}"
-                )
+
+                if inspect.isclass(rx_expected):
+                    rx_message = rx_expected.from_bytes(payload)
+                    assert rx_expected == type(rx_message)
+                else:
+                    rx_message = type(rx_expected).from_bytes(payload)
+                    assert rx_message == rx_expected, (
+                        f"Command {command} with arguments {tx_message} "
+                        f"returned {rx_message} instead of {rx_expected}"
+                    )
 
 
 def test_main():
@@ -82,11 +87,12 @@ def test_main():
 
     test_data_table = [
         (main.SetSettings, main.Settings(6, 10, 100, 2), main.ACK),
+        (main.CalcTrajectory, communication.EmptyMessage(), main.Trajectory),
         (main.Quit, communication.EmptyMessage(), None),
     ]
 
-    device_serial = TestSerial(m._ser)
-    master_serial = TestSerialMaster(device_serial)
+    device_serial = MockSerial(m._ser)
+    master_serial = MockSerialMaster(device_serial)
     packet_handler = communication.PacketHandler(master_serial)
     MasterEmulator(test_data_table, packet_handler)
 
