@@ -56,7 +56,7 @@ class MasterEmulator:
         self.ser = ser
         self.test_data = test_data
 
-        self.thread = threading.Thread(target=self._run)
+        self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
     def _run(self):

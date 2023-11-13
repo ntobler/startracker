@@ -3,6 +3,7 @@
 import sys
 import logging
 import pathlib
+import enum
 
 import serial
 import numpy as np
@@ -15,9 +16,16 @@ from . import config
 from typing import Type
 
 
+class AcknowledgeEnum(enum.Enum):
+    NACK = 0
+    ACK = 1
+
+
 @communication.make_message
 class Acknowledge:
-    ack = communication.Field("uint8", "1 if acknowledge okay else 0")
+    ack = communication.EnumField(
+        AcknowledgeEnum, "uint8", "1 if acknowledge okay else 0"
+    )
 
 
 @communication.make_message
@@ -45,9 +53,15 @@ class Quaternion:
     w = communication.Field("float32", "w part of the quaternion")
 
 
+class AttitudeEstimationMode(enum.Enum):
+    OFF = 0
+    ON = 1
+    SINGLE = 2
+
+
 @communication.make_message
 class Status:
-    attitude_estimation_mode = communication.Field("uint8")
+    attitude_estimation_mode = communication.EnumField(AttitudeEstimationMode, "uint8")
     current_number_of_matches = communication.Field("uint16")
     average_number_of_matches = communication.Field("uint16")
     quaternion = communication.StructField(Quaternion, "curent quaternion")
@@ -55,9 +69,11 @@ class Status:
         "uint16", "Id of the current attitude estimation sample"
     )
 
+
 @communication.make_message
 class EmptyMessage:
     pass
+
 
 def generate_code():
     """Utility function to generate code for the STM projet"""
@@ -67,8 +83,8 @@ def generate_code():
 
 
 # Instantiate, as they are used frequently
-ACK = Acknowledge(True)
-NACK = Acknowledge(False)
+ACK = Acknowledge(AcknowledgeEnum.ACK)
+NACK = Acknowledge(AcknowledgeEnum.NACK)
 
 
 class GetStatus(communication.Command):
@@ -87,7 +103,7 @@ class GetStatus(communication.Command):
 
     def execute(self, payload: bytes) -> bytes:
         status = Status(
-            attitude_estimation_mode=69, #TODO implement
+            attitude_estimation_mode=69,  # TODO implement
             current_number_of_matches=420,
             average_number_of_matches=314,
             quaternion=self._attitude_filter.attitude_quat,
@@ -147,10 +163,12 @@ class Quit(communication.Command):
     def execute(self, payload: bytes) -> bytes:
         raise KeyboardInterrupt()
 
-#TODO implement
+
+# TODO implement
 # class SetAttitudeEstimationMode(AttitudeEstimationMode) returns (Acknowledge)
 # class RecordDarkFrame(Empty) returns (Acknowledge)
 # class Shutdown(Empty) returns (Acknowledge)
+
 
 class App:
     """Production application class."""
