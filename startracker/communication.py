@@ -172,6 +172,13 @@ class EnumField(Field):
     def format(self, value):
         return int(value.value)
 
+    def c_definition(self, name: str):
+        c_code = f"{self._enum_type.__name__} {name};"
+        if self.desc is not None:
+            c_code += f" // {self.desc}"
+        c_code += "\n"
+        return c_code
+
     def generate_c_code(self, enum_args: str, indent: int):
         c_code = f"typedef enum {self._enum_type.__name__} : {self.c_type} {{\n"
         for k in self._enum_type:
