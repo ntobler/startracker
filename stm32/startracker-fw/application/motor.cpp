@@ -19,9 +19,8 @@ static float polynom[3][N] = {{ 7.11859163e-12f,  1.78833188e-07f,  3.31593291e-
 						      { 3.55347520e-11f,  5.26166407e-07f,  9.16399197e-03f, -6.48713382e-09f },
 						      { 1.27991415e-11f,  1.70074972e-07f,  6.23996244e-03f, -1.54755701e-09f }};
 //stepper motor target position in mm
-static float position[3];
-
-static uint32_t tick = 0;
+float position[3];
+uint32_t tick = 0;
 
 void motor_init() {
 	motor[0].uart = &huart2;
@@ -47,3 +46,4 @@ void motor_update() {
 		position[i] = pos;
 	}
 }
+

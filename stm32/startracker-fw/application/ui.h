@@ -23,12 +23,39 @@ public:
 
 class Splash : public AbstractUI {
 	int timer = 0;
+	void draw();
 public:
 	AbstractUI* update(Ui_event_en e) override;
 };
 
-
 class Home : public AbstractUI {
+	void draw();
+public:
+	AbstractUI* update(Ui_event_en e) override;
+};
+
+class Menu : public AbstractUI {
+	int pos = 0;
+	float fpos = 0;
+	void draw();
+public:
+	AbstractUI* update(Ui_event_en e) override;
+};
+
+class Bubble : public AbstractUI {
+	void draw();
+public:
+	AbstractUI* update(Ui_event_en e) override;
+};
+
+class Shutdown : public AbstractUI {
+	void draw();
+public:
+	AbstractUI* update(Ui_event_en e) override;
+};
+
+class About : public AbstractUI {
+	void draw();
 public:
 	AbstractUI* update(Ui_event_en e) override;
 };

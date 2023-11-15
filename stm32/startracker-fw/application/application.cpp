@@ -5,6 +5,7 @@
  *      Author: cchtofl01
  */
 
+#include <mpu9250.h>
 #include "main.h"
 #include "application.h"
 #include "scheduler.h"
@@ -15,6 +16,7 @@
 #include "usbd_cdc_if.h"
 #include "ui.h"
 #include "motor.h"
+#include "imu.h"
 
 
 static uint32_t vpc_send_cb(uint8_t* buf, uint32_t len);
@@ -28,7 +30,9 @@ static void task2();
 
 extern uint32_t os_started;
 extern UART_HandleTypeDef huart1;
-extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim4;   //fast timer for motor control update
+extern TIM_HandleTypeDef htim5;   //microseconds counter up to 4294967295
+extern I2C_HandleTypeDef hi2c3;
 
 
 Serial serial_rpi;
@@ -37,6 +41,7 @@ SerialVCP serial_usb(vpc_send_cb);
 
 
 void app_init() {
+	HAL_TIM_Base_Start(&htim5);
 	serial_rpi.init(&huart1);
 	__enable_irq();
 
@@ -85,9 +90,16 @@ static void task0() {
 
 static void task1() {
 	ui_init();
+
+	imu_init();
+
 	while (1) {
 		ui_update();
-		scheduler_task_sleep(50);
+
+		for (int i = 0; i < 50; i++) {
+			scheduler_task_sleep(1);
+			imu_update();
+		}
 	}
 }
 
