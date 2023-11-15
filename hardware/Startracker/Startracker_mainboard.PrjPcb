@@ -5,14 +5,14 @@ ChannelRoomNamingStyle=0
 ReleasesFolder=
 ChannelDesignatorFormatString=$Component_$RoomName
 ChannelRoomLevelSeperator=_
-OpenOutputs=1
+OpenOutputs=0
 ArchiveProject=0
 TimestampOutput=0
 SeparateFolders=0
 TemplateLocationPath=
 PinSwapBy_Netlabel=1
 PinSwapBy_Pin=1
-AllowPortNetNames=0
+AllowPortNetNames=1
 AllowSheetEntryNetNames=1
 AppendSheetNumberToLocalNets=0
 NetlistSinglePinNets=0
@@ -43,7 +43,6 @@ CrossRefPorts=3
 CrossRefCrossSheets=1
 CrossRefSheetEntries=0
 CrossRefFollowFromMainSettings=1
-CurrentVariant=951.xxxx
 
 [Preferences]
 PrefsVaultGUID=
@@ -243,13 +242,11 @@ DocumentUniqueId=
 
 [ProjectVariant1]
 UniqueID=873E8F09-4BF2-420F-A642-D92220AFBA1F
-Description=951.xxxx
+Description=Standard
 AllowFabrication=0
 ParameterCount=3
-VariationCount=3
-Variation1=Designator=D1|UniqueId=\TDKBSHRX|Kind=1|AlternatePart= 
-Variation2=Designator=R?|UniqueId=\UBXENITB\MTEWFIPL|Kind=1|AlternatePart= 
-Variation3=Designator=D1|UniqueId=\FRJKUKAJ|Kind=0|AlternatePart= 
+VariationCount=1
+Variation1=Designator=R31|UniqueId=\UBXENITB\MTEWFIPL|Kind=1|AlternatePart= 
 ParamVariationCount=0
 
 [Parameter2_1]
@@ -258,7 +255,7 @@ Value=Base Variant
 
 [Parameter2_2]
 Name=_VariantName
-Value=951.xxxx
+Value=Standard
 
 [Parameter2_3]
 Name=_VariantRevision
@@ -269,84 +266,84 @@ DocumentPath=Project Outputs for Startracker_mainboard\Design Rule Check - Start
 DItemRevisionGUID=
 
 [Parameter1]
-Name=PCB_Assy_DrawnBy
-Value=L. Barbisch
+Name=Schematic_Title
+Value=Startracker
 
 [Parameter2]
-Name=PCB_Assy_DrawnDate
-Value=dd.mm.yyyy
-
-[Parameter3]
-Name=PCB_CheckedBy
-Value=L. Barbisch
-
-[Parameter4]
-Name=PCB_CheckedDate
-Value=dd.mm.yyyy
-
-[Parameter5]
-Name=PCB_DrawnBy
-Value=L. Barbisch
-
-[Parameter6]
-Name=PCB_DrawnDate
-Value=dd.mm.yyyy
-
-[Parameter7]
-Name=PCB_PartNo
-Value=XXX.XXXX
-
-[Parameter8]
-Name=PCB_Revision
-Value=A
-
-[Parameter9]
-Name=PCB_Title
-Value=Startracker
-
-[Parameter10]
-Name=PCB_TP_DocumentNo
-Value=XXXXXXXX
-
-[Parameter11]
-Name=PCB_TP_Revision
-Value=A
-
-[Parameter12]
-Name=Project
-Value=Startracker
-
-[Parameter13]
-Name=Revision
-Value=A00
-
-[Parameter14]
-Name=Schematic_CheckedBy
-Value=L. Barbisch
-
-[Parameter15]
-Name=Schematic_CheckedDate
-Value=dd.mm.yyyy
-
-[Parameter16]
-Name=Schematic_DocumentNo
-Value=XXXXXXXX
-
-[Parameter17]
-Name=Schematic_DrawnBy
-Value=L. Barbisch
-
-[Parameter18]
-Name=Schematic_DrawnDate
-Value=dd.mm.yyyy
-
-[Parameter19]
 Name=Schematic_Revision
 Value=A00
 
-[Parameter20]
-Name=Schematic_Title
+[Parameter3]
+Name=Schematic_DrawnDate
+Value=15.11.2023
+
+[Parameter4]
+Name=Schematic_DrawnBy
+Value=L. Barbisch
+
+[Parameter5]
+Name=Schematic_DocumentNo
+Value=XXXXXXXX
+
+[Parameter6]
+Name=Schematic_CheckedDate
+Value=15.11.2023
+
+[Parameter7]
+Name=Schematic_CheckedBy
+Value=L. Barbisch
+
+[Parameter8]
+Name=Revision
+Value=A00
+
+[Parameter9]
+Name=Project
 Value=Startracker
+
+[Parameter10]
+Name=PCB_TP_Revision
+Value=A
+
+[Parameter11]
+Name=PCB_TP_DocumentNo
+Value=XXXXXXXX
+
+[Parameter12]
+Name=PCB_Title
+Value=Startracker
+
+[Parameter13]
+Name=PCB_Revision
+Value=A
+
+[Parameter14]
+Name=PCB_PartNo
+Value=XXX.XXXX
+
+[Parameter15]
+Name=PCB_DrawnDate
+Value=15.11.2023
+
+[Parameter16]
+Name=PCB_DrawnBy
+Value=L. Barbisch
+
+[Parameter17]
+Name=PCB_CheckedDate
+Value=15.11.2023
+
+[Parameter18]
+Name=PCB_CheckedBy
+Value=L. Barbisch
+
+[Parameter19]
+Name=PCB_Assy_DrawnDate
+Value=15.11.2023
+
+[Parameter20]
+Name=PCB_Assy_DrawnBy
+Value=L. Barbisch
 
 [Configuration1]
 Name=Project Files
@@ -373,11 +370,11 @@ ContentTypeGUID=0C520D2A-E60C-11DF-B822-12313F0024A2
 ConfigurationType=Fabrication
 
 [Configuration3]
-Name=Variant 951.xxxx
+Name=No Variant
 ParameterCount=0
 ConstraintFileCount=0
 ReleaseItemId=
-Variant=951.xxxx
+Variant=[No Variations]
 OutputJobsCount=3
 DocumentReferenceClass1=DocumentReference
 OutputJobFileName1=Startracker_mainboard_ASSY.OutJob
@@ -389,11 +386,11 @@ ContentTypeGUID=0D12F8DC-E60C-11DF-B822-12313F0024A2
 ConfigurationType=Assembly
 
 [Configuration4]
-Name=No Variant
+Name=Assembly Standard
 ParameterCount=0
 ConstraintFileCount=0
 ReleaseItemId=
-Variant=[No Variations]
+Variant=Standard
 OutputJobsCount=3
 DocumentReferenceClass1=DocumentReference
 OutputJobFileName1=Startracker_mainboard_ASSY.OutJob
