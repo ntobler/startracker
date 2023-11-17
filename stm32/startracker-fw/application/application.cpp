@@ -17,16 +17,28 @@
 #include "ui.h"
 #include "motor.h"
 #include "imu.h"
+#include "perf.h"
+
+typedef struct {
+	Perf ui;
+	Perf imu;
+	Perf motor;
+	Perf control;
+} Perf_monitor;
 
 
 static uint32_t vpc_send_cb(uint8_t* buf, uint32_t len);
 
-static uint8_t stack0[4096];
-static uint8_t stack1[4096];
-static uint8_t stack2[4096];
-static void task0();
-static void task1();
-static void task2();
+#define STACK_SIZE (4096)
+
+static uint8_t stack_idle[STACK_SIZE];
+static uint8_t stack_ui[STACK_SIZE];
+static uint8_t stack_control[STACK_SIZE];
+static uint8_t stack_motor[STACK_SIZE];
+static void task_idle();
+static void task_ui();
+static void task_control();
+static void task_motor();
 
 extern uint32_t os_started;
 extern UART_HandleTypeDef huart1;
@@ -37,6 +49,7 @@ extern I2C_HandleTypeDef hi2c3;
 
 Serial serial_rpi;
 SerialVCP serial_usb(vpc_send_cb);
+Perf_monitor perf;
 
 
 
@@ -45,9 +58,11 @@ void app_init() {
 	serial_rpi.init(&huart1);
 	__enable_irq();
 
-	scheduler_addTask(0,  task0, stack0,  4096);
-	scheduler_addTask(1,  task1, stack1,  4096);
-	scheduler_addTask(2,  task2, stack2,  4096);
+	scheduler_addTask(ID_TASK_IDLE,    task_idle,    stack_idle,    STACK_SIZE);
+	scheduler_addTask(ID_TASK_UI,      task_ui,      stack_ui,      STACK_SIZE);
+	scheduler_addTask(ID_TASK_CONTROL, task_control, stack_control, STACK_SIZE);
+	scheduler_addTask(ID_TASK_MOTOR,   task_motor,   stack_motor,   STACK_SIZE);
+
 	os_started = 1;
 	scheduler_join();
 
@@ -70,7 +85,7 @@ static uint32_t vpc_send_cb(uint8_t* buf, uint32_t len) {
 	return res != USBD_OK;
 }
 
-static void task0() {
+static void task_idle() {
 	while (1) {
 		//IDLE TASK
 
@@ -88,30 +103,47 @@ static void task0() {
 	}
 }
 
-static void task1() {
+static void task_ui() {
 	ui_init();
-
 	imu_init();
-
 	while (1) {
-		ui_update();
-
-		for (int i = 0; i < 50; i++) {
-			scheduler_task_sleep(1);
-			imu_update();
+		//Wait for UI update event. This should arrive cyclic.
+		//Waiting is done with a timeout so the task is used to poll the IMU sensor
+		//which is on the same I2C bus as the display.
+		uint32_t event = scheduler_event_wait_timeout(EVENT_TASK_UPDATE, 1);
+		if (event & EVENT_TASK_UPDATE) {
+			perf.ui.start();
+			ui_update();
+			perf.ui.end();
 		}
+		perf.imu.start();
+		imu_update();
+		perf.imu.end();
 	}
 }
 
 
-static void task2() {
+static void task_control() {
+	control_init();
+	while (1) {
+		perf.control.start();
+		control_update();
+		scheduler_event_set(ID_TASK_UI, EVENT_TASK_UPDATE);
+		perf.control.end();
+		scheduler_task_sleep(100);
+	}
+}
+
+static void task_motor() {
 	HAL_TIM_Base_Start_IT(&htim4);
 	motor_init();
 	while (1) {
 //		scheduler_task_sleep(3000);
-		uint32_t event = scheduler_event_wait(0x01);
-		if (event & 0x01) {
+		uint32_t event = scheduler_event_wait(EVENT_TASK_MOTOR_TIMER);
+		if (event & EVENT_TASK_MOTOR_TIMER) {
+			perf.motor.start();
 			motor_update();
+			perf.motor.end();
 		}
 	}
 }
