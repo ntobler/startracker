@@ -18,6 +18,8 @@
 #include "motor.h"
 #include "imu.h"
 #include "perf.h"
+#include "control.h"
+
 
 typedef struct {
 	Perf ui;
@@ -43,7 +45,7 @@ static void task_motor();
 extern uint32_t os_started;
 extern UART_HandleTypeDef huart1;
 extern TIM_HandleTypeDef htim4;   //fast timer for motor control update
-extern TIM_HandleTypeDef htim5;   //microseconds counter up to 4294967295
+extern TIM_HandleTypeDef htim5;   //microseconds counter up to 4294967295. Used by imu and perf
 extern I2C_HandleTypeDef hi2c3;
 
 

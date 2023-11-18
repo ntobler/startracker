@@ -187,12 +187,12 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-//#if 0
+#if 0
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-//#endif
-//  uwTick++;
+#endif
+  uwTick++;
   if (os_started) {
 	  scheduler_systick_handler();
   }
@@ -218,7 +218,7 @@ void TIM4_IRQHandler(void)
   /* USER CODE BEGIN TIM4_IRQn 1 */
 #endif
   htim4.Instance->SR = 0;
-  scheduler_event_set(2, 0x01);
+  scheduler_event_set(ID_TASK_MOTOR, EVENT_TASK_MOTOR_TIMER);
   /* USER CODE END TIM4_IRQn 1 */
 }
 
