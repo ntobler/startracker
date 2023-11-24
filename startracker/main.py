@@ -4,6 +4,8 @@ import sys
 import logging
 import pathlib
 import enum
+import argparse
+import subprocess
 
 import serial
 import numpy as np
@@ -154,26 +156,43 @@ class CalcTrajectory(communication.Command):
         return message.to_bytes()
 
 
-class Quit(communication.Command):
-    """Quit the application."""
+class ShutdownInterrupt(Exception):
+    pass
 
+
+class Quit(communication.Command):
     cmd: int = 4
     argument_type: Type[communication.Message] = EmptyMessage
 
+    def __init__(self, enable_shutdown: bool):
+        """
+        Quit the application.
+
+        Args:
+            enable_shutdown: Application is allowed to shutdown the system
+        """
+        self._enable_shutdown = enable_shutdown
+
     def execute(self, payload: bytes) -> bytes:
-        raise KeyboardInterrupt()
+        if self._enable_shutdown:
+            raise ShutdownInterrupt()
+        else:
+            raise KeyboardInterrupt()
 
 
 # TODO implement
 # class SetAttitudeEstimationMode(AttitudeEstimationMode) returns (Acknowledge)
 # class RecordDarkFrame(Empty) returns (Acknowledge)
-# class Shutdown(Empty) returns (Acknowledge)
 
 
 class App:
-    """Production application class."""
+    def __init__(self, enable_shutdown: bool):
+        """
+        Production application class.
 
-    def __init__(self):
+        Args:
+            enable_shutdown: Application is allowed to shutdown the system
+        """
         logging.info("Starting application")
 
         s = config.settings
@@ -195,7 +214,7 @@ class App:
             GetStatus(af, tc),
             SetSettings(),
             CalcTrajectory(af, tc),
-            Quit(),
+            Quit(enable_shutdown),
         ]
 
         # Run communication handler to process incoming commands.
@@ -213,6 +232,9 @@ class App:
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt")
             pass
+        except ShutdownInterrupt:
+            logging.info("ShutdownInterrupt")
+            subprocess.Popen("shutdown -h +1")
         return 0
 
 
@@ -224,10 +246,14 @@ def main() -> int:
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[logging.StreamHandler()],
     )
-    e = None
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--enable-shutdown", action="store_true", default=False)
+    args = parser.parse_args()
+
     try:
-        return App()()
-    except Exception as e:
+        return App(args.enable_shutdown)()
+    except Exception:
         logging.critical("Unhandled exception", exc_info=sys.exc_info())
         return -1
 
