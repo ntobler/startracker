@@ -6,7 +6,7 @@ scp ../web/index.html starpi:/home/pi/web
 scp ../startracker/camera_debug.py starpi:/home/pi/startracker
 scp ../startracker/camera_stream.py starpi:/home/pi/startracker
 scp ../startracker/camera_recorder.py starpi:/home/pi/startracker
-scp ../startracker/camera_calibration.py starpi:/home/pi/startracker
+scp ../startracker/camera_webgui.py starpi:/home/pi/startracker
 scp ../startracker/persistent.py starpi:/home/pi/startracker
 scp ../requirements.txt starpi:/home/pi/startracker
 scp -r '../startracker/camera/camera.py' starpi:'/home/pi/startracker/camera/camera.py'
