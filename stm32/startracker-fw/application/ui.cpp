@@ -27,10 +27,11 @@ extern uint32_t tick;
 extern Imu_data_t imu;
 
 
-Button button_up(blackpill_button_GPIO_Port, blackpill_button_Pin, 1);
-Button button_down(0, 0, 0);
-Button button_left(0, 0, 0);
-Button button_right(0, 0, 0);
+Button button_up(BUTTON_UP_GPIO_Port, BUTTON_UP_Pin, 1);
+Button button_down(BUTTON_DOWN_GPIO_Port, BUTTON_DOWN_Pin, 1);
+Button button_left(BUTTON_LEFT_GPIO_Port, BUTTON_LEFT_Pin, 1);
+Button button_right(BUTTON_RIGHT_GPIO_Port, BUTTON_RIGHT_Pin, 1);
+
 
 extern Image_description_t img_splash;
 extern Image_description_t img_rpi;
