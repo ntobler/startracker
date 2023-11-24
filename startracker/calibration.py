@@ -11,7 +11,6 @@ from typing import Union, Sequence, Dict
 
 
 class CameraCalibration:
-
     def __init__(self, cal_dict: Dict):
         """
         Camera Calibration that can be saved and restored from the filesystem.

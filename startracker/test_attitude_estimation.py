@@ -290,4 +290,3 @@ def test_attutude_estimation():
                 f"quat: {quat}, n_matches: {n_matches}, delta_angle: {delta_angle:.3f}"
             )
             plt.show()
-
