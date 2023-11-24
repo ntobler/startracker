@@ -59,8 +59,48 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define blackpill_button_Pin GPIO_PIN_0
-#define blackpill_button_GPIO_Port GPIOA
+#define LED_Pin GPIO_PIN_13
+#define LED_GPIO_Port GPIOC
+#define TMC3_STEP_Pin GPIO_PIN_14
+#define TMC3_STEP_GPIO_Port GPIOC
+#define TMC3_DIR_Pin GPIO_PIN_15
+#define TMC3_DIR_GPIO_Port GPIOC
+#define POWER_ENABLE_Pin GPIO_PIN_0
+#define POWER_ENABLE_GPIO_Port GPIOA
+#define MOTOR_BOOST_ENABLE_Pin GPIO_PIN_3
+#define MOTOR_BOOST_ENABLE_GPIO_Port GPIOA
+#define CHARGER_DONE_Pin GPIO_PIN_4
+#define CHARGER_DONE_GPIO_Port GPIOA
+#define BUTTON_UP_Pin GPIO_PIN_7
+#define BUTTON_UP_GPIO_Port GPIOA
+#define BUTTON_RIGHT_Pin GPIO_PIN_0
+#define BUTTON_RIGHT_GPIO_Port GPIOB
+#define ADC_9_VSYS_Pin GPIO_PIN_1
+#define ADC_9_VSYS_GPIO_Port GPIOB
+#define LED_CLK_Pin GPIO_PIN_2
+#define LED_CLK_GPIO_Port GPIOB
+#define LED_DATA_Pin GPIO_PIN_10
+#define LED_DATA_GPIO_Port GPIOB
+#define IMU_INTERRUPT_Pin GPIO_PIN_12
+#define IMU_INTERRUPT_GPIO_Port GPIOB
+#define RPI_ENABLE_Pin GPIO_PIN_13
+#define RPI_ENABLE_GPIO_Port GPIOB
+#define CHARGER_CHARGING_Pin GPIO_PIN_14
+#define CHARGER_CHARGING_GPIO_Port GPIOB
+#define BUTTON_DOWN_Pin GPIO_PIN_9
+#define BUTTON_DOWN_GPIO_Port GPIOA
+#define BUTTON_LEFT_Pin GPIO_PIN_10
+#define BUTTON_LEFT_GPIO_Port GPIOA
+#define TMC_ENABLE_Pin GPIO_PIN_15
+#define TMC_ENABLE_GPIO_Port GPIOA
+#define TMC1_STEP_Pin GPIO_PIN_3
+#define TMC1_STEP_GPIO_Port GPIOB
+#define TMC1_DIR_Pin GPIO_PIN_5
+#define TMC1_DIR_GPIO_Port GPIOB
+#define TMC2_STEP_Pin GPIO_PIN_8
+#define TMC2_STEP_GPIO_Port GPIOB
+#define TMC2_DIR_Pin GPIO_PIN_9
+#define TMC2_DIR_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
