@@ -3,6 +3,7 @@
 import pathlib
 
 import numpy as np
+import scipy.spatial.transform
 
 import cots_star_tracker
 
@@ -16,7 +17,7 @@ class AttitudeEstimator:
         data_dir: Union[pathlib.Path, str],
         min_star_area: int = 3,
         max_star_area: int = 100,
-        nmatch: int = 5,
+        n_match: int = 5,
         star_match_pixel_tol: float = 2.0,
     ):
         """
@@ -27,7 +28,7 @@ class AttitudeEstimator:
             data_dir: Star catalog data directory.
             min_star_area: Minimum area in pixels for a star to be detected.
             max_star_area: Maximum area in pixels for a star to be detected.
-            nmatch: Required minimum number of matches for a successful attitude lock.
+            n_match: Required minimum number of matches for a successful attitude lock.
             star_match_pixel_tol: Tolerance in pixels for a star to be recognized as match.
         """
         data_dir = pathlib.Path(data_dir)
@@ -35,7 +36,7 @@ class AttitudeEstimator:
         self._cam_file = pathlib.Path(calibration_file)
         self._min_star_area = min_star_area
         self._max_star_area = max_star_area
-        self._nmatch = nmatch
+        self._n_match = n_match
 
         self._k = np.load(data_dir / "k.npy")
         self._m = np.load(data_dir / "m.npy")
@@ -50,7 +51,7 @@ class AttitudeEstimator:
 
     def __call__(
         self, image: np.ndarray, darkframe: Optional[np.ndarray] = None
-    ) -> Tuple[np.ndarray, int]:
+    ) -> Tuple[np.ndarray, int, np.ndarray, np.ndarray]:
         """
         Perform attitude estimation on a camera image of stars.
 
@@ -59,11 +60,13 @@ class AttitudeEstimator:
             darkframe: Grayscale darkframe image (Captured with lid on).
 
         Returns:
-            Tuple[np.ndarray, int]:
-                - Quaternion #TODO check [x, y, z, w], What are x, y, z axes
-                - Number of star matches
+            Tuple[np.ndarray, int, np.ndarray, np.ndarray]:
+                - Quaternion [x, y, z, w], transforms from the camera frame to the star frame.
+                - Number of matched stars.
+                - Camera frame XYZ coordinates of the image coordinates of the matches.
+                - Camera frame XYZ coordinates of the catalog coordinates of the matches.
         """
-        q_est, _, nmatches, _, _ = cots_star_tracker.star_tracker(
+        q_est, id_match, n_matches, x_obs, _ = cots_star_tracker.star_tracker(
             image,
             str(self._cam_file),
             darkframe=darkframe,
@@ -76,13 +79,19 @@ class AttitudeEstimator:
             min_star_area=self._min_star_area,
             max_star_area=self._max_star_area,
             isa_thresh=self._isa_thresh,
-            nmatch=self._nmatch,
+            nmatch=self._n_match,
         )
-        return q_est, nmatches
+
+        image_xyz = x_obs.T
+        cat_xyz = self._x_cat.T[id_match][:, 0]
+
+        cat_xyz = scipy.spatial.transform.Rotation.from_quat(q_est).inv().apply(cat_xyz)
+
+        return q_est, n_matches, image_xyz, cat_xyz
 
 
 class AttitudeFilter:
-    """Filter multliple attitude observations over time."""
+    """Filter multiple attitude observations over time."""
 
     attitude_quat: Optional[np.ndarray]
     estimation_id: int
