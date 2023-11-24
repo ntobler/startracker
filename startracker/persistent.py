@@ -1,3 +1,4 @@
+"""Persistent data storage module."""
 import pathlib
 
 
@@ -27,3 +28,6 @@ class Persistent:
         self.package_dir = pathlib.Path(__file__).parent.expanduser().absolute()
 
         self.default_conf_file = self.package_dir / "default_config.yml"
+
+        self.testing_dir = self.user_data_dir / "testing"
+        self.testing_dir.mkdir(exist_ok=True)

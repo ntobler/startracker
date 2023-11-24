@@ -83,7 +83,7 @@ class MasterEmulator:
 
 
 def test_main():
-    m = main.App()
+    m = main.App(False)
 
     test_data_table = [
         (main.SetSettings, main.Settings(6, 10, 100, 2), main.ACK),
