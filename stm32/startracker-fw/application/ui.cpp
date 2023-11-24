@@ -13,6 +13,7 @@
 #include "stdio.h"
 #include "image.h"
 #include "imu.h"
+#include "scheduler.h"
 
 
 static AbstractUI* active = 0;
@@ -29,8 +30,8 @@ extern Imu_data_t imu;
 
 Button button_up(BUTTON_UP_GPIO_Port, BUTTON_UP_Pin, 1);
 Button button_down(BUTTON_DOWN_GPIO_Port, BUTTON_DOWN_Pin, 1);
-Button button_left(BUTTON_LEFT_GPIO_Port, BUTTON_LEFT_Pin, 1);
-Button button_right(BUTTON_RIGHT_GPIO_Port, BUTTON_RIGHT_Pin, 1);
+Button button_right(BUTTON_LEFT_GPIO_Port, BUTTON_LEFT_Pin, 1);
+Button button_left(BUTTON_RIGHT_GPIO_Port, BUTTON_RIGHT_Pin, 1);
 
 
 extern Image_description_t img_splash;
@@ -101,7 +102,10 @@ AbstractUI* Home::update(Ui_event_en e) {
 //		return 0;
 //	}
 	draw();
-	if (button_up.event == BTN_RISING) {
+	if (button_up.event == BTN_RISING ||
+		button_left.event == BTN_RISING ||
+		button_right.event == BTN_RISING ||
+		button_down.event == BTN_RISING) {
 		return &menu;
 	}
 	return 0;
@@ -198,11 +202,22 @@ power OFF
 */
 
 	if (button_up.event == BTN_RISING) {
-//		ssd1306_demo_run();
-		pos = (pos + 1) % 8;
-		//draw();
+		pos ++;
+		if (pos >= 8) {
+			pos = 8;
+		}
 	}
-	if (button_up.event == BTN_LONG) {
+	if (button_down.event == BTN_RISING) {
+		pos--;
+		if (pos < 0) {
+			pos = 0;
+		}
+	}
+	if (button_left.event == BTN_RISING) {
+		return &home;
+	}
+	if (button_up.event == BTN_LONG ||
+		button_right.event == BTN_RISING) {
 		if (pos == 0) {
 			return &home;
 		}
@@ -260,7 +275,10 @@ AbstractUI* Bubble::update(Ui_event_en e) {
 		draw();
 		return 0;
 	}
-	if (button_up.event == BTN_RISING) {
+	if (button_up.event == BTN_RISING ||
+		button_left.event == BTN_RISING ||
+		button_right.event == BTN_RISING ||
+		button_down.event == BTN_RISING) {
 		return &menu;
 	}
 	draw();
@@ -325,7 +343,10 @@ AbstractUI* About::update(Ui_event_en e) {
 		draw();
 		return 0;
 	}
-	if (button_up.event == BTN_RISING) {
+	if (button_up.event == BTN_RISING ||
+		button_left.event == BTN_RISING ||
+		button_right.event == BTN_RISING ||
+		button_down.event == BTN_RISING) {
 		return &menu;
 	}
 	return 0;
@@ -353,8 +374,14 @@ AbstractUI* Shutdown::update(Ui_event_en e) {
 		draw();
 		return 0;
 	}
-	if (button_up.event == BTN_RISING) {
+	if (button_right.event == BTN_RISING) {
+
+		HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_RESET);
+		scheduler_task_sleep(100);
 		NVIC_SystemReset();
+	}
+	if (button_left.event == BTN_RISING) {
+		return &menu;
 	}
 	draw();
 	return 0;
