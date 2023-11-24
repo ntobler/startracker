@@ -106,6 +106,7 @@ static void task_idle() {
 }
 
 static void task_ui() {
+	scheduler_task_sleep(200);
 	ui_init();
 	imu_init();
 	while (1) {
@@ -118,14 +119,19 @@ static void task_ui() {
 			ui_update();
 			perf.ui.end();
 		}
-		perf.imu.start();
-		imu_update();
-		perf.imu.end();
+
+		//only update IMU when I2C is ready. tha means the DMA transfer(s) from the display are finished.
+		if (hi2c3.State == HAL_I2C_STATE_READY) {
+			perf.imu.start();
+			imu_update();
+			perf.imu.end();
+		}
 	}
 }
 
 
 static void task_control() {
+	HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_SET);
 	control_init();
 	while (1) {
 		perf.control.start();
@@ -133,6 +139,7 @@ static void task_control() {
 		scheduler_event_set(ID_TASK_UI, EVENT_TASK_UPDATE);
 		perf.control.end();
 		scheduler_task_sleep(100);
+		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 	}
 }
 
