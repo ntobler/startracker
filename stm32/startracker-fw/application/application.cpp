@@ -19,6 +19,8 @@
 #include "imu.h"
 #include "perf.h"
 #include "control.h"
+#include "APA102C.h"
+#include "math.h"
 
 
 typedef struct {
@@ -101,12 +103,12 @@ static void task_idle() {
 			serial_usb.writeBuf(buf, avail);
 			//scheduler_task_sleep(10);
 		}
-//		__WFI();
+		__WFI();
 	}
 }
 
 static void task_ui() {
-	scheduler_task_sleep(200);
+	scheduler_task_sleep(100);
 	ui_init();
 	imu_init();
 	while (1) {
@@ -126,6 +128,7 @@ static void task_ui() {
 			imu_update();
 			perf.imu.end();
 		}
+
 	}
 }
 
@@ -140,10 +143,18 @@ static void task_control() {
 		perf.control.end();
 		scheduler_task_sleep(100);
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
+
+		float t = (uwTick % 5000) / 5000.0f * 2*3.14159f;
+		uint8_t r = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t)));
+		uint8_t g = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t+2.0943951023931953f)));
+		uint8_t b = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t+2*2.0943951023931953f)));
+		writeColor(r,g,b,7,LED_CLK_GPIO_Port,LED_CLK_Pin,LED_DATA_GPIO_Port,LED_DATA_Pin);
 	}
 }
 
 static void task_motor() {
+	scheduler_task_sleep(500);
 	HAL_TIM_Base_Start_IT(&htim4);
 	motor_init();
 	while (1) {
