@@ -71,6 +71,8 @@ void Error_Handler(void);
 #define MOTOR_BOOST_ENABLE_GPIO_Port GPIOA
 #define CHARGER_DONE_Pin GPIO_PIN_4
 #define CHARGER_DONE_GPIO_Port GPIOA
+#define TIM3_CH1_TMC_PWM_Pin GPIO_PIN_6
+#define TIM3_CH1_TMC_PWM_GPIO_Port GPIOA
 #define BUTTON_UP_Pin GPIO_PIN_7
 #define BUTTON_UP_GPIO_Port GPIOA
 #define BUTTON_RIGHT_Pin GPIO_PIN_0
