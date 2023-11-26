@@ -42,6 +42,11 @@ class Settings:
 
 @communication.make_message
 class Trajectory:
+    ack = communication.EnumField(
+        AcknowledgeEnum,
+        "uint8",
+        "1 if the trajectory could be calculated successfully, otherwise 0",
+    )
     start = communication.Field("float32", "Start time in seconds")
     stop = communication.Field("float32", "Stop time in seconds")
     coeffs = communication.ArrayField("float32", (3, 4), "Polynomial coefficients")
@@ -59,6 +64,7 @@ class AttitudeEstimationMode(enum.Enum):
     OFF = 0
     ON = 1
     SINGLE = 2
+    RECORD_DARKFRAME = 3
 
 
 @communication.make_message
@@ -78,9 +84,10 @@ class EmptyMessage:
 
 
 def generate_code():
-    """Utility function to generate code for the STM projet"""
+    """Utility function to generate code for the STM project"""
     communication.gen_code_with_dependencies(
-        [Acknowledge, Settings, Trajectory, Status], pathlib.Path("out.h")
+        [Acknowledge, Settings, Trajectory, Status, EmptyMessage],
+        pathlib.Path("out.h"),
     )
 
 
@@ -93,17 +100,20 @@ class GetStatus(communication.Command):
     """Get the application status."""
 
     cmd: int = 1
-    argument_type: Type[communication.Message] = Status
+    request_type: Type[communication.Message] = EmptyMessage
+    response_type: Type[communication.Message] = Status
 
     def __init__(
         self,
         attitude_filter: attitude_estimation.AttitudeFilter,
         trajectory_calculator: trajectory.TrajectoryCalculator,
+        image_acquisitioner: attitude_estimation.ImageAcquisitioner,
     ):
         self._attitude_filter = attitude_filter
         self._trajectory_calculator = trajectory_calculator
+        self._image_acquisitioner = image_acquisitioner
 
-    def execute(self, payload: bytes) -> bytes:
+    def execute(self, request: EmptyMessage) -> Status:
         status = Status(
             attitude_estimation_mode=69,  # TODO implement
             current_number_of_matches=420,
@@ -111,26 +121,28 @@ class GetStatus(communication.Command):
             quaternion=self._attitude_filter.attitude_quat,
             estimation_id=self._attitude_filter.estimation_id,
         )
-        return status.to_bytes()
+        return status
 
 
 class SetSettings(communication.Command):
     """Set star tracker settings."""
 
     cmd: int = 2
-    argument_type: Type[communication.Message] = Settings
+    request_type: Type[communication.Message] = Settings
+    response_type: Type[communication.Message] = Acknowledge
 
-    def execute(self, payload: bytes) -> bytes:
-        settings = self.argument_type.from_bytes(payload)
+    def execute(self, request: Settings) -> Acknowledge:
+        settings = request
         # TODO add logic
-        return ACK.to_bytes()
+        return ACK
 
 
 class CalcTrajectory(communication.Command):
     """Calculate trajectory using current attitude."""
 
     cmd: int = 3
-    argument_type: Type[communication.Message] = EmptyMessage
+    request_type: Type[communication.Message] = EmptyMessage
+    response_type: Type[communication.Message] = Trajectory
 
     def __init__(
         self,
@@ -140,29 +152,31 @@ class CalcTrajectory(communication.Command):
         self._attitude_filter = attitude_filter
         self._trajectory_calculator = trajectory_calculator
 
-    def execute(self, payload: bytes) -> bytes:
+    def execute(self, request: EmptyMessage) -> Trajectory:
         az_el = self._attitude_filter.get_azimuth_elevation()
 
         if az_el is None:
-            return NACK.to_bytes()
+            return Trajectory(ack=NACK)
 
         az, el = az_el
         polynom_trajectory = self._trajectory_calculator(az, el)
-        message = Trajectory(
+        response = Trajectory(
+            AcknowledgeEnum.ACK,
             polynom_trajectory.start,
             polynom_trajectory.stop,
             polynom_trajectory.position_coeffs.tolist(),
         )
-        return message.to_bytes()
+        return response
 
 
 class ShutdownInterrupt(Exception):
     pass
 
 
-class Quit(communication.Command):
+class Shutdown(communication.Command):
     cmd: int = 4
-    argument_type: Type[communication.Message] = EmptyMessage
+    request_type: Type[communication.Message] = EmptyMessage
+    response_type: Type[communication.Message] = Acknowledge
 
     def __init__(self, enable_shutdown: bool):
         """
@@ -173,11 +187,15 @@ class Quit(communication.Command):
         """
         self._enable_shutdown = enable_shutdown
 
-    def execute(self, payload: bytes) -> bytes:
+    def execute(self, request: EmptyMessage) -> Acknowledge:
+        import time
+
+        time.sleep(10)
         if self._enable_shutdown:
             raise ShutdownInterrupt()
         else:
             raise KeyboardInterrupt()
+        return ACK
 
 
 # TODO implement
@@ -214,7 +232,7 @@ class App:
             GetStatus(af, tc),
             SetSettings(),
             CalcTrajectory(af, tc),
-            Quit(enable_shutdown),
+            Shutdown(enable_shutdown),
         ]
 
         # Run communication handler to process incoming commands.

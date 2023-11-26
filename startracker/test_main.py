@@ -61,7 +61,7 @@ class MasterEmulator:
 
     def _run(self):
         for command, tx_message, rx_expected in self.test_data:
-            assert command.argument_type == type(tx_message)
+            assert command.request_type == type(tx_message)
             self.ser.write_cmd(command.cmd, tx_message.to_bytes())
 
             if rx_expected is not None:
@@ -88,7 +88,7 @@ def test_main():
     test_data_table = [
         (main.SetSettings, main.Settings(6, 10, 100, 2), main.ACK),
         (main.CalcTrajectory, main.EmptyMessage(), main.Trajectory),
-        (main.Quit, main.EmptyMessage(), None),
+        (main.Shutdown, main.EmptyMessage(), None),
     ]
 
     device_serial = MockSerial(m._ser)

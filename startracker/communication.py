@@ -53,7 +53,7 @@ class PacketHandler(serial.Serial):
     - 1 cmd_id byte
     - 1 length byte, evaluates to n
     - n payload bytes
-    - 2 crc bytes (crc16)
+    - 2 crc bytes of payload only (crc16)
     """
 
     def __init__(self, ser: serial.Serial):
@@ -325,6 +325,7 @@ def gen_code_with_dependencies(
     h_file: Union[pathlib.Path, str],
     indent: int = 4,
     skip_file_write: bool = False,
+    include_dependencies: bool = True,
 ) -> str:
     """Export a .h file of the message definitions."""
     h_file = pathlib.Path(h_file)
@@ -339,8 +340,9 @@ def gen_code_with_dependencies(
             elif isinstance(v, EnumField):
                 dependencies.append(v)
 
-    for m in messages:
-        check_msg(m)
+    if include_dependencies:
+        for m in messages:
+            check_msg(m)
 
     deps = list(dict.fromkeys(reversed(dependencies)))
 
@@ -384,10 +386,10 @@ class Command(abc.ABC):
     """Base class for communication commands."""
 
     cmd: int
-    argument_type: Type[Message] = Message
+    request_type: Type[Message] = Message
 
     @abc.abstractmethod
-    def execute(self, payload: bytes) -> bytes:
+    def execute(self, payload: Message) -> Message:
         ...
 
 
@@ -416,6 +418,8 @@ class CommandHandler:
                 if command is None:
                     self.serial.write_cmd(cmd_id, self._default_message.to_bytes())
                 else:
-                    self.serial.write_cmd(cmd_id, command.execute(payload))
+                    request = command.request_type().from_bytes(payload)
+                    response = command.execute(request)
+                    self.serial.write_cmd(cmd_id, response.to_bytes())
             except CommunicationTimeoutException:
                 pass
