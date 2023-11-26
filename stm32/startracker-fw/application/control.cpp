@@ -12,6 +12,7 @@
 #include "application.h"
 #include "string.h"
 #include "main.h"
+#include "rpi_protocol.h"
 
 
 enum {
@@ -33,7 +34,6 @@ Control_t control = {0};
 
 static void measure_vbat();
 static void rpi_power(uint32_t on);
-static uint32_t rpi_responsive();
 static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltage);
 
 extern ADC_HandleTypeDef hadc1;
@@ -81,7 +81,8 @@ void control_update() {
 	control.charge_level = battery_charge_level_state_machine(control.charge_level, control.battery_voltage * 1000.0f);
 
 
-
+	static uint32_t poll_timer = 0;
+	const uint32_t POLL_TIME = 10;
 
 	switch (control.state) {
 	case CONTROL_IDLE:
@@ -92,8 +93,13 @@ void control_update() {
 		break;
 	case CONTROL_BOOTING:
 		rpi_on_time = RPI_ON_TIMEOUT;
-		if (rpi_responsive()) {
-			control.state = CONTROL_MEASURING;
+		poll_timer++;
+		if (poll_timer > POLL_TIME) {
+			Status* status = rpi_status();
+			if (status) {
+				control.state = CONTROL_MEASURING;
+			}
+			poll_timer = 0;
 		}
 		break;
 	case CONTROL_MEASURING:
@@ -236,10 +242,7 @@ static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltag
 
 
 static void rpi_power(uint32_t on) {
-	//TODO
-	control.rpi_running = 1;
+	control.rpi_running = on;
+	HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, (GPIO_PinState)on);
 }
 
-static uint32_t rpi_responsive() {
-	return 1;
-}
