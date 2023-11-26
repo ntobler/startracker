@@ -1,0 +1,10 @@
+# Default configuration. Additional configuration can be specified in `~/.startracker/config.yml`
+serial_port: null
+serial_baudrate: 9600
+hardware:
+    motor_dists_from_center: 50
+    motor_theta: 90
+    motor_phi: 45
+trajectory:
+    max_seconds: 150
+    max_dist: 10

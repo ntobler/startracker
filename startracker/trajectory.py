@@ -1,8 +1,9 @@
 import dataclasses
 
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.spatial.transform
+
+from typing import Union
 
 
 def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
@@ -19,7 +20,7 @@ def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
     Returns:
         (np.ndarray): fermat mid point shape=[..., xyz]
     """
-    a, b, c = np.swapaxes(points, -2, 0)
+    a, b, c = np.moveaxis(points, -2, 0)
 
     ba = a - b
     bc = c - b
@@ -141,6 +142,8 @@ class MotorSolver:
         # assert np.all(sled_dists > 0)
 
         if (not np.all(sled_dists > 0)) or (plot and motor_dists.ndim == 1):
+            import matplotlib.pyplot as plt
+
             translation = solution[:3]
             shaft_vectors = shaft_directions * motor_dists[:, None]
 
@@ -221,7 +224,7 @@ class MotorSolver:
 def astro_rotation_matrix(
     azimuth: float,
     elevation: float,
-    roll: float,
+    roll: Union[float, np.ndarray],
     degrees: bool = False,
 ):
     """
@@ -251,15 +254,24 @@ def astro_rotation_matrix(
     return rot_matrix
 
 
-def seconds_to_degrees(seconds: float):
+def seconds_to_degrees(seconds: Union[float, np.ndarray]):
     return seconds * (360 / (24 * 60 * 60))
+
+
+def degrees_to_seconds(degrees: Union[float, np.ndarray]):
+    return degrees / (360 / (24 * 60 * 60))
 
 
 @dataclasses.dataclass
 class PolynomTrajectory:
     position_coeffs: np.ndarray
+    """Polynomial coefficients, in decreasing order (c_{n}, c_{n-1}, ... c_{0},
+    shape=[motor_count, order+1]
+    """
     start: float
+    """Start value in seconds to use for the polynomial evaluation."""
     stop: float
+    """Stop value in seconds to use for the polynomial evaluation."""
 
 
 def find_continuous_zero_slice(x: np.ndarray, mid_index: int) -> slice:
@@ -286,7 +298,7 @@ class TrajectoryCalculator:
         self._max_dist = max_dist
         self._motor_solver = motor_solver
 
-    def __call__(self, azimuth: float, elevation: float):
+    def __call__(self, azimuth: float, elevation: float) -> PolynomTrajectory:
         seconds = np.linspace(-self._max_seconds / 2, self._max_seconds / 2, 100)
         roll = seconds_to_degrees(seconds)
 
@@ -309,7 +321,7 @@ class TrajectoryCalculator:
         if len(seconds) == 0:
             raise ValueError("Calculated trajectory has zero length")
 
-        poly = np.polyfit(seconds, motor_dists, 3)
+        poly = np.polyfit(seconds, motor_dists, 3).T
 
         return PolynomTrajectory(
             position_coeffs=poly,

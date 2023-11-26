@@ -1,0 +1,8 @@
+-r requirements.txt
+matplotlib
+pre-commit
+pytest
+
+pycairo
+astropy
+pandas

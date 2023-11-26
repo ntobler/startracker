@@ -1,2 +1,8 @@
-opencv-python
 numpy
+opencv-python
+scipy
+flask
+flask-sock
+pyserial
+dynaconf
+git+https://github.com/ntobler/COTS-Star-Tracker.git@simplification

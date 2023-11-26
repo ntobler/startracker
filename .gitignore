@@ -4,3 +4,7 @@
 History/
 __Previews/
 Project Logs*/
+
+test_images*
+build
+startracker.egg-info
