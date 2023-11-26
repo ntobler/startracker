@@ -1,0 +1,3 @@
+Layer Pairs Export File for PCB: \\192.168.1.200\Storragepool\Datastorrage\Projects\Startracker\hardware\Startracker\Startracker_mainboard.PcbDoc
+LayersSetName=Top_Bot_Thru_Holes|DrillFile=startracker_a00-roundholes.txt|DrillLayers=gtl,g1,g2,gbl
+LayersSetName=Top_Bot_Slot_Holes|DrillFile=startracker_a00-slotholes.txt|DrillLayers=gtl,g1,g2,gbl

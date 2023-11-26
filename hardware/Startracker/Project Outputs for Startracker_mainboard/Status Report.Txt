@@ -1,0 +1,10 @@
+Output: Electrical Rules Check
+Type  : ERC
+From  : Project [Startracker_mainboard.PrjPcb]
+   Generated File[Startracker_A00.html]
+
+
+Files Generated   : 1
+Documents Printed : 0
+
+Finished Output Generation At 20:15:39 On 15.11.2023
