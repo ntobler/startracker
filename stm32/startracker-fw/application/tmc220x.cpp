@@ -59,8 +59,8 @@ void TMC220X::send_init() {
 	send_data(REG_CHOPCONF, 0xC10D0024);  //Reset default=0xC10D0024
 
 
-
-	HAL_GPIO_WritePin(en_port, en_pin, GPIO_PIN_SET);
+    //to save power, disable drivers with enable pin
+	HAL_GPIO_WritePin(en_port, en_pin, GPIO_PIN_RESET);
 
 }
 
