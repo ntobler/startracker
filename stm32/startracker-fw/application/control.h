@@ -30,6 +30,7 @@ typedef struct {
 	uint8_t charger_done;
 	Control_state_en state;
 	uint8_t rpi_running;
+	uint8_t charge_level;
 } Control_t;
 
 

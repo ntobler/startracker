@@ -34,6 +34,7 @@ Control_t control = {0};
 static void measure_vbat();
 static void rpi_power(uint32_t on);
 static uint32_t rpi_responsive();
+static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltage);
 
 extern ADC_HandleTypeDef hadc1;
 
@@ -76,6 +77,8 @@ void control_update() {
 	if (battery_charge_change > 0.02f || battery_charge_change < -0.02f) {
 		control.charger_done = 0;
 	}
+
+	control.charge_level = battery_charge_level_state_machine(control.charge_level, control.battery_voltage * 1000.0f);
 
 
 
@@ -179,6 +182,58 @@ static void measure_vbat() {
 //				+ new_vbat * 0.2f;
 //	}
 }
+
+
+
+static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltage) {
+	switch (state) {
+	case 0:
+		if (voltage > 3451) return state + 1;
+		return state;
+	case 1:
+		if (voltage < 3395) return state - 1;
+		if (voltage > 3529) return state + 1;
+		return state;
+	case 2:
+		if (voltage < 3515) return state - 1;
+		if (voltage > 3577) return state + 1;
+		return state;
+	case 3:
+		if (voltage < 3559) return state - 1;
+		if (voltage > 3608) return state + 1;
+		return state;
+	case 4:
+		if (voltage < 3600) return state - 1;
+		if (voltage > 3654) return state + 1;
+		return state;
+	case 5:
+		if (voltage < 3638) return state - 1;
+		if (voltage > 3702) return state + 1;
+		return state;
+	case 6:
+		if (voltage < 3692) return state - 1;
+		if (voltage > 3749) return state + 1;
+		return state;
+	case 7:
+		if (voltage < 3736) return state - 1;
+		if (voltage > 3814) return state + 1;
+		return state;
+	case 8:
+		if (voltage < 3797) return state - 1;
+		if (voltage > 3888) return state + 1;
+		return state;
+	case 9:
+		if (voltage < 3866) return state - 1;
+		if (voltage > 3969) return state + 1;
+		return state;
+	case 10:
+		if (voltage < 3941) return state - 1;
+		return state;
+	default:
+		return 5;
+	}
+}
+
 
 static void rpi_power(uint32_t on) {
 	//TODO

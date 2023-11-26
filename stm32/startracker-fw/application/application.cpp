@@ -33,7 +33,7 @@ typedef struct {
 
 static uint32_t vpc_send_cb(uint8_t* buf, uint32_t len);
 
-#define STACK_SIZE (4096)
+#define STACK_SIZE (4096*2)
 
 static uint8_t stack_idle[STACK_SIZE];
 static uint8_t stack_ui[STACK_SIZE];
@@ -46,6 +46,7 @@ static void task_motor();
 
 extern uint32_t os_started;
 extern UART_HandleTypeDef huart1;
+extern TIM_HandleTypeDef htim3;   //Steper drive current reference PWM
 extern TIM_HandleTypeDef htim4;   //fast timer for motor control update
 extern TIM_HandleTypeDef htim5;   //microseconds counter up to 4294967295. Used by imu and perf
 extern I2C_HandleTypeDef hi2c3;
@@ -108,7 +109,7 @@ static void task_idle() {
 }
 
 static void task_ui() {
-	scheduler_task_sleep(100);
+	scheduler_task_sleep(150);  //must wait for the display driver IC to boot up.
 	ui_init();
 	imu_init();
 	while (1) {
@@ -134,28 +135,29 @@ static void task_ui() {
 
 
 static void task_control() {
-	HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_SET);
 	control_init();
 	while (1) {
+		scheduler_task_sleep(100);
 		perf.control.start();
 		control_update();
 		scheduler_event_set(ID_TASK_UI, EVENT_TASK_UPDATE);
 		perf.control.end();
-		scheduler_task_sleep(100);
-		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+		//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
 
-		float t = (uwTick % 5000) / 5000.0f * 2*3.14159f;
-		uint8_t r = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t)));
-		uint8_t g = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t+2.0943951023931953f)));
-		uint8_t b = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t+2*2.0943951023931953f)));
-		writeColor(r,g,b,7,LED_CLK_GPIO_Port,LED_CLK_Pin,LED_DATA_GPIO_Port,LED_DATA_Pin);
+//		float t = (uwTick % 5000) / 5000.0f * 2*3.14159f;
+//		uint8_t r = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t)));
+//		uint8_t g = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t+2.0943951023931953f)));
+//		uint8_t b = (uint8_t)(255.0f*(0.5f+0.5f*sinf(t+2*2.0943951023931953f)));
+//		writeColor(r,g,b,7,LED_CLK_GPIO_Port,LED_CLK_Pin,LED_DATA_GPIO_Port,LED_DATA_Pin);
 	}
 }
 
 static void task_motor() {
-	scheduler_task_sleep(500);
+	scheduler_task_sleep(10000);
 	HAL_TIM_Base_Start_IT(&htim4);
+	htim3.Instance->CCR1 = 256;
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 	motor_init();
 	while (1) {
 //		scheduler_task_sleep(3000);

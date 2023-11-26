@@ -14,6 +14,17 @@ typedef enum {
 	HIDE
 } Ui_event_en;
 
+typedef enum {
+	MENU_BUBBLE,
+	MENU_CAPTURE,
+	MENU_STARTSTOP,
+	MENU_HOME,
+	MENU_VIEW,
+	MENU_SHUTDOWN,
+	MENU_ABOUT,
+	MENU_COUNT
+} Menu_entry_id_en;
+
 
 class AbstractUI {
 public:
@@ -36,7 +47,7 @@ public:
 
 class Menu : public AbstractUI {
 	int pos = 0;
-	float fpos = 0;
+	float fpos = 0.0f;
 	void draw();
 public:
 	AbstractUI* update(Ui_event_en e) override;

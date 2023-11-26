@@ -14,6 +14,7 @@
 #include "image.h"
 #include "imu.h"
 #include "scheduler.h"
+#include "control.h"
 
 
 static AbstractUI* active = 0;
@@ -26,10 +27,11 @@ static About about;
 extern float position[3];
 extern uint32_t tick;
 extern Imu_data_t imu;
+extern Control_t control;
 
 
-Button button_up(BUTTON_UP_GPIO_Port, BUTTON_UP_Pin, 1);
-Button button_down(BUTTON_DOWN_GPIO_Port, BUTTON_DOWN_Pin, 1);
+Button button_down(BUTTON_UP_GPIO_Port, BUTTON_UP_Pin, 1);
+Button button_up(BUTTON_DOWN_GPIO_Port, BUTTON_DOWN_Pin, 1);
 Button button_right(BUTTON_LEFT_GPIO_Port, BUTTON_LEFT_Pin, 1);
 Button button_left(BUTTON_RIGHT_GPIO_Port, BUTTON_RIGHT_Pin, 1);
 
@@ -52,6 +54,7 @@ extern Image_description_t img_battery7;
 extern Image_description_t img_battery8;
 extern Image_description_t img_battery9;
 extern Image_description_t img_battery10;
+extern Image_description_t img_battery_full;
 static Image_description_t* img_batterys [] = {
 	&img_battery0,
 	&img_battery1,
@@ -64,6 +67,15 @@ static Image_description_t* img_batterys [] = {
 	&img_battery8,
 	&img_battery9,
 	&img_battery10,
+};
+static const char* entrys[MENU_COUNT] = {
+		"bubble level",
+		"capture stars",
+		"start tracking",
+		"home motors",
+		"view camera",
+		"shutdown",
+		"about",
 };
 
 
@@ -93,6 +105,7 @@ void Splash::draw() {
 	ssd1306_SetColor(White);
     ssd1306_Clear();
     ssd1306_DrawImage(0, 0, &img_splash);
+
     ssd1306_UpdateScreen();
 }
 
@@ -101,13 +114,19 @@ AbstractUI* Home::update(Ui_event_en e) {
 //		draw();
 //		return 0;
 //	}
-	draw();
 	if (button_up.event == BTN_RISING ||
 		button_left.event == BTN_RISING ||
 		button_right.event == BTN_RISING ||
 		button_down.event == BTN_RISING) {
 		return &menu;
 	}
+	if (button_up.event == BTN_LONG) {
+		return &shutdown;
+	}
+	if (button_down.event == BTN_LONG) {
+		return &splash;
+	}
+	draw();
 	return 0;
 }
 
@@ -124,90 +143,60 @@ volatile static YourEnum yourEnum[100];
 void Home::draw() {
     ssd1306_Clear();
     ssd1306_SetColor(White);
-    int i = 0;
+    int i = 1;  //first line is line 1 because line 0 is used by all the symbols
+
 
     ssd1306_SetCursor(0, i++*13);
-//    ssd1306_WriteString("Home", Font_7x10);
+    ssd1306_WriteString("bat=", Font_7x10);
+    ssd1306_write_float(control.battery_voltage, 2, Font_7x10);
+    ssd1306_WriteString("V ", Font_7x10);
+    if (control.charger_done == 0 && control.charger_charging == 0) {
+        ssd1306_write_int(control.charge_level * 10, Font_7x10);
+        ssd1306_WriteString("%", Font_7x10);
+    }
 
-//    ssd1306_SetCursor(0, i++*13);
-//    ssd1306_WriteString("pos[0]=", Font_7x10);
-//    ssd1306_write_float(position[0], 3, Font_7x10);
-//
-//    ssd1306_SetCursor(0, i++*13);
-//    ssd1306_WriteString("pos[1]=", Font_7x10);
-//    ssd1306_write_float(position[1], 3, Font_7x10);
-//
-//    ssd1306_SetCursor(0, i++*13);
-//    ssd1306_WriteString("pos[2]=", Font_7x10);
-//    ssd1306_write_float(position[2], 3, Font_7x10);
-//    i = 4;
-    ssd1306_SetCursor(0, i++*13);
-    ssd1306_WriteString("tick=", Font_7x10);
-    ssd1306_write_int(tick, Font_7x10);
 
-//    i = 0;
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.a[0]/128, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.a[1]/128, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.a[2]/128, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.g[0]/128, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.g[1]/128, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.g[2]/128, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.m[0]/4, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.m[1]/4, 3);
-//	ssd1306_FillRect(0, 15+i++*4, imu.raw.m[2]/4, 3);
-
-	ssd1306_SetCursor(0, i++*13);
-	ssd1306_WriteString("yaw=", Font_7x10);
-	ssd1306_write_float(imu.fusion.yaw, 3, Font_7x10);
-
-	ssd1306_SetCursor(0, i++*13);
-	ssd1306_WriteString("pitch=", Font_7x10);
-	ssd1306_write_float(imu.fusion.pitch, 3, Font_7x10);
-
-	ssd1306_SetCursor(0, i++*13);
-	ssd1306_WriteString("roll=", Font_7x10);
-	ssd1306_write_float(imu.fusion.roll, 3, Font_7x10);
 
 
     i = 0;
-    ssd1306_DrawImage(i++ * 20, 0, &img_rpi);
-    ssd1306_DrawImage(i++ * 20, 0, &img_ursa_maior);
-    ssd1306_DrawImage(i++ * 20, 0, img_batterys[(uwTick / 200) % 11]);
-    ssd1306_DrawImage(i++ * 20, 0, uwTick % 1000 > 500 ? &img_power : &img_power_active);
+    if (control.rpi_running) {
+        ssd1306_DrawImage(i++ * 20, 0, &img_rpi);
+    }
+    if (control.state == CONTROL_MEASURING) {
+        ssd1306_DrawImage(i++ * 20, 0, &img_ursa_maior);
+    }
+    if (control.charger_done) {
+        ssd1306_DrawImage(i++ * 20, 0, &img_battery_full);
+        ssd1306_DrawImage(i++ * 20, 0, &img_power);
+    } else if (control.charger_charging) {
+        ssd1306_DrawImage(i++ * 20, 0, img_batterys[(uwTick / 200) % 11]);
+        ssd1306_DrawImage(i++ * 20, 0, uwTick % 1000 > 500 ? &img_power : &img_power_active);
+    } else {
+        ssd1306_DrawImage(i++ * 20, 0, img_batterys[control.charge_level]);
+    }
     ssd1306_DrawImage(i++ * 20, 0, &img_motor);
     ssd1306_DrawImage(i++ * 20, 0, &img_camera);
 
     ssd1306_UpdateScreen();
 }
 
-extern Image_description_t img_rpi;
-extern Image_description_t img_camera;
-extern Image_description_t img_motor;
-extern Image_description_t img_power;
-extern Image_description_t img_ursa_maior;
-extern Image_description_t img_battery;
+
 
 
 
 AbstractUI* Menu::update(Ui_event_en e) {
-	if (e == SHOW) {
-		draw();
-		return 0;
-	}
-/*
-capture image
-start tracking
-home motors
-power OFF
-*/
+//	if (e == SHOW) {
+//		draw();
+//		return 0;
+//	}
 
-	if (button_up.event == BTN_RISING) {
-		pos ++;
-		if (pos >= 8) {
-			pos = 8;
+	if (button_down.event == BTN_RISING) {
+		pos++;
+		if (pos > MENU_COUNT-1) {
+			pos = MENU_COUNT-1;
 		}
 	}
-	if (button_down.event == BTN_RISING) {
+	if (button_up.event == BTN_RISING) {
 		pos--;
 		if (pos < 0) {
 			pos = 0;
@@ -218,16 +207,13 @@ power OFF
 	}
 	if (button_up.event == BTN_LONG ||
 		button_right.event == BTN_RISING) {
-		if (pos == 0) {
-			return &home;
-		}
-		if (pos == 1) {
+		if (pos == MENU_BUBBLE) {
 			return &bubble;
 		}
-		if (pos == 6) {
+		if (pos == MENU_SHUTDOWN) {
 			return &shutdown;
 		}
-		if (pos == 7) {
+		if (pos == MENU_ABOUT) {
 			return &about;
 		}
 	}
@@ -237,23 +223,13 @@ power OFF
 
 
 void Menu::draw() {
-	static const int num_entry = 8;
-	static const char* entrys[num_entry] = {
-			"home screen",
-			"bubble level",
-			"capture stars",
-			"start tracking",
-			"home motors",
-			"view camera",
-			"shutdown",
-			"about",
-	};
+
 
     ssd1306_Clear();
     ssd1306_SetColor(White);
     fpos = (fpos * 0.6f) + (pos * 0.4f);
 
-    for (int i = 0; i < num_entry; i++) {
+    for (int i = 0; i < MENU_COUNT; i++) {
     	int y = (int)((i-fpos+2) * 13);
         ssd1306_SetCursor(0, y);
 
