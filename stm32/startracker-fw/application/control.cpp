@@ -26,7 +26,8 @@ static uint8_t do_reset = 0;
 static uint8_t do_shutdown = 0;
 static uint32_t rpi_on_time = 0;
 static uint32_t adc_dma_buf[ADC_SAMPLE_LEN * ADC_CHANNELS];
-
+static float old_battery_voltage = 0.0f;
+static float battery_charge_change = 0.0f;
 
 Control_t control = {0};
 
@@ -53,13 +54,28 @@ void control_init() {
 void control_update() {
 	measure_vbat();
 
+	if (old_battery_voltage == 0.0f) {
+		old_battery_voltage = control.battery_voltage;
+	}
+	battery_charge_change = control.battery_voltage - old_battery_voltage;
+	old_battery_voltage = old_battery_voltage * 0.998f + 0.002f * control.battery_voltage;
+
 	//evaluate if charger is charging
 //	control.charger_charging = HAL_GPIO_ReadPin(CHARGER_CHARGING_GPIO_Port, CHARGER_CHARGING_Pin) == GPIO_PIN_RESET;  //this does not work because pullop R10 is missing and power_enable is pulling the line low anyhow.
 	control.charger_charging = control.battery_voltage > 4.00f;
+	if (battery_charge_change > 0.02f) {
+		control.charger_charging = 1;
+	}
+	if (battery_charge_change < -0.02f) {
+		control.charger_charging = 0;
+	}
 
 	//evaluate if charger is done
 //	control.charger_done = HAL_GPIO_ReadPin(CHARGER_DONE_GPIO_Port, CHARGER_DONE_Pin) == GPIO_PIN_RESET;
-	control.charger_done = control.battery_voltage > 4.20f;
+	control.charger_done = control.battery_voltage > 4.15f;
+	if (battery_charge_change > 0.02f || battery_charge_change < -0.02f) {
+		control.charger_done = 0;
+	}
 
 
 
@@ -116,29 +132,52 @@ void control_action_shutdown() {
 
 
 static void measure_vbat() {
+//INTEGER variant
 	//build average ADC voltage for battery. There is a LDO of 3.3V as the ADC reference.
 	//There is also a 10k/10k resistive divider => factor 2
-	float sum = 0;
+	uint32_t sum = 0;
 	uint32_t count = 0;
 	for (uint32_t i = 0; i < ADC_SAMPLE_LEN; i++) {
 		uint32_t adc_bat = adc_dma_buf[i * ADC_CHANNELS + 0];
 		uint32_t adc_vrefint = adc_dma_buf[i * ADC_CHANNELS + 1];
-		uint32_t vrefint = __LL_ADC_CALC_VREFANALOG_VOLTAGE(adc_vrefint,
-				LL_ADC_RESOLUTION_12B);
-		//float voltage = __LL_ADC_CALC_DATA_TO_VOLTAGE(vrefint, adc_bat, LL_ADC_RESOLUTION_12B) / 1000.0f * 2.0f;
-		float vbat = (vrefint / 1000.0f) * (adc_bat / 4096.0f) * 2.0f;
-		if (vbat < 6.0f && vbat > 2.0f) {
+		uint32_t vrefint = __LL_ADC_CALC_VREFANALOG_VOLTAGE(adc_vrefint, LL_ADC_RESOLUTION_12B);
+		uint32_t vbat = vrefint * adc_bat * 2 / 4096;
+		if (vbat < 6000 && vbat > 2000) {
 			sum += vbat;
 			count++;
 		}
 	}
-	float new_vbat = sum / count;
+	float new_vbat = (float)sum / count / 1000;
 	if (control.battery_voltage == 0.0f) {
 		control.battery_voltage = new_vbat;
 	} else {
-		control.battery_voltage = control.battery_voltage * 0.8f
-				+ new_vbat * 0.2f;
+		control.battery_voltage = control.battery_voltage * 0.90f + new_vbat * 0.10f;
 	}
+
+//FLOAT variant
+//	//build average ADC voltage for battery. There is a LDO of 3.3V as the ADC reference.
+//	//There is also a 10k/10k resistive divider => factor 2
+//	float sum = 0;
+//	uint32_t count = 0;
+//	for (uint32_t i = 0; i < ADC_SAMPLE_LEN; i++) {
+//		uint32_t adc_bat = adc_dma_buf[i * ADC_CHANNELS + 0];
+//		uint32_t adc_vrefint = adc_dma_buf[i * ADC_CHANNELS + 1];
+//		uint32_t vrefint = __LL_ADC_CALC_VREFANALOG_VOLTAGE(adc_vrefint,
+//				LL_ADC_RESOLUTION_12B);
+//		//float voltage = __LL_ADC_CALC_DATA_TO_VOLTAGE(vrefint, adc_bat, LL_ADC_RESOLUTION_12B) / 1000.0f * 2.0f;
+//		float vbat = (vrefint / 1000.0f) * (adc_bat / 4096.0f) * 2.0f;
+//		if (vbat < 6.0f && vbat > 2.0f) {
+//			sum += vbat;
+//			count++;
+//		}
+//	}
+//	float new_vbat = sum / count;
+//	if (control.battery_voltage == 0.0f) {
+//		control.battery_voltage = new_vbat;
+//	} else {
+//		control.battery_voltage = control.battery_voltage * 0.8f
+//				+ new_vbat * 0.2f;
+//	}
 }
 
 static void rpi_power(uint32_t on) {
