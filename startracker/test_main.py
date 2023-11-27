@@ -6,6 +6,7 @@ import serial
 
 from . import main
 from . import communication
+from . import attitude_estimation
 
 from typing import Sequence, Tuple, Type, Union
 
@@ -26,6 +27,10 @@ class MockSerial(serial.Serial):
         for x in data:
             self.miso_channel.put(x)
 
+    def reset_input_buffer(self):
+        while not self.mosi_channel.empty():
+            self.mosi_channel.get_nowait()
+
 
 class MockSerialMaster(serial.Serial):
     def __init__(self, test_serial: MockSerial):
@@ -40,61 +45,96 @@ class MockSerialMaster(serial.Serial):
         for x in data:
             self.test_serial.mosi_channel.put(x)
 
+    def reset_input_buffer(self):
+        while not self.test_serial.miso_channel.empty():
+            self.test_serial.miso_channel.get_nowait()
+
 
 class MasterEmulator:
     def __init__(
         self,
-        test_data: Sequence[
-            Tuple[
-                communication.Command,
-                communication.Message,
-                Union[None, communication.Message, Type[communication.Message]],
-            ],
-        ],
         ser: communication.PacketHandler,
     ):
         self.ser = ser
-        self.test_data = test_data
 
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
     def _run(self):
-        for command, tx_message, rx_expected in self.test_data:
-            assert command.request_type == type(tx_message)
-            self.ser.write_cmd(command.cmd, tx_message.to_bytes())
+        test_data_table = [
+            (main.SetSettings, main.Settings(6, 10, 100, 2), main.ACK),
+            (main.CalcTrajectory, main.EmptyMessage(), None),
+        ]
 
+        for command, tx_message, rx_expected in test_data_table:
+            rx_message = self.transceive(command, tx_message)
             if rx_expected is not None:
-                cmd, payload = self.ser.read_cmd()
-                assert cmd == command.cmd, (
-                    f"Command {command} with arguments {tx_message} "
-                    f"returned cmd id {cmd} instead of {command.cmd}"
-                )
+                self.assert_response(command, rx_message, rx_expected, tx_message)
 
-                if inspect.isclass(rx_expected):
-                    rx_message = rx_expected.from_bytes(payload)
-                    assert rx_expected == type(rx_message)
-                else:
-                    rx_message = type(rx_expected).from_bytes(payload)
-                    assert rx_message == rx_expected, (
-                        f"Command {command} with arguments {tx_message} "
-                        f"returned {rx_message} instead of {rx_expected}"
-                    )
+        self.transceive(
+            main.SetAttitudeEstimationMode,
+            main.AttitudeEstimationMode(
+                attitude_estimation.AttitudeEstimationModeEnum.RECORD_DARKFRAME
+            ),
+        )
+
+        response = self.transceive(main.GetStatus, main.EmptyMessage())
+        assert (
+            response.attitude_estimation_mode
+            == attitude_estimation.AttitudeEstimationModeEnum.RECORD_DARKFRAME
+        )
+        import time
+
+        while True:
+            response = self.transceive(main.GetStatus, main.EmptyMessage())
+            if (
+                response.attitude_estimation_mode
+                == attitude_estimation.AttitudeEstimationModeEnum.RECORD_DARKFRAME
+            ):
+                time.sleep(0.3)
+            elif (
+                response.attitude_estimation_mode
+                == attitude_estimation.AttitudeEstimationModeEnum.IDLE
+            ):
+                break
+            else:
+                assert False
+
+        self.send(main.Shutdown, main.EmptyMessage())
+
+        print("success")
+
+    def send(self, command: communication.Command, tx_message: communication.Message):
+        assert command.request_type == type(tx_message)
+        self.ser.write_cmd(command.cmd, tx_message.to_bytes())
+
+    def transceive(
+        self, command: communication.Command, tx_message: communication.Message
+    ):
+        self.ser.reset_input_buffer()
+        self.send(command, tx_message)
+        cmd, payload = self.ser.read_cmd()
+        assert cmd == command.cmd, (
+            f"Command {command} with arguments {tx_message} "
+            f"returned cmd id {cmd} instead of {command.cmd}"
+        )
+        rx_message = command.response_type.from_bytes(payload)
+        return rx_message
+
+    def assert_response(self, command, rx_message, rx_expected, tx_message):
+        assert rx_message == rx_expected, (
+            f"Command {command} with arguments {tx_message} "
+            f"returned {rx_message} instead of {rx_expected}"
+        )
 
 
 def test_main():
     m = main.App(False)
 
-    test_data_table = [
-        (main.SetSettings, main.Settings(6, 10, 100, 2), main.ACK),
-        (main.CalcTrajectory, main.EmptyMessage(), main.Trajectory),
-        (main.Shutdown, main.EmptyMessage(), None),
-    ]
-
     device_serial = MockSerial(m._ser)
     master_serial = MockSerialMaster(device_serial)
     packet_handler = communication.PacketHandler(master_serial)
-    MasterEmulator(test_data_table, packet_handler)
+    MasterEmulator(packet_handler)
 
     m._ser = device_serial
     m()

@@ -60,16 +60,18 @@ class Quaternion:
     w = communication.Field("float32", "w part of the quaternion")
 
 
-class AttitudeEstimationMode(enum.Enum):
-    OFF = 0
-    ON = 1
-    SINGLE = 2
-    RECORD_DARKFRAME = 3
+@communication.make_message
+class AttitudeEstimationMode:
+    mode = communication.EnumField(
+        attitude_estimation.AttitudeEstimationModeEnum, "uint8"
+    )
 
 
 @communication.make_message
 class Status:
-    attitude_estimation_mode = communication.EnumField(AttitudeEstimationMode, "uint8")
+    attitude_estimation_mode = communication.EnumField(
+        attitude_estimation.AttitudeEstimationModeEnum, "uint8"
+    )
     current_number_of_matches = communication.Field("uint16")
     average_number_of_matches = communication.Field("uint16")
     quaternion = communication.StructField(Quaternion, "curent quaternion")
@@ -86,7 +88,14 @@ class EmptyMessage:
 def generate_code():
     """Utility function to generate code for the STM project"""
     communication.gen_code_with_dependencies(
-        [Acknowledge, Settings, Trajectory, Status, EmptyMessage],
+        [
+            Acknowledge,
+            Settings,
+            Trajectory,
+            Status,
+            EmptyMessage,
+            AttitudeEstimationMode,
+        ],
         pathlib.Path("out.h"),
     )
 
@@ -114,11 +123,14 @@ class GetStatus(communication.Command):
         self._image_acquisitioner = image_acquisitioner
 
     def execute(self, request: EmptyMessage) -> Status:
+        quat = self._attitude_filter.attitude_quat
+        if quat is None:
+            quat = np.full((4,), np.nan, np.float32)
         status = Status(
-            attitude_estimation_mode=69,  # TODO implement
-            current_number_of_matches=420,
-            average_number_of_matches=314,
-            quaternion=self._attitude_filter.attitude_quat,
+            attitude_estimation_mode=self._image_acquisitioner.mode,
+            current_number_of_matches=420,  # TODO implement
+            average_number_of_matches=314,  # TODO implement
+            quaternion=Quaternion(quat[0], quat[1], quat[2], quat[3]),
             estimation_id=self._attitude_filter.estimation_id,
         )
         return status
@@ -190,7 +202,7 @@ class Shutdown(communication.Command):
     def execute(self, request: EmptyMessage) -> Acknowledge:
         import time
 
-        time.sleep(10)
+        time.sleep(2)
         if self._enable_shutdown:
             raise ShutdownInterrupt()
         else:
@@ -198,9 +210,22 @@ class Shutdown(communication.Command):
         return ACK
 
 
-# TODO implement
-# class SetAttitudeEstimationMode(AttitudeEstimationMode) returns (Acknowledge)
-# class RecordDarkFrame(Empty) returns (Acknowledge)
+class SetAttitudeEstimationMode(communication.Command):
+    """Set the attitude estimation mode."""
+
+    cmd: int = 5
+    request_type: Type[communication.Message] = AttitudeEstimationMode
+    response_type: Type[communication.Message] = Acknowledge
+
+    def __init__(
+        self,
+        image_acquisitioner: attitude_estimation.ImageAcquisitioner,
+    ):
+        self._image_acquisitioner = image_acquisitioner
+
+    def execute(self, request: AttitudeEstimationMode) -> Status:
+        self._image_acquisitioner.mode = request.mode
+        return ACK
 
 
 class App:
@@ -226,17 +251,21 @@ class App:
             s.trajectory.max_seconds, s.trajectory.max_dist, ms
         )
         af = attitude_estimation.AttitudeFilter()
+        ia = attitude_estimation.ImageAcquisitioner(af)
 
         # All available commands
         self._commands = [
-            GetStatus(af, tc),
+            GetStatus(af, tc, ia),
             SetSettings(),
             CalcTrajectory(af, tc),
             Shutdown(enable_shutdown),
+            SetAttitudeEstimationMode(ia),
         ]
 
         # Run communication handler to process incoming commands.
         self._ser = serial.Serial(config.settings.serial_port)
+
+        ia.start_thread()
 
     def __call__(self) -> int:
         """Run main loop of the command handler."""

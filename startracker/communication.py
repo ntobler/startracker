@@ -112,6 +112,9 @@ class PacketHandler(serial.Serial):
 
         self._ser.write(length_cmd + payload + crc)
 
+    def reset_input_buffer(self):
+        self._ser.reset_input_buffer()
+
 
 class Field:
     """Message field for base datatypes."""
@@ -170,6 +173,7 @@ class EnumField(Field):
         return self._enum_type(value)
 
     def format(self, value):
+        assert isinstance(value, self._enum_type), f"{value} is not {self._enum_type}"
         return int(value.value)
 
     def c_definition(self, name: str):
@@ -203,6 +207,7 @@ class StructField(Field):
         return self.dtype.from_bytes(value)
 
     def format(self, value):
+        assert isinstance(value, self.dtype), f"{value} is not of type {self.dtype}"
         return value.to_bytes()
 
 
@@ -387,6 +392,7 @@ class Command(abc.ABC):
 
     cmd: int
     request_type: Type[Message] = Message
+    response_type: Type[Message] = Message
 
     @abc.abstractmethod
     def execute(self, payload: Message) -> Message:

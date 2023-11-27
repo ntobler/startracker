@@ -5,6 +5,6 @@ Incudes raspberry pi camera and a mock implementation that runs in a development
 """
 
 try:
-    from camera.camera import Camera
+    from startracker.camera.camera import Camera
 except ImportError:
-    from camera.mock_camera import MockCamera as Camera
+    from startracker.camera.mock_camera import MockCamera as Camera

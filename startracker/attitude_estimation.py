@@ -1,11 +1,21 @@
 """Star image based attitude estimation."""
 
+import enum
 import pathlib
+import logging
+import time
+import threading
 
 import numpy as np
 import scipy.spatial.transform
+import cv2
 
 import cots_star_tracker
+
+from . import camera
+from . import persistent
+from . import image_processing
+from . import kalkam
 
 from typing import Optional, Union, Tuple
 
@@ -45,9 +55,15 @@ class AttitudeEstimator:
         self._indexed_star_pairs = np.load(data_dir / "indexed_star_pairs.npy")
 
         # Inter start angle threshold
-        camera_matrix, _, _ = cots_star_tracker.read_cam_json(calibration_file)
-        dx = camera_matrix[0, 0]
+        self._intrinsic, _, _ = cots_star_tracker.read_cam_json(calibration_file)
+        dx = self._intrinsic[0, 0]
         self._isa_thresh = star_match_pixel_tol * (1 / dx)
+
+    def image_xyz_to_xy(self, image_xyz):
+        image_xy = (self._intrinsic @ image_xyz.T).T
+        image_xy = image_xy[..., :2] / image_xy[..., 2:]
+        image_xy = kalkam.PointUndistorter(self._dist_coeffs).distort(image_xy)
+        return image_xy
 
     def __call__(
         self, image: np.ndarray, darkframe: Optional[np.ndarray] = None
@@ -125,3 +141,111 @@ class AttitudeFilter:
         """
         # TODO implement
         return 60.0, 40.0
+
+
+class AttitudeEstimationModeEnum(enum.Enum):
+    IDLE = 0
+    RUNNING = 1
+    SINGLE = 2
+    RECORD_DARKFRAME = 3
+    FAULT = 4
+
+
+class ImageAcquisitioner:
+    mode: AttitudeEstimationModeEnum
+    """Current mode"""
+
+    def __init__(self, attitude_filter: AttitudeFilter):
+        self._logger = logging.getLogger("ImageAcquisitioner")
+        self.mode = AttitudeEstimationModeEnum.IDLE
+        self._attitude_filter = attitude_filter
+
+        self._exposure_ms = 250
+        self._analog_gain = 4
+        self._digital_gain = 4
+
+        pers = persistent.Persistent.get_instance()
+
+        if not pers.cam_file.exists():
+            logging.critical("Missing camera calibration")
+            self._attitude_estimator = None
+            self.mode = AttitudeEstimationModeEnum.FAULT
+        elif not pers.star_data_dir.exists():
+            logging.critical("Missing star data catalog")
+            self._attitude_estimator = None
+            self.mode = AttitudeEstimationModeEnum.FAULT
+        else:
+            self._attitude_estimator = AttitudeEstimator(
+                pers.cam_file,
+                pers.star_data_dir,
+            )
+
+        self._dark_frame_file = pers.dark_frame_file
+        try:
+            self._dark_frame = np.load(self._dark_frame_file)
+        except Exception:
+            self._dark_frame = None
+
+    def update_settings(
+        self,
+        exposure_ms: float = 250,
+        analog_gain: int = 4,
+        digital_gain: int = 4,
+    ):
+        self._logger.info(f"Capture e={exposure_ms} g={analog_gain}")
+        self._exposure_ms = exposure_ms
+        self._analog_gain = analog_gain
+        self._digital_gain = digital_gain
+
+    def _capture(self, save_darkframe: bool = False):
+        self._cam.exposure_ms = self._exposure_ms
+        self._cam.gain = self._analog_gain
+
+        image = self._cam.capture_raw()
+        self._logger.info(f"Raw bayer shape={image.shape} dtype={image.dtype}")
+
+        if save_darkframe:
+            self._dark_frame = image.copy()
+            np.save(self._dark_frame_file, self._dark_frame)
+
+        # Correct black level
+        if self._dark_frame is not None:
+            cv2.subtract(image, self._dark_frame, dst=image)
+
+        image = image_processing.binning(image, factor=2)
+
+        if self._digital_gain in [1, 2]:
+            image //= 4 // self._digital_gain
+        image = image.astype(np.uint8)
+
+        self._logger.info(f"Output shape={image.shape} dtype={image.dtype}")
+
+        return image
+
+    def start_thread(self):
+        self._thread = threading.Thread(target=self.run, daemon=True)
+        self._thread.start()
+
+    def run(self):
+        self._cam = camera.Camera(exposure_ms=1)
+        with self._cam:
+            while True:
+                if self.mode == AttitudeEstimationModeEnum.RUNNING:
+                    image = self._capture(save_darkframe=True)
+                    self._logger.info(f"image mean: {image.mean()}")
+
+                    quat, n_matches, image_xyz, _ = self._attitude_estimator(image)
+
+                    self._attitude_filter.put_quat(quat)
+                    self.n_matches = n_matches
+                    self.positions = self._attitude_estimator.image_xyz_to_xy(image_xyz)
+
+                elif self.mode == AttitudeEstimationModeEnum.IDLE:
+                    time.sleep(0.1)
+                elif self.mode == AttitudeEstimationModeEnum.RECORD_DARKFRAME:
+                    self._capture(save_darkframe=True)
+                    self.mode = AttitudeEstimationModeEnum.IDLE
+                elif self.mode == AttitudeEstimationModeEnum.FAULT:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(0.1)
