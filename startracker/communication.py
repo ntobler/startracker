@@ -5,6 +5,7 @@ import abc
 import dataclasses
 import struct
 import pathlib
+import logging
 
 import numpy as np
 
@@ -415,6 +416,7 @@ class CommandHandler:
         default_message: Message,
     ):
         self.serial = serial
+        self._logger = logging.getLogger("CommandHandler")
         assert len({c.cmd for c in commands}) == len(
             commands
         ), "Commands are not unique."
@@ -431,6 +433,7 @@ class CommandHandler:
                     self.serial.write_cmd(cmd_id, self._default_message.to_bytes())
                 else:
                     request = command.request_type().from_bytes(payload)
+                    self._logger.info(f"RX: {request.__name__}")
                     response = command.execute(request)
                     self.serial.write_cmd(cmd_id, response.to_bytes())
             except CommunicationTimeoutException:
