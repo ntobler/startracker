@@ -3,6 +3,5 @@ matplotlib
 pre-commit
 pytest
 
-pycairo
 astropy
 pandas

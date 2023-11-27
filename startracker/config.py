@@ -30,9 +30,9 @@ class ConfigurationException(Exception):
 
 def check_validation_errors():
     """Check and validate all configuration."""
-    try:
-        settings.validators.validate_all()
-    except ValidationError as e:
-        raise ConfigurationException(f"Configuration validation error: {e}")
-    except Exception as e:
-        raise ConfigurationException(f"Configuration error: {e}")
+    # try:
+    settings.validators.validate_all()
+    # except ValidationError as e:
+    #     raise ConfigurationException(f"Configuration validation error: {e}")
+    # except Exception as e:
+    #     raise ConfigurationException(f"Configuration error: {e}")
