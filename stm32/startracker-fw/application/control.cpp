@@ -14,6 +14,9 @@
 #include "main.h"
 #include "rpi_protocol.h"
 
+#define set_command_flag(flag)   control.flags = (Control_rpi_flags_t)(control.flags |  (flag))
+#define reset_command_flag(flag) control.flags = (Control_rpi_flags_t)(control.flags & ~(flag))
+
 
 enum {
 	RPI_ON_TIMEOUT = 60*10 * 3, //in 100ms ticks => 3min
@@ -21,9 +24,7 @@ enum {
 	ADC_CHANNELS = 2,
 };
 
-static uint8_t do_capture = 0;
-static uint8_t do_track = 0;
-static uint8_t do_reset = 0;
+static uint8_t do_boot = 0;
 static uint8_t do_shutdown = 0;
 static uint32_t rpi_on_time = 0;
 static uint32_t adc_dma_buf[ADC_SAMPLE_LEN * ADC_CHANNELS];
@@ -33,15 +34,14 @@ static float battery_charge_change = 0.0f;
 Control_t control = {0};
 
 static void measure_vbat();
-static void rpi_power(uint32_t on);
+static void rpi_power_on();
+static void rpi_power_off();
 static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltage);
 
 extern ADC_HandleTypeDef hadc1;
 
 void control_init() {
-	do_capture = 0;
-	do_track = 0;
-	do_reset = 0;
+	do_boot = 0;
 	do_shutdown = 0;
 	memset(&control, 0, sizeof(Control_t));
 
@@ -83,53 +83,66 @@ void control_update() {
 
 	static uint32_t poll_timer = 0;
 	const uint32_t POLL_TIME = 10;
+	poll_timer = (poll_timer + 1) % POLL_TIME;
+
+	static uint32_t timer = 0;
 
 	switch (control.state) {
-	case CONTROL_IDLE:
-		if (do_capture) {
-			do_capture = 0;
-			control.state = CONTROL_BOOTING;
+	case CONTROL_RPI_IDLE:
+		if (control.flags & RPI_DO_BOOT) {
+			reset_command_flag(RPI_DO_BOOT);
+			rpi_power_on();
+			control.state = CONTROL_RPI_BOOTING;
+			timer = 0;
 		}
 		break;
-	case CONTROL_BOOTING:
-		rpi_on_time = RPI_ON_TIMEOUT;
-		poll_timer++;
-		if (poll_timer > POLL_TIME) {
+	case CONTROL_RPI_BOOTING:
+		timer++;
+		if (timer > 1200) {
+			control.state = CONTROL_RPI_IDLE;
+			rpi_power_off();
+		} else
+		if (poll_timer == 0) {
 			Status* status = rpi_status();
 			if (status) {
-				control.state = CONTROL_MEASURING;
+				control.state = CONTROL_RPI_READY;
 			}
-			poll_timer = 0;
+		} else
+		if (control.flags & CONTROL_RPI_SHUTDOWN) {
+			reset_command_flag(CONTROL_RPI_SHUTDOWN);
+			control.state = CONTROL_RPI_SHUTDOWN;
+			timer = 0;
 		}
 		break;
-	case CONTROL_MEASURING:
-		rpi_on_time = RPI_ON_TIMEOUT;
+	case CONTROL_RPI_READY:
+		if (control.flags & CONTROL_RPI_SHUTDOWN) {
+			reset_command_flag(CONTROL_RPI_SHUTDOWN);
+			timer = 0;
+			control.state = CONTROL_RPI_SHUTDOWN;
+		}
 		break;
-	case CONTROL_RUNNING:
+	case CONTROL_RPI_SHUTDOWN:
+		timer++;
+		rpi_shutdown();
+		if (timer > 250) {
+			control.state = CONTROL_RPI_IDLE;
+			rpi_power_off();
+		}
 		break;
 	default:
-		control.state = CONTROL_IDLE;
+		control.state = CONTROL_RPI_IDLE;
+		rpi_power_off();
 	}
 
-	//switch rpi on, off with a delay
-	if (rpi_on_time) {
-		rpi_on_time--;
-	}
-	rpi_power(rpi_on_time);
+
 
 }
 
 
-void control_action_capture() {
-	do_capture = 1;
-}
 
-void control_action_track() {
-	do_track = 1;
-}
 
-void control_action_reset() {
-	do_reset = 1;
+void control_action_start() {
+	do_boot = 1;
 }
 
 void control_action_shutdown() {
@@ -240,9 +253,11 @@ static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltag
 	}
 }
 
+static void rpi_power_on() {
+	HAL_GPIO_WritePin(RPI_ENABLE_GPIO_Port, RPI_ENABLE_Pin, GPIO_PIN_SET);
+}
 
-static void rpi_power(uint32_t on) {
-	control.rpi_running = on;
-	HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, (GPIO_PinState)on);
+static void rpi_power_off() {
+	HAL_GPIO_WritePin(RPI_ENABLE_GPIO_Port, RPI_ENABLE_Pin, GPIO_PIN_RESET);
 }
 
