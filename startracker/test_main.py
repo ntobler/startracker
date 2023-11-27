@@ -1,14 +1,12 @@
 import threading
 import queue
-import inspect
+import time
 
 import serial
 
 from . import main
 from . import communication
 from . import attitude_estimation
-
-from typing import Sequence, Tuple, Type, Union
 
 
 class MockSerial(serial.Serial):
@@ -99,6 +97,17 @@ class MasterEmulator:
                 break
             else:
                 assert False
+
+        self.transceive(
+            main.SetAttitudeEstimationMode,
+            main.AttitudeEstimationMode(
+                attitude_estimation.AttitudeEstimationModeEnum.RUNNING
+            ),
+        )
+
+        time.sleep(4)
+
+        self.transceive(main.GetStars, main.EmptyMessage())
 
         self.send(main.Shutdown, main.EmptyMessage())
 

@@ -154,10 +154,16 @@ class AttitudeEstimationModeEnum(enum.Enum):
 class ImageAcquisitioner:
     mode: AttitudeEstimationModeEnum
     """Current mode"""
+    positions: Optional[np.ndarray]
+    """xy positions of recognized stars"""
+    n_matches: int
+    """Number of currently matched stars."""
 
     def __init__(self, attitude_filter: AttitudeFilter):
         self._logger = logging.getLogger("ImageAcquisitioner")
         self.mode = AttitudeEstimationModeEnum.IDLE
+        self.n_matches = 0
+        self.positions = None
         self._attitude_filter = attitude_filter
 
         self._exposure_ms = 250
@@ -231,14 +237,17 @@ class ImageAcquisitioner:
         with self._cam:
             while True:
                 if self.mode == AttitudeEstimationModeEnum.RUNNING:
-                    image = self._capture(save_darkframe=True)
+                    image = self._capture()
                     self._logger.info(f"image mean: {image.mean()}")
 
                     quat, n_matches, image_xyz, _ = self._attitude_estimator(image)
 
                     self._attitude_filter.put_quat(quat)
                     self.n_matches = n_matches
-                    self.positions = self._attitude_estimator.image_xyz_to_xy(image_xyz)
+                    self.positions = (
+                        self._attitude_estimator.image_xyz_to_xy(image_xyz)
+                        / image.shape[1]
+                    )
 
                 elif self.mode == AttitudeEstimationModeEnum.IDLE:
                     time.sleep(0.1)

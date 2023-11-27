@@ -80,6 +80,20 @@ class Status:
     )
 
 
+MAX_STAR_COUNT = 32
+"""Maximal number of stars in the star position list."""
+
+
+@communication.make_message
+class Stars:
+    count = communication.Field("uint8", "Number of recognized stars")
+    positions = communication.ArrayField(
+        "uint8",
+        (MAX_STAR_COUNT, 2),
+        "x (0..127) and y (0..63) positions of recognized stars, shape=[32, 2]",
+    )
+
+
 @communication.make_message
 class EmptyMessage:
     pass
@@ -95,6 +109,7 @@ def generate_code():
             Status,
             EmptyMessage,
             AttitudeEstimationMode,
+            Stars,
         ],
         pathlib.Path("out.h"),
     )
@@ -228,6 +243,32 @@ class SetAttitudeEstimationMode(communication.Command):
         return ACK
 
 
+class GetStars(communication.Command):
+    """Get list of recognized star positions."""
+
+    cmd: int = 6
+    request_type: Type[communication.Message] = EmptyMessage
+    response_type: Type[communication.Message] = Stars
+
+    def __init__(
+        self,
+        image_acquisitioner: attitude_estimation.ImageAcquisitioner,
+    ):
+        self._image_acquisitioner = image_acquisitioner
+
+    def execute(self, request: EmptyMessage) -> Status:
+        positions = self._image_acquisitioner.positions
+        fixed_size_positions = np.full((MAX_STAR_COUNT, 2), 255, np.uint8)
+        if positions is None:
+            count = 0
+        else:
+            count = min(len(positions), MAX_STAR_COUNT)
+            common_slc = slice(count)
+            fixed_size_positions[common_slc] = np.round(positions * 128)[common_slc]
+        response = Stars(count, fixed_size_positions)
+        return response
+
+
 class App:
     def __init__(self, enable_shutdown: bool):
         """
@@ -260,6 +301,7 @@ class App:
             CalcTrajectory(af, tc),
             Shutdown(enable_shutdown),
             SetAttitudeEstimationMode(ia),
+            GetStars(ia),
         ]
 
         # Run communication handler to process incoming commands.
