@@ -17,9 +17,9 @@ extern "C" {
 
 
 Status* rpi_status();
-Acknowledge* SetSettings(Settings* settings);
-Trajectory * CalcTrajectory();
-Acknowledge* Shutdown();
+Acknowledge* rpi_setSettings(Settings* settings);
+Trajectory * rpi_calcTrajectory();
+Acknowledge* rpi_shutdown();
 
 
 #ifdef __cplusplus

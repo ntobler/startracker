@@ -45,7 +45,7 @@ Status* rpi_status() {
 	return 0;
 }
 
-Acknowledge* SetSettings(Settings* settings) {
+Acknowledge* rpi_set_settings(Settings* settings) {
 	const uint8_t cmd = RPI_CMD_SetSettings;
 	const uint8_t* request_dat = (uint8_t*)settings;
 	uint32_t request_size = sizeof(Settings);
@@ -57,7 +57,7 @@ Acknowledge* SetSettings(Settings* settings) {
 	return 0;
 }
 
-Trajectory * CalcTrajectory() {
+Trajectory * rpi_calc_trajectory() {
 	const uint8_t cmd = RPI_CMD_CalcTrajectory;
 	const uint8_t* request_dat = 0;
 	uint32_t request_size = 0;
@@ -69,7 +69,7 @@ Trajectory * CalcTrajectory() {
 	return 0;
 }
 
-Acknowledge* Shutdown() {
+Acknowledge* rpi_shutdown() {
 	const uint8_t cmd = RPI_CMD_Shutdown;
 	const uint8_t* request_dat = 0;
 	uint32_t request_size = 0;

@@ -15,6 +15,7 @@
 #include "imu.h"
 #include "scheduler.h"
 #include "control.h"
+#include "motor.h"
 
 
 static AbstractUI* active = 0;
@@ -28,6 +29,7 @@ extern float position[3];
 extern uint32_t tick;
 extern Imu_data_t imu;
 extern Control_t control;
+extern Motor_t motor;
 
 
 Button button_down(BUTTON_UP_GPIO_Port, BUTTON_UP_Pin, 1);
@@ -55,6 +57,7 @@ extern Image_description_t img_battery8;
 extern Image_description_t img_battery9;
 extern Image_description_t img_battery10;
 extern Image_description_t img_battery_full;
+extern Image_description_t img_blank;
 static Image_description_t* img_batterys [] = {
 	&img_battery0,
 	&img_battery1,
@@ -69,15 +72,35 @@ static Image_description_t* img_batterys [] = {
 	&img_battery10,
 };
 static const char* entrys[MENU_COUNT] = {
-		"bubble level",
-		"capture stars",
-		"start tracking",
-		"home motors",
-		"view camera",
-		"shutdown",
-		"about",
+	"rpi",
+	"trajectory",
+	"home motors",
+	"disable motors",
+	"bubble level",
+	"view camera",
+	"shutdown",
+	"about",
 };
 
+//start tracking => rpi not running
+//stop tracking => rpi running
+
+//---------------- => no trajectory yet
+//start trajectory => trajectory calculated
+//reset trajectory => trajectory calculated & running
+//pause trajectory => trajectory calculated & running
+
+//home motors => always
+
+//disable motors => if running or homed
+
+//bubble level
+
+//view camera
+
+//shutdown
+
+//about
 
 AbstractUI* Splash::update(Ui_event_en e) {
 	if (e == SHOW) {
@@ -159,10 +182,13 @@ void Home::draw() {
 
 
     i = 0;
-    if (control.rpi_running) {
+    if (control.state == CONTROL_RPI_READY) {
         ssd1306_DrawImage(i++ * 20, 0, &img_rpi);
     }
-    if (control.state == CONTROL_MEASURING) {
+    if (control.state == CONTROL_RPI_SHUTDOWN || control.state == CONTROL_RPI_BOOTING) {
+        ssd1306_DrawImage(i++ * 20, 0, uwTick % 1000 > 500 ? &img_rpi : &img_blank);
+    }
+    if (motor.trajectory_ready) {
         ssd1306_DrawImage(i++ * 20, 0, &img_ursa_maior);
     }
     if (control.charger_done) {
@@ -174,8 +200,10 @@ void Home::draw() {
     } else {
         ssd1306_DrawImage(i++ * 20, 0, img_batterys[control.charge_level]);
     }
-    ssd1306_DrawImage(i++ * 20, 0, &img_motor);
-    ssd1306_DrawImage(i++ * 20, 0, &img_camera);
+    if (motor.state != MOTOR_MODE_NONE) {
+        ssd1306_DrawImage(i++ * 20, 0, &img_motor);
+    }
+//    ssd1306_DrawImage(i++ * 20, 0, &img_camera);
 
     ssd1306_UpdateScreen();
 }
@@ -217,6 +245,43 @@ AbstractUI* Menu::update(Ui_event_en e) {
 			return &about;
 		}
 	}
+
+
+	switch (control.state) {
+	case CONTROL_RPI_SHUTDOWN:
+	case CONTROL_RPI_IDLE:
+		entrys[MENU_RPI] = "boot raspi";
+		break;
+	case CONTROL_RPI_BOOTING:
+	case CONTROL_RPI_READY:
+		entrys[MENU_RPI] = "shutdown raspi";
+		break;
+	}
+
+
+	switch (motor.state) {
+	case MOTOR_MODE_NONE:
+		entrys[MENU_TRAJECTORY1] = "home motors";
+		entrys[MENU_TRAJECTORY2] = "trajectory run";
+	case MOTOR_MODE_HOMING:
+		entrys[MENU_TRAJECTORY1] = "homing..";
+		entrys[MENU_TRAJECTORY2] = "trajectory run";
+		break;
+	case MOTOR_MODE_READY:
+		entrys[MENU_TRAJECTORY1] = "home motors";
+		entrys[MENU_TRAJECTORY2] = "trajectory run";
+		break;
+	case MOTOR_MODE_RUNNING:
+		entrys[MENU_TRAJECTORY1] = "trajectory stop";
+		entrys[MENU_TRAJECTORY2] = "trajectory pause";
+		break;
+	case MOTOR_MODE_PAUSE:
+		entrys[MENU_TRAJECTORY1] = "trajectory stop";
+		entrys[MENU_TRAJECTORY2] = "trajectory resume";
+		break;
+	}
+
+
 	draw();
 	return 0;
 }
