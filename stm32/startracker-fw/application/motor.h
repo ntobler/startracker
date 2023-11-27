@@ -43,7 +43,7 @@ typedef struct {
 void motor_init();
 void motor_update();
 void motor_set_trajectory(Trajectory* trajectory);
-void motor_control(Motor_command_flags_t cmd);
+void motor_do(Motor_command_flags_t cmd);
 
 
 #ifdef __cplusplus

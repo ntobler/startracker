@@ -26,7 +26,6 @@ enum {
 
 static uint8_t do_boot = 0;
 static uint8_t do_shutdown = 0;
-static uint32_t rpi_on_time = 0;
 static uint32_t adc_dma_buf[ADC_SAMPLE_LEN * ADC_CHANNELS];
 static float old_battery_voltage = 0.0f;
 static float battery_charge_change = 0.0f;
@@ -140,16 +139,9 @@ void control_update() {
 
 
 
-
-void control_action_start() {
-	do_boot = 1;
+void control_do(Control_rpi_flags_t cmd) {
+	set_command_flag(cmd);
 }
-
-void control_action_shutdown() {
-	do_shutdown = 1;
-}
-
-
 
 
 

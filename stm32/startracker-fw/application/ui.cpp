@@ -72,10 +72,11 @@ static Image_description_t* img_batterys [] = {
 	&img_battery10,
 };
 static const char* entrys[MENU_COUNT] = {
-	"rpi",
-	"trajectory",
-	"home motors",
-	"disable motors",
+		"rpi",
+		"tracking",
+	"trajectory0",
+	"trajectory1",
+	"trajectory2",
 	"bubble level",
 	"view camera",
 	"shutdown",
@@ -133,10 +134,10 @@ void Splash::draw() {
 }
 
 AbstractUI* Home::update(Ui_event_en e) {
-//	if (e == SHOW) {
-//		draw();
-//		return 0;
-//	}
+	if (e == SHOW) {
+		return 0;
+	}
+
 	if (button_up.event == BTN_RISING ||
 		button_left.event == BTN_RISING ||
 		button_right.event == BTN_RISING ||
@@ -213,10 +214,9 @@ void Home::draw() {
 
 
 AbstractUI* Menu::update(Ui_event_en e) {
-//	if (e == SHOW) {
-//		draw();
-//		return 0;
-//	}
+	if (e == SHOW) {
+		return 0;
+	}
 
 	if (button_down.event == BTN_RISING) {
 		pos++;
@@ -233,8 +233,49 @@ AbstractUI* Menu::update(Ui_event_en e) {
 	if (button_left.event == BTN_RISING) {
 		return &home;
 	}
-	if (button_up.event == BTN_LONG ||
-		button_right.event == BTN_RISING) {
+	if (button_up.event == BTN_LONG || button_right.event == BTN_RISING) {
+		if (pos == MENU_RPI) {
+			if (control.state == CONTROL_RPI_SHUTDOWN || control.state == CONTROL_RPI_IDLE) {
+				control_do(RPI_DO_BOOT);
+			} else {
+				control_do(RPI_DO_SHUTDOWN);
+			}
+		}
+		if (pos == MENU_TRACKING) {
+			control_do(RPI_DO_CALC);
+		}
+		if (pos == MENU_TRAJECTORY0) {
+			if (motor.state == MOTOR_MODE_READY ||
+				motor.state == MOTOR_MODE_RUNNING ||
+				motor.state == MOTOR_MODE_PAUSE) {
+				motor_do(MOTOR_DO_DISABLE);
+			}
+		}
+		if (pos == MENU_TRAJECTORY1) {
+			if (motor.state == MOTOR_MODE_NONE ||
+				motor.state == MOTOR_MODE_READY) {
+				motor_do(MOTOR_DO_HOME);
+			}
+			if (motor.state == MOTOR_MODE_RUNNING) {
+			    motor_do(MOTOR_DO_STOP);
+			}
+			if (motor.state == MOTOR_MODE_PAUSE) {
+			    motor_do(MOTOR_DO_STOP);
+			}
+		}
+		if (pos == MENU_TRAJECTORY2) {
+			if (motor.state == MOTOR_MODE_NONE ||
+				motor.state == MOTOR_MODE_HOMING ||
+				motor.state == MOTOR_MODE_READY) {
+				motor_do(MOTOR_DO_START);
+			}
+			if (motor.state == MOTOR_MODE_RUNNING) {
+			    motor_do(MOTOR_DO_PAUSE);
+			}
+			if (motor.state == MOTOR_MODE_PAUSE) {
+			    motor_do(MOTOR_DO_RESUME);
+			}
+		}
 		if (pos == MENU_BUBBLE) {
 			return &bubble;
 		}
@@ -261,21 +302,27 @@ AbstractUI* Menu::update(Ui_event_en e) {
 
 	switch (motor.state) {
 	case MOTOR_MODE_NONE:
+		entrys[MENU_TRAJECTORY0] = "(motor off)";
 		entrys[MENU_TRAJECTORY1] = "home motors";
 		entrys[MENU_TRAJECTORY2] = "trajectory run";
+		break;
 	case MOTOR_MODE_HOMING:
-		entrys[MENU_TRAJECTORY1] = "homing..";
+		entrys[MENU_TRAJECTORY0] = "(motor off)";
+		entrys[MENU_TRAJECTORY1] = "(homing)";
 		entrys[MENU_TRAJECTORY2] = "trajectory run";
 		break;
 	case MOTOR_MODE_READY:
+		entrys[MENU_TRAJECTORY0] = "disable motors";
 		entrys[MENU_TRAJECTORY1] = "home motors";
 		entrys[MENU_TRAJECTORY2] = "trajectory run";
 		break;
 	case MOTOR_MODE_RUNNING:
+		entrys[MENU_TRAJECTORY0] = "disable motors";
 		entrys[MENU_TRAJECTORY1] = "trajectory stop";
 		entrys[MENU_TRAJECTORY2] = "trajectory pause";
 		break;
 	case MOTOR_MODE_PAUSE:
+		entrys[MENU_TRAJECTORY0] = "disable motors";
 		entrys[MENU_TRAJECTORY1] = "trajectory stop";
 		entrys[MENU_TRAJECTORY2] = "trajectory resume";
 		break;
@@ -313,7 +360,6 @@ void Menu::draw() {
 
 AbstractUI* Bubble::update(Ui_event_en e) {
 	if (e == SHOW) {
-		draw();
 		return 0;
 	}
 	if (button_up.event == BTN_RISING ||

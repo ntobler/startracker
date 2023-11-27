@@ -69,7 +69,8 @@ void motor_update() {
 		break;
 	case MOTOR_MODE_HOMING:
 		run_home();
-		if (home_timer > 2000) {
+		home_timer++;
+		if (home_timer > 20000) {
 			motor.state = MOTOR_MODE_READY;
 		}
 		break;
@@ -128,7 +129,7 @@ void motor_set_trajectory(Trajectory* trajectory) {
 	set_command_flag(MOTOR_DO_ASSIGN_TRAJECTORY);
 }
 
-void motor_control(Motor_command_flags_t cmd) {
+void motor_do(Motor_command_flags_t cmd) {
 	set_command_flag(cmd);
 }
 

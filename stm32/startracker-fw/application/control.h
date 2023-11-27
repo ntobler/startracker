@@ -42,8 +42,7 @@ typedef struct {
 
 void control_init();
 void control_update();
-void control_action_start();
-void control_action_shutdown();
+void control_do(Control_rpi_flags_t cmd);
 
 
 #ifdef __cplusplus
