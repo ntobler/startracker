@@ -1,5 +1,6 @@
 """Module to handle serial communication"""
 
+import enum
 import abc
 import dataclasses
 import struct
@@ -158,13 +159,12 @@ class Field:
         return value
 
 
-import enum
-
-
 class EnumField(Field):
     """Message field for enums."""
 
-    def __init__(self, enum_type: enum.Enum, dtype="uint8", desc: Optional[str] = None):
+    def __init__(
+        self, enum_type: Type[enum.Enum], dtype="uint8", desc: Optional[str] = None
+    ):
         super().__init__(dtype, desc=desc)
         self.default = enum_type(0)
         self._enum_type = enum_type
@@ -397,6 +397,12 @@ class Command(abc.ABC):
     @abc.abstractmethod
     def execute(self, payload: Message) -> Message:
         ...
+
+    @classmethod
+    def generate_c_code(cls):
+        c_code = f"{cls.response_type.__name__}* {cls.__name__}({cls.request_type.__name__});"
+        c_code += f" // cmd_id: {cls.cmd}\n"
+        return c_code
 
 
 class CommandHandler:

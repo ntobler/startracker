@@ -99,22 +99,6 @@ class EmptyMessage:
     pass
 
 
-def generate_code():
-    """Utility function to generate code for the STM project"""
-    communication.gen_code_with_dependencies(
-        [
-            Acknowledge,
-            Settings,
-            Trajectory,
-            Status,
-            EmptyMessage,
-            AttitudeEstimationMode,
-            Stars,
-        ],
-        pathlib.Path("out.h"),
-    )
-
-
 # Instantiate, as they are used frequently
 ACK = Acknowledge(AcknowledgeEnum.ACK)
 NACK = Acknowledge(AcknowledgeEnum.NACK)

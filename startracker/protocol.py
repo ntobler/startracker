@@ -1,48 +1,38 @@
 """Protocol definitions for the UART connection to the STM32 main board."""
 
-
-def set_settings(
-    min_matches: int,
-    exposure_ms: int,
-    gain: int,
-    attitude_estimation_timeout_ms: int,
-):
-    return {
-        "acknowledge": (True, False),
-    }
+import pathlib
+from . import communication
+from . import main
 
 
-class Mode:
-    OFF = 0
-    ON = 1
-    SINGLE = 2
+def generate_code():
+    """Utility function to generate code for the STM project"""
+    communication.gen_code_with_dependencies(
+        [
+            main.Acknowledge,
+            main.Settings,
+            main.Trajectory,
+            main.Status,
+            main.EmptyMessage,
+            main.AttitudeEstimationMode,
+            main.Stars,
+        ],
+        pathlib.Path("out.h"),
+    )
+
+    commands = [
+        main.GetStatus,
+        main.SetSettings,
+        main.CalcTrajectory,
+        main.Shutdown,
+        main.SetAttitudeEstimationMode,
+        main.GetStars,
+    ]
+
+    with open("commands.c", "w") as f:
+        for cmd in commands:
+            f.write(cmd.generate_c_code())
 
 
-def set_attitude_estimation_mode(
-    mode: Mode,
-):
-    return {
-        "acknowledge": True,
-    }
-
-
-def record_dark_frame():
-    return {
-        "acknowledge": True,
-    }
-
-
-def get_status():
-    return {
-        "attitude estimation": ("on", "off"),
-        "current_number_of_matches": int,
-        "average_number_of_matches": int,
-        "quaternion": [float, float, float, float],
-        "estimation_id": int,
-    }
-
-
-def shutdown():
-    return {
-        "acknowledge": True,
-    }
+if __name__ == "__main__":
+    generate_code()
