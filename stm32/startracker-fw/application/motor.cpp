@@ -51,6 +51,7 @@ static void run_motors();
 
 
 void motor_init() {
+	//set all the Direction pins
 	steppers[0].dir_port = TMC1_DIR_GPIO_Port;
 	steppers[0].dir_pin  = TMC1_DIR_Pin;
 	steppers[1].dir_port = TMC2_DIR_GPIO_Port;
@@ -58,6 +59,7 @@ void motor_init() {
 	steppers[2].dir_port = TMC3_DIR_GPIO_Port;
 	steppers[2].dir_pin  = TMC3_DIR_Pin;
 
+	//set all the step pins
 	steppers[0].step_port = TMC1_STEP_GPIO_Port;
 	steppers[0].step_pin  = TMC1_STEP_Pin;
 	steppers[1].step_port = TMC2_STEP_GPIO_Port;
@@ -65,11 +67,12 @@ void motor_init() {
 	steppers[2].step_port = TMC3_STEP_GPIO_Port;
 	steppers[2].step_pin  = TMC3_STEP_Pin;
 
-	HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
-	scheduler_task_sleep(100);
-
+	//assign the uarts to all motors
 	steppers[0].uart = &huart2;
-	steppers[0].send_init();
+	steppers[1].uart = &huart2;
+	steppers[2].uart = &huart2;
+
+	//cleanly init the power state
 	enable_disable_motors(0);
 }
 void motor_update() {
@@ -80,14 +83,13 @@ void motor_update() {
 		if (motor.flags & MOTOR_DO_HOME) {
 			reset_command_flag(MOTOR_DO_HOME);
 			motor.state = MOTOR_MODE_HOMING;
-//			enable_motors();
 			home_timer = 0;
 		}
 		break;
 	case MOTOR_MODE_HOMING:
 		run_home();
 		home_timer++;
-		if (home_timer > 50000) {
+		if (home_timer > 40000) {
 			motor.state = MOTOR_MODE_READY;
 		}
 		break;
@@ -104,7 +106,6 @@ void motor_update() {
 		if (motor.flags & MOTOR_DO_DISABLE) {
 			reset_command_flag(MOTOR_DO_DISABLE);
 			motor.state = MOTOR_MODE_NONE;
-//			disable_motors();
 		} else
 		if (motor.flags & MOTOR_DO_ASSIGN_TRAJECTORY) {
 			reset_command_flag(MOTOR_DO_ASSIGN_TRAJECTORY);
@@ -134,7 +135,6 @@ void motor_update() {
 		break;
 	default:
 		motor.state = MOTOR_MODE_NONE;
-//		disable_motors();
 	}
 
 	enable_disable_motors(motor.state != MOTOR_MODE_NONE);
@@ -154,28 +154,44 @@ void motor_do(Motor_command_flags_t cmd) {
 
 
 static void enable_disable_motors(uint32_t enable) {
-	static uint32_t old = -1;
+	//this implements a simple state machine for ON and OFF of motors
+	//the state machine is not in a traditional form.
+	//it implements extended Enable and Disable functions for the motors
+	static uint32_t old = -1; //force state transition on first update
+	enable = enable ? 1 : 0; //clean up input variable
+
 	if (old != enable) {
 		old = enable;
 
 		if (enable) {
-//			for (int i = 0; i < 10; i++) {
-//				HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
-//				scheduler_task_sleep(5);
-//				HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_RESET);
-//				scheduler_task_sleep(50);
-//			}
-//			HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
-//			scheduler_task_sleep(1000);
-			scheduler_task_sleep(50);
-			HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_RESET);
-			scheduler_task_sleep(50);
-		} else {
-			scheduler_task_sleep(50);
+
+			// MOTOR ENABLE SEQUENCE
+
+			//disable motors
 			HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_SET);
-			scheduler_task_sleep(50);
-//			HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_RESET);
-//			scheduler_task_sleep(50);
+
+			//enable 12V power boosting. The 4.8V may not be enough for the drivers to start properly.
+			HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
+
+			//wait for it to get stable and TMC to boot up
+			scheduler_task_sleep(40);
+
+			//send TMC init sequence. Since the data line is shared this needs only be done on one motor.
+			steppers[0].send_init();
+
+			//enable motors
+			HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_RESET);
+
+		} else {
+
+			// MOTOR DISABLE SEQUENCE
+
+			//disable motors
+			HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_SET);
+
+			//disable 12V power boosting
+			HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_RESET);
+
 		}
 	}
 }
@@ -194,10 +210,10 @@ static void assign_trajectory() {
 static void run_home() {
 	for (int i = 0; i < 3; i++) {
 //		steppers[i].set_to(-1);
-		if (home_timer > 50000 / 2) {
-			steppers[i].set_to(1);
+		if (home_timer > 40000 / 2) {
+			steppers[i].set_to(4);
 		} else {
-			steppers[i].set_to(-1);
+			steppers[i].set_to(-4);
 		}
 		steppers[i].step_to(0);
 	}

@@ -154,19 +154,24 @@ static void task_control() {
 }
 
 static void task_motor() {
+	//wait a bit before starting this task
 	scheduler_task_sleep(20);
-	htim3.Instance->CCR1 = 150;
-	//htim3.Instance->CCR1 = 980;
+
+	//enable trinamics current setting pwm. This has a high frequency.
+	htim3.Instance->CCR1 = 75;
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+
+	//initialize the motor module
 	motor_init();
+
+	//start fast timer to give this task update events
 	HAL_TIM_Base_Start_IT(&htim4);
-//	htim4.Instance->ARR = 1000-1; //4 times slower
 	while (1) {
-//		scheduler_task_sleep(3000);
+		//wait for events
 		uint32_t event = scheduler_event_wait(EVENT_TASK_MOTOR_TIMER);
 		if (event & EVENT_TASK_MOTOR_TIMER) {
 			perf.motor.start();
-			motor_update();
+			motor_update();  //update all the steppers and related functions. May block for longer time if required.
 			perf.motor.end();
 		}
 	}
