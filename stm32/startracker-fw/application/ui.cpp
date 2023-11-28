@@ -31,7 +31,6 @@ extern uint32_t tick;
 extern Imu_data_t imu;
 extern Control_t control;
 extern Motor_t motor;
-static uint32_t battery_low_event = 0;
 
 
 
@@ -462,8 +461,8 @@ void About::draw() {
 
 AbstractUI* Shutdown::update(Ui_event_en e) {
 	if (e == SHOW) {
-		timer = 0;
 		draw();
+		control_do(CONTROL_DO_SHUTDOWN);  //maybe redundant
 		return 0;
 	}
 	if (button_right.event == BTN_RISING) {
@@ -473,12 +472,6 @@ AbstractUI* Shutdown::update(Ui_event_en e) {
 	}
 	if (button_left.event == BTN_RISING) {
 		return &menu;
-	}
-	timer++;
-	if (timer > 5) {
-		HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_RESET);
-		scheduler_task_sleep(100);
-		NVIC_SystemReset();
 	}
 	draw();
 	return 0;
@@ -503,16 +496,8 @@ void Shutdown::draw() {
 AbstractUI* LowBattery::update(Ui_event_en e) {
 	if (e == SHOW) {
 		draw();
-		timer = 0;
 		return 0;
 	}
-	timer++;
-	if (timer > 20) {
-		HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_RESET);
-		scheduler_task_sleep(100);
-		NVIC_SystemReset();
-	}
-
 	return 0;
 }
 
@@ -540,18 +525,20 @@ void ui_update() {
 			active = new_ui;
 			active->update(SHOW);
 		}
-		if (battery_low_event) {
+		if (control.is_low_battery) {
 			if (active != &low_battery) {
 				active->update(HIDE);
 				active = &low_battery;
 				active->update(SHOW);
 			}
-			battery_low_event = 0;
+		} else if (control.is_shutting_down) {
+			if (active != &shutdown) {
+				active->update(HIDE);
+				active = &shutdown;
+				active->update(SHOW);
+			}
 		}
 	}
 }
 
 
-void ui_battery_low() {
-	battery_low_event = 1;
-}

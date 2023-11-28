@@ -66,7 +66,6 @@ public:
 };
 
 class Shutdown : public AbstractUI {
-	int timer = 0;
 	void draw();
 public:
 	AbstractUI* update(Ui_event_en e) override;
@@ -79,7 +78,6 @@ public:
 };
 
 class LowBattery : public AbstractUI {
-	int timer = 0;
 	void draw();
 public:
 	AbstractUI* update(Ui_event_en e) override;
@@ -88,7 +86,6 @@ public:
 
 void ui_init();
 void ui_update();
-void ui_battery_low();
 
 
 #ifdef __cplusplus

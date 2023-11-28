@@ -15,8 +15,9 @@
 #include "rpi_protocol.h"
 #include "ui.h"
 
-#define set_command_flag(flag)   control.flags = (Control_rpi_flags_t)(control.flags |  (flag))
-#define reset_command_flag(flag) control.flags = (Control_rpi_flags_t)(control.flags & ~(flag))
+
+#define set_command_flag(flag)   control.flags = (Control_flags_t)(control.flags |  (flag))
+#define reset_command_flag(flag) control.flags = (Control_flags_t)(control.flags & ~(flag))
 
 
 enum {
@@ -28,6 +29,7 @@ enum {
 static uint32_t adc_dma_buf[ADC_SAMPLE_LEN * ADC_CHANNELS];
 static float old_battery_voltage = 0.0f;
 static float battery_charge_change = 0.0f;
+static uint16_t shutdown_timer = 0;
 
 Control_t control = {0};
 
@@ -35,6 +37,7 @@ static void measure_vbat();
 static void rpi_power_on();
 static void rpi_power_off();
 static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltage);
+static void do_the_shutdown();
 
 extern ADC_HandleTypeDef hadc1;
 
@@ -76,7 +79,10 @@ void control_update() {
 	control.charge_level = battery_charge_level_state_machine(control.charge_level, control.battery_voltage * 1000.0f);
 
 	if (control.battery_voltage < 3.3f) {
-		ui_battery_low();
+		control.is_low_battery = 1;
+		control_do(CONTROL_DO_SHUTDOWN);
+	} else {
+		control.is_low_battery = 0;
 	}
 
 
@@ -133,13 +139,24 @@ void control_update() {
 		rpi_power_off();
 	}
 
+	//handle shutdown and shutdown request (waits for raspi)
+	if (control.flags & CONTROL_DO_SHUTDOWN) {
+		control.is_shutting_down = 1;
+		set_command_flag(RPI_DO_SHUTDOWN);
+		if (control.state == CONTROL_RPI_IDLE && shutdown_timer > 20) {
+			//now we are ready for shutdown
+			do_the_shutdown();
+		}
+		shutdown_timer++;
+	}
+
 
 
 }
 
 
 
-void control_do(Control_rpi_flags_t cmd) {
+void control_do(Control_flags_t cmd) {
 	set_command_flag(cmd);
 }
 
@@ -252,5 +269,11 @@ static void rpi_power_on() {
 
 static void rpi_power_off() {
 	HAL_GPIO_WritePin(RPI_ENABLE_GPIO_Port, RPI_ENABLE_Pin, GPIO_PIN_RESET);
+}
+
+static void do_the_shutdown() {
+	HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_RESET);
+	scheduler_task_sleep(100);
+	NVIC_SystemReset();
 }
 

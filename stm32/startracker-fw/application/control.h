@@ -28,21 +28,24 @@ typedef enum {
 	RPI_DO_BOOT = 0x01,
 	RPI_DO_SHUTDOWN = 0x02,
 	RPI_DO_CALC = 0x04,
-} Control_rpi_flags_t;
+	CONTROL_DO_SHUTDOWN = 0x08,
+} Control_flags_t;
 
 typedef struct {
 	float battery_voltage;
 	uint8_t charger_charging;
 	uint8_t charger_done;
 	Control_rpi_state state;
-	Control_rpi_flags_t flags;
+	Control_flags_t flags;
 	uint8_t charge_level;
+	uint8_t is_shutting_down;
+	uint8_t is_low_battery;
 } Control_t;
 
 
 void control_init();
 void control_update();
-void control_do(Control_rpi_flags_t cmd);
+void control_do(Control_flags_t cmd);
 
 
 #ifdef __cplusplus
