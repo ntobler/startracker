@@ -13,6 +13,7 @@
 #include "string.h"
 #include "main.h"
 #include "rpi_protocol.h"
+#include "ui.h"
 
 #define set_command_flag(flag)   control.flags = (Control_rpi_flags_t)(control.flags |  (flag))
 #define reset_command_flag(flag) control.flags = (Control_rpi_flags_t)(control.flags & ~(flag))
@@ -24,8 +25,6 @@ enum {
 	ADC_CHANNELS = 2,
 };
 
-static uint8_t do_boot = 0;
-static uint8_t do_shutdown = 0;
 static uint32_t adc_dma_buf[ADC_SAMPLE_LEN * ADC_CHANNELS];
 static float old_battery_voltage = 0.0f;
 static float battery_charge_change = 0.0f;
@@ -40,12 +39,9 @@ static uint8_t battery_charge_level_state_machine(uint8_t state, uint32_t voltag
 extern ADC_HandleTypeDef hadc1;
 
 void control_init() {
-	do_boot = 0;
-	do_shutdown = 0;
 	memset(&control, 0, sizeof(Control_t));
 
 	HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_SET);
-//	HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
 
 	HAL_ADC_Start_DMA(&hadc1, adc_dma_buf, ADC_SAMPLE_LEN * ADC_CHANNELS);
 }
@@ -78,6 +74,10 @@ void control_update() {
 	}
 
 	control.charge_level = battery_charge_level_state_machine(control.charge_level, control.battery_voltage * 1000.0f);
+
+	if (control.battery_voltage < 3.3f) {
+		ui_battery_low();
+	}
 
 
 	static uint32_t poll_timer = 0;
@@ -142,6 +142,7 @@ void control_update() {
 void control_do(Control_rpi_flags_t cmd) {
 	set_command_flag(cmd);
 }
+
 
 
 

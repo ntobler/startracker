@@ -8,6 +8,10 @@
 #ifndef UI_H_
 #define UI_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
 	SHOW,
 	UPDATE,
@@ -62,6 +66,7 @@ public:
 };
 
 class Shutdown : public AbstractUI {
+	int timer = 0;
 	void draw();
 public:
 	AbstractUI* update(Ui_event_en e) override;
@@ -73,9 +78,21 @@ public:
 	AbstractUI* update(Ui_event_en e) override;
 };
 
+class LowBattery : public AbstractUI {
+	int timer = 0;
+	void draw();
+public:
+	AbstractUI* update(Ui_event_en e) override;
+};
+
 
 void ui_init();
 void ui_update();
+void ui_battery_low();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* UI_H_ */

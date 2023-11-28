@@ -10,6 +10,7 @@
 #include "string.h"
 #include "stm32_hal.h"
 #include "main.h"
+#include "scheduler.h"
 
 
 #define set_command_flag(flag)   motor.flags = (Motor_command_flags_t)(motor.flags |  (flag))
@@ -43,17 +44,33 @@ Motor_t motor = {MOTOR_MODE_NONE};
 static int32_t get_start_tick();
 static int32_t get_end_tick();
 
-static void enable_motors();
-static void disable_motors();
+static void enable_disable_motors(uint32_t enable);
 static void assign_trajectory();
 static void run_home();
 static void run_motors();
 
 
 void motor_init() {
+	steppers[0].dir_port = TMC1_DIR_GPIO_Port;
+	steppers[0].dir_pin  = TMC1_DIR_Pin;
+	steppers[1].dir_port = TMC2_DIR_GPIO_Port;
+	steppers[1].dir_pin  = TMC2_DIR_Pin;
+	steppers[2].dir_port = TMC3_DIR_GPIO_Port;
+	steppers[2].dir_pin  = TMC3_DIR_Pin;
+
+	steppers[0].step_port = TMC1_STEP_GPIO_Port;
+	steppers[0].step_pin  = TMC1_STEP_Pin;
+	steppers[1].step_port = TMC2_STEP_GPIO_Port;
+	steppers[1].step_pin  = TMC2_STEP_Pin;
+	steppers[2].step_port = TMC3_STEP_GPIO_Port;
+	steppers[2].step_pin  = TMC3_STEP_Pin;
+
+	HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
+	scheduler_task_sleep(100);
+
 	steppers[0].uart = &huart2;
 	steppers[0].send_init();
-	disable_motors();
+	enable_disable_motors(0);
 }
 void motor_update() {
 
@@ -63,14 +80,14 @@ void motor_update() {
 		if (motor.flags & MOTOR_DO_HOME) {
 			reset_command_flag(MOTOR_DO_HOME);
 			motor.state = MOTOR_MODE_HOMING;
-			enable_motors();
+//			enable_motors();
 			home_timer = 0;
 		}
 		break;
 	case MOTOR_MODE_HOMING:
 		run_home();
 		home_timer++;
-		if (home_timer > 20000) {
+		if (home_timer > 50000) {
 			motor.state = MOTOR_MODE_READY;
 		}
 		break;
@@ -87,7 +104,7 @@ void motor_update() {
 		if (motor.flags & MOTOR_DO_DISABLE) {
 			reset_command_flag(MOTOR_DO_DISABLE);
 			motor.state = MOTOR_MODE_NONE;
-			disable_motors();
+//			disable_motors();
 		} else
 		if (motor.flags & MOTOR_DO_ASSIGN_TRAJECTORY) {
 			reset_command_flag(MOTOR_DO_ASSIGN_TRAJECTORY);
@@ -117,8 +134,10 @@ void motor_update() {
 		break;
 	default:
 		motor.state = MOTOR_MODE_NONE;
-		disable_motors();
+//		disable_motors();
 	}
+
+	enable_disable_motors(motor.state != MOTOR_MODE_NONE);
 
 }
 
@@ -133,13 +152,35 @@ void motor_do(Motor_command_flags_t cmd) {
 	set_command_flag(cmd);
 }
 
-static void enable_motors() {
-	HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_SET);
+
+static void enable_disable_motors(uint32_t enable) {
+	static uint32_t old = -1;
+	if (old != enable) {
+		old = enable;
+
+		if (enable) {
+//			for (int i = 0; i < 10; i++) {
+//				HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
+//				scheduler_task_sleep(5);
+//				HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_RESET);
+//				scheduler_task_sleep(50);
+//			}
+//			HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
+//			scheduler_task_sleep(1000);
+			scheduler_task_sleep(50);
+			HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_RESET);
+			scheduler_task_sleep(50);
+		} else {
+			scheduler_task_sleep(50);
+			HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_SET);
+			scheduler_task_sleep(50);
+//			HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_RESET);
+//			scheduler_task_sleep(50);
+		}
+	}
 }
 
-static void disable_motors() {
-	HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_RESET);
-}
+
 static void assign_trajectory() {
 	start_time = new_trajectory.start;
 	end_time = new_trajectory.stop;
@@ -152,7 +193,12 @@ static void assign_trajectory() {
 
 static void run_home() {
 	for (int i = 0; i < 3; i++) {
-		steppers[i].set_to(-1);
+//		steppers[i].set_to(-1);
+		if (home_timer > 50000 / 2) {
+			steppers[i].set_to(1);
+		} else {
+			steppers[i].set_to(-1);
+		}
 		steppers[i].step_to(0);
 	}
 }

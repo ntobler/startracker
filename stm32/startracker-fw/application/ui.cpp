@@ -25,11 +25,14 @@ static Menu menu;
 static Bubble bubble;
 static Shutdown shutdown;
 static About about;
+static LowBattery low_battery;
 extern float position[3];
 extern uint32_t tick;
 extern Imu_data_t imu;
 extern Control_t control;
 extern Motor_t motor;
+static uint32_t battery_low_event = 0;
+
 
 
 Button button_down(BUTTON_UP_GPIO_Port, BUTTON_UP_Pin, 1);
@@ -58,6 +61,7 @@ extern Image_description_t img_battery9;
 extern Image_description_t img_battery10;
 extern Image_description_t img_battery_full;
 extern Image_description_t img_blank;
+extern Image_description_t img_low_battery;
 static Image_description_t* img_batterys [] = {
 	&img_battery0,
 	&img_battery1,
@@ -111,7 +115,7 @@ AbstractUI* Splash::update(Ui_event_en e) {
 	}
 
 	timer++;
-	if (timer > 20) {
+	if (timer > 5) {
 		return &home;
 	}
 	draw();
@@ -458,17 +462,23 @@ void About::draw() {
 
 AbstractUI* Shutdown::update(Ui_event_en e) {
 	if (e == SHOW) {
+		timer = 0;
 		draw();
 		return 0;
 	}
 	if (button_right.event == BTN_RISING) {
-
 		HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_RESET);
 		scheduler_task_sleep(100);
 		NVIC_SystemReset();
 	}
 	if (button_left.event == BTN_RISING) {
 		return &menu;
+	}
+	timer++;
+	if (timer > 5) {
+		HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_RESET);
+		scheduler_task_sleep(100);
+		NVIC_SystemReset();
 	}
 	draw();
 	return 0;
@@ -490,6 +500,28 @@ void Shutdown::draw() {
     ssd1306_UpdateScreen();
 }
 
+AbstractUI* LowBattery::update(Ui_event_en e) {
+	if (e == SHOW) {
+		draw();
+		timer = 0;
+		return 0;
+	}
+	timer++;
+	if (timer > 20) {
+		HAL_GPIO_WritePin(POWER_ENABLE_GPIO_Port, POWER_ENABLE_Pin, GPIO_PIN_RESET);
+		scheduler_task_sleep(100);
+		NVIC_SystemReset();
+	}
+
+	return 0;
+}
+
+void LowBattery::draw() {
+    ssd1306_Clear();
+	ssd1306_DrawImage(128 / 2 - img_low_battery.width / 2, 64 / 2 - img_low_battery.height / 2, &img_low_battery);
+    ssd1306_UpdateScreen();
+}
+
 void ui_init() {
 	  ssd1306_Init();
 	  active = &splash;
@@ -508,5 +540,18 @@ void ui_update() {
 			active = new_ui;
 			active->update(SHOW);
 		}
+		if (battery_low_event) {
+			if (active != &low_battery) {
+				active->update(HIDE);
+				active = &low_battery;
+				active->update(SHOW);
+			}
+			battery_low_event = 0;
+		}
 	}
+}
+
+
+void ui_battery_low() {
+	battery_low_event = 1;
 }
