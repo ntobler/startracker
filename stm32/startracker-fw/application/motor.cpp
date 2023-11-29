@@ -20,6 +20,7 @@
 #define TICK_TIME (0.00025f)
 
 extern UART_HandleTypeDef huart2;
+extern TIM_HandleTypeDef htim5;
 static TMC220X steppers[3];
 //polynom like in python. Example data.
 //the order is c3, c2, c1, c0
@@ -171,10 +172,23 @@ static void enable_disable_motors(uint32_t enable) {
 			HAL_GPIO_WritePin(TMC_ENABLE_GPIO_Port, TMC_ENABLE_Pin, GPIO_PIN_SET);
 
 			//enable 12V power boosting. The 4.8V may not be enough for the drivers to start properly.
+			//there is an issue that enabling the 12V booster can stress the 5.2V power booster and the battery
+			//management so much that it shuts down because of overcurrent.
+			//  =>  Simulations have shown that the 12V booster needs about ~100us to load all secondary capacitors,
+			//      which is a considerable amount of charge. The solution is to enable it multiple times for 5us
+			//      at one time with 1ms pauses in between.
+			scheduler_task_sleep(1);
+			for (int i = 0; i < 200; i++) {
+				HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
+				uint32_t micros = htim5.Instance->CNT + 5;
+				while (htim5.Instance->CNT < micros);
+				HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_RESET);
+				scheduler_task_sleep(1);
+			}
 			HAL_GPIO_WritePin(MOTOR_BOOST_ENABLE_GPIO_Port, MOTOR_BOOST_ENABLE_Pin, GPIO_PIN_SET);
 
 			//wait for it to get stable and TMC to boot up
-			scheduler_task_sleep(40);
+			scheduler_task_sleep(200);
 
 			//send TMC init sequence. Since the data line is shared this needs only be done on one motor.
 			steppers[0].send_init();
