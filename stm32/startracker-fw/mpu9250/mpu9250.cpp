@@ -176,7 +176,7 @@
 // Set initial input parameters
 
 
-
+extern uint32_t uwTick;
 
 
 
@@ -439,6 +439,7 @@ void MPU9250::calibrateMPU9250(float * dest1, float * dest2)
 	fifo_count = ((uint16_t)data[0] << 8) | data[1];
 	packet_count = fifo_count/12;// How many sets of full gyro and accelerometer data for averaging
 
+	uint32_t timeout = uwTick + 1000;
 	for (ii = 0; ii < packet_count; ii++) {
 		int16_t accel_temp[3] = {0, 0, 0}, gyro_temp[3] = {0, 0, 0};
 		readBytes(MPU9250_ADDRESS, FIFO_R_W, 12, &data[0]); // read data for averaging
@@ -455,6 +456,10 @@ void MPU9250::calibrateMPU9250(float * dest1, float * dest2)
 		gyro_bias[0] += (int32_t) gyro_temp[0];
 		gyro_bias[1] += (int32_t) gyro_temp[1];
 		gyro_bias[2] += (int32_t) gyro_temp[2];
+
+		if (uwTick > timeout) {
+			break;
+		}
 
 	}
 	accel_bias[0] /= (int32_t) packet_count; // Normalize sums to get average count biases
