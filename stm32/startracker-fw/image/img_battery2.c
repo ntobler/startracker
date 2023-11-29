@@ -1,6 +1,6 @@
 #include "image.h"
 
-static uint8_t img_battery2_data[] = {252,252,252,4,4,4,4,4,4,4,4,28,240,7,7,7,4,4,4,4,4,4,4,4,7,1};
+static const uint8_t img_battery2_data[] ATTR_TO_FLASH = {252,252,252,4,4,4,4,4,4,4,4,28,240,7,7,7,4,4,4,4,4,4,4,4,7,1};
 
 Image_description_t img_battery2 = {
     .width = 13,

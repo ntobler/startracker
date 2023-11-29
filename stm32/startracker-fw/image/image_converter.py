@@ -25,7 +25,7 @@ def generate_bit_image(image_file: pathlib.Path, h_file: pathlib.Path, name: str
     filecontent = f"""\
 #include "image.h"
 
-static uint8_t {name}_data[] = {{{data}}};
+static const uint8_t {name}_data[] ATTR_TO_FLASH = {{{data}}};
 
 Image_description_t {name} = {{
     .width = {width},

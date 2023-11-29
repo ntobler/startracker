@@ -15,10 +15,12 @@ extern "C" {
 
 #include "stdint.h"
 
+#define ATTR_TO_FLASH __attribute__((section(".rodata")))
+
 typedef struct {
 	uint8_t width;
 	uint8_t height;
-	uint8_t* data;
+	const uint8_t* data;
 } Image_description_t;
 
 
