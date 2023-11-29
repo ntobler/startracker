@@ -11,6 +11,7 @@
 //TMC220xx register addresses
 #define REG_GCONF (0x00)
 #define REG_CHOPCONF (0x6C)
+#define REG_PWMCONF (0x70)
 #define REG_VELOCITY_DEP_CNTRL (0x10)
 #define REG_WRITE (0x80)
 #define REG_READ  (0x00)
@@ -75,10 +76,12 @@ void TMC220X::send_init() {
 	send_data(REG_CHOPCONF, 0x00000053);  //Reset default=0x10000053
 
 	//send pwm config
-	send_data(REG_CHOPCONF, 0xC10D0024);  //Reset default=0xC10D0024
+	send_data(REG_PWMCONF, 0xC10D0024);  //Reset default=0xC10D0024
 
-
-//	send_data(REG_VELOCITY_DEP_CNTRL, 2 + (4 << 8) + (1 << 16));
+	uint32_t ihold = 1;  // max 31
+	uint32_t irun = 24;  // max 31
+	uint32_t iholddelay = 1; // max 16
+	send_data(REG_VELOCITY_DEP_CNTRL, ihold + (irun << 8) + (iholddelay << 16));
 
 }
 
