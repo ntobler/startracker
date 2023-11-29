@@ -31,4 +31,5 @@ void Perf::end() {
 	_private.sum = sum;
 	last = t;
 	average = sum / cycles;
+	total += t;
 }

@@ -28,6 +28,7 @@ public:
 	uint32_t last = 0;
 	uint32_t average = 0;
 	uint32_t cycles = 0;
+	uint32_t total;
 	Perf();
 	void start();
 	void end();

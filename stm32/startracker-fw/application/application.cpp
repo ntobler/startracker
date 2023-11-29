@@ -28,6 +28,8 @@ typedef struct {
 	Perf imu;
 	Perf motor;
 	Perf control;
+	Perf wfi;
+	Perf active;
 } Perf_monitor;
 
 
@@ -104,7 +106,12 @@ static void task_idle() {
 			serial_usb.writeBuf(buf, avail);
 			//scheduler_task_sleep(10);
 		}
+
+		perf.wfi.start();
+		perf.active.end();
 		__WFI();
+		perf.wfi.end();
+		perf.active.start();
 	}
 }
 
@@ -116,7 +123,7 @@ static void task_ui() {
 		//Wait for UI update event. This should arrive cyclic.
 		//Waiting is done with a timeout so the task is used to poll the IMU sensor
 		//which is on the same I2C bus as the display.
-		uint32_t event = scheduler_event_wait_timeout(EVENT_TASK_UPDATE, 1);
+		uint32_t event = scheduler_event_wait_timeout(EVENT_TASK_UPDATE, 100);
 		if (event & EVENT_TASK_UPDATE) {
 			perf.ui.start();
 			ui_update();
@@ -159,6 +166,7 @@ static void task_motor() {
 
 	//enable trinamics current setting pwm. This has a high frequency.
 	htim3.Instance->CCR1 = 75;
+	htim3.Instance->CCR1 = 37;
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 
 	//initialize the motor module
