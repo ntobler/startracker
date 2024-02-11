@@ -2,12 +2,19 @@
 
 import pathlib
 import json
+import collections
 
 import cv2
+import numpy as np
 
 from . import kalkam
 
 from typing import Union, Sequence, Dict
+
+
+IntrinsicParams = collections.namedtuple(
+    "IntrinsicParams", ["fx", "fy", "tx", "ty", "width", "height"]
+)
 
 
 class CameraCalibration:
@@ -58,6 +65,40 @@ class CameraCalibration:
             "RMS_reproj_err_pix": 0.5855461668735685,
         }
         return cls(cal_dict)
+
+    def intrinsic_params(self) -> IntrinsicParams:
+        """
+        Get intrinsic camera parameters.
+
+        Returns:
+            IntrinsicParams: Named tuple containing camera parameters
+        """
+        intrinsic = self.cal_dict["camera_matrix"]
+        fx = intrinsic[0][0]
+        fy = intrinsic[1][1]
+        tx = intrinsic[0][2]
+        ty = intrinsic[1][2]
+        width, height = self.cal_dict["resolution"]
+        return IntrinsicParams(fx, fy, tx, ty, width, height)
+
+    def get_frame_corners(self) -> np.ndarray:
+        """
+        Get a numpy array representing the corners of the camera in cartesian space.
+
+        Returns:
+            np.ndarray: Corners xyz shape=[5, 3]
+        """
+        p = self.intrinsic_params()
+        x0 = (-p.tx - 0.5) / p.fx
+        x1 = (p.width - p.tx - 0.5) / p.fx
+        y0 = (-p.ty - 0.5) / p.fy
+        y1 = (p.height - p.ty - 0.5) / p.fy
+
+        corners = np.array(
+            ((x0, x1, x1, x0, x0), (y0, y0, y1, y1, y0), (1, 1, 1, 1, 1)),
+            dtype=np.float32,
+        ).T
+        return corners
 
     def save_json(self, filename: Union[str, pathlib.Path]):
         """
