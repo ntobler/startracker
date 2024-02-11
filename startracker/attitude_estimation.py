@@ -55,14 +55,20 @@ class AttitudeEstimator:
         self._indexed_star_pairs = np.load(data_dir / "indexed_star_pairs.npy")
 
         # Inter start angle threshold
-        self._intrinsic, _, _ = cots_star_tracker.read_cam_json(calibration_file)
+        self._intrinsic, _, self._dist_coeffs = cots_star_tracker.read_cam_json(
+            calibration_file
+        )
         dx = self._intrinsic[0, 0]
         self._isa_thresh = star_match_pixel_tol * (1 / dx)
 
     def image_xyz_to_xy(self, image_xyz):
         image_xy = (self._intrinsic @ image_xyz.T).T
         image_xy = image_xy[..., :2] / image_xy[..., 2:]
-        image_xy = kalkam.PointUndistorter(self._dist_coeffs).distort(image_xy)
+        image_xy = kalkam.PointUndistorter(
+            kalkam.Calibration(
+                self._intrinsic, self._dist_coeffs, 0, 0, None
+            )  # TODO Ewwwwww fix this
+        ).distort(image_xy)
         return image_xy
 
     def __call__(
@@ -166,9 +172,11 @@ class ImageAcquisitioner:
         self.positions = None
         self._attitude_filter = attitude_filter
 
-        self._exposure_ms = 250
-        self._analog_gain = 4
-        self._digital_gain = 4
+        self._cam_settings = camera.CameraSettings(
+            exposure_ms=250,
+            analog_gain=4,
+            digital_gain=4,
+        )
 
         pers = persistent.Persistent.get_instance()
 
@@ -192,57 +200,29 @@ class ImageAcquisitioner:
         except Exception:
             self._dark_frame = None
 
-    def update_settings(
-        self,
-        exposure_ms: float = 250,
-        analog_gain: int = 4,
-        digital_gain: int = 4,
-    ):
-        self._logger.info(f"Capture e={exposure_ms} g={analog_gain}")
-        self._exposure_ms = exposure_ms
-        self._analog_gain = analog_gain
-        self._digital_gain = digital_gain
-
-    def _capture(self, save_darkframe: bool = False):
-        self._cam.exposure_ms = self._exposure_ms
-        self._cam.gain = self._analog_gain
-
-        image = self._cam.capture_raw()
-        self._logger.info(f"Raw bayer shape={image.shape} dtype={image.dtype}")
-
-        if save_darkframe:
-            self._dark_frame = image.copy()
-            np.save(self._dark_frame_file, self._dark_frame)
-
-        # Correct black level
-        if self._dark_frame is not None:
-            cv2.subtract(image, self._dark_frame, dst=image)
-
-        image = image_processing.binning(image, factor=2)
-
-        if self._digital_gain in [1, 2]:
-            image //= 4 // self._digital_gain
-        image = image.astype(np.uint8)
-
-        self._logger.info(f"Output shape={image.shape} dtype={image.dtype}")
-
-        return image
-
     def start_thread(self):
         self._thread = threading.Thread(target=self.run, daemon=True)
         self._thread.start()
 
     def run(self):
-        self._cam = camera.Camera(exposure_ms=1)
-        with self._cam:
+        cam = camera.RpiCamera(self._cam_settings)
+        with cam:
             while True:
                 if self.mode == AttitudeEstimationModeEnum.RUNNING:
-                    image = self._capture()
+                    if self._attitude_estimator is None:
+                        self.mode = AttitudeEstimationModeEnum.FAULT
+                        continue
+                    image = cam.capture()
                     self._logger.info(f"image mean: {image.mean()}")
 
-                    quat, n_matches, image_xyz, _ = self._attitude_estimator(image)
+                    try:
+                        quat, n_matches, image_xyz, _ = self._attitude_estimator(image)
+                        self._attitude_filter.put_quat(quat)
+                    except Exception:
+                        # TODO use cots_star_tracker.StartrackerException (not exposed yet)
+                        n_matches = 0
+                        image_xyz = np.zeros((0, 3))
 
-                    self._attitude_filter.put_quat(quat)
                     self.n_matches = n_matches
                     self.positions = (
                         self._attitude_estimator.image_xyz_to_xy(image_xyz)
@@ -252,7 +232,7 @@ class ImageAcquisitioner:
                 elif self.mode == AttitudeEstimationModeEnum.IDLE:
                     time.sleep(0.1)
                 elif self.mode == AttitudeEstimationModeEnum.RECORD_DARKFRAME:
-                    self._capture(save_darkframe=True)
+                    cam.record_darkframe()
                     self.mode = AttitudeEstimationModeEnum.IDLE
                 elif self.mode == AttitudeEstimationModeEnum.FAULT:
                     time.sleep(0.1)

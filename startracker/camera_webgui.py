@@ -95,26 +95,14 @@ class Main:
         self, exposure_ms: float, analog_gain: int, digital_gain: int, binning: int
     ):
         self._logger.info(f"Capture e={exposure_ms} g={analog_gain}")
-        self._cam.exposure_ms = exposure_ms
-        self._cam.gain = analog_gain
 
-        image = self._cam.capture_raw()
-        self._logger.info(f"Raw bayer shape={image.shape} dtype={image.dtype}")
+        settings = self._cam.settings
+        settings.exposure_ms = exposure_ms
+        settings.analog_gain = analog_gain
+        settings.digital_gain = digital_gain
+        self._cam.settings = settings
 
-        # Correct black level
-        image = image.view(np.int16)
-        image -= 55
-        np.clip(image, 0, 0x7FFF, out=image)
-        image = image.view(np.uint16)
-
-        if binning in [2, 4, 8]:
-            image = image_processing.binning(image, factor=2)
-
-        if digital_gain in [1, 2]:
-            image //= 4 // digital_gain
-        image = image.astype(np.uint8)
-
-        self._logger.info(f"Output shape={image.shape} dtype={image.dtype}")
+        image = self._cam.capture()
 
         self.image_container.put(image)
 
@@ -133,7 +121,8 @@ class Main:
     def run(self):
         """Thread run method."""
         print("starting Main")
-        self._cam = camera.Camera(exposure_ms=1)
+        settings = camera.CameraSettings()
+        self._cam = camera.RpiCamera(settings)
         with self._cam:
             while True:
                 method, args, return_event = self.input_queue.get()
