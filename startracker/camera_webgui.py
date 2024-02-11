@@ -1,4 +1,6 @@
-# Flask web application to capture images using a smartphone browser or any other browser.
+"""
+Flask web application to capture images using a smartphone browser or any other browser.
+"""
 
 import queue
 import threading
@@ -147,7 +149,7 @@ sock = Sock(app)
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("cameraWebgui.html")
 
 
 @app.post("/capture")
@@ -181,7 +183,7 @@ def image(ws):
         ws.send(image_data)
 
 
-def main():
+def cli():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -189,8 +191,8 @@ def main():
         handlers=[logging.StreamHandler()],
     )
 
-    app.run(debug=False, host="0.0.0.0")
+    app.run(debug=False, host="127.0.0.1")
 
 
 if __name__ == "__main__":
-    main()
+    cli()
