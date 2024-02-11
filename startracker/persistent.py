@@ -29,9 +29,6 @@ class Persistent:
 
         self.default_conf_file = self.package_dir / "default_config.yml"
 
-        self.testing_dir = self.user_data_dir / "testing"
-        self.testing_dir.mkdir(exist_ok=True)
-
         self.cam_file = self.user_data_dir / "cam_file.json"
 
         self.star_data_dir = self.user_data_dir / "star_data"

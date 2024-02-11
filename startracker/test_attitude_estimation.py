@@ -8,12 +8,14 @@ from . import testing_utils
 
 
 def test_attutude_estimation():
-    data_dir, cam_file = testing_utils.get_test_context()
+    tm = testing_utils.TestingMaterial(use_existing=True)
 
     rng = np.random.default_rng(42)
 
-    ae = attitude_estimation.AttitudeEstimator(cam_file, data_dir)
-    intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(cam_file)
+    ae = attitude_estimation.AttitudeEstimator(tm.cam_file, tm.stardata_dir)
+    intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
+        tm.cam_file
+    )
 
     sig = testing_utils.StarImageGenerator(intrinsic, (width, height), dist_coeffs)
 

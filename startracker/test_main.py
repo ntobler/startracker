@@ -1,12 +1,12 @@
 import threading
 import queue
-import time
 
 import serial
 
 from . import main
 from . import communication
 from . import attitude_estimation
+from . import testing_utils
 
 
 class MockSerial(serial.Serial):
@@ -138,6 +138,8 @@ class MasterEmulator:
 
 
 def test_main():
+    testing_utils.TestingMaterial(use_existing=True).patch_persistent()
+
     m = main.App(False)
 
     device_serial = MockSerial(m._ser)

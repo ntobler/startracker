@@ -1,5 +1,7 @@
 """Various helper function and classes for testing, especially for star and camera simulation"""
 
+import pathlib
+
 import cots_star_tracker
 import cv2
 import numpy as np
@@ -13,18 +15,33 @@ from . import transform
 from typing import Tuple
 
 
-def get_test_context(use_existing: bool = False):
-    testing_dir = persistent.Persistent.get_instance().testing_dir
-    testing_dir.mkdir(exist_ok=True)
-    cam_file = testing_dir / "calibration.json"
-    data_dir = testing_dir / "stardata"
+class TestingMaterial:
 
-    if (not cam_file.exists()) or (not use_existing):
-        calibration.CameraCalibration.make_dummy().save_json(cam_file)
-    if (not data_dir.exists()) or (not use_existing):
-        data_dir.mkdir(exist_ok=True)
-        cots_star_tracker.create_catalog(cam_file, data_dir, b_thresh=5.5, verbose=True)
-    return data_dir, cam_file
+    testing_dir: pathlib.Path
+    cam_file: pathlib.Path
+    stardata_dir: pathlib.Path
+
+    def __init__(self, use_existing: bool = True):
+
+        user_data_dir = persistent.Persistent.get_instance().user_data_dir
+
+        self.testing_dir = user_data_dir / "testing"
+        self.testing_dir.mkdir(exist_ok=True)
+
+        self.cam_file = self.testing_dir / "calibration.json"
+        if (not self.cam_file.exists()) or (not use_existing):
+            calibration.CameraCalibration.make_dummy().save_json(self.cam_file)
+
+        self.stardata_dir = self.testing_dir / "stardata"
+        if (not self.stardata_dir.exists()) or (not use_existing):
+            self.stardata_dir.mkdir(exist_ok=True)
+            cots_star_tracker.create_catalog(
+                self.cam_file, self.stardata_dir, b_thresh=5.5, verbose=True
+            )
+
+    def patch_persistent(self):
+        persistent.Persistent.get_instance().cam_file = self.cam_file
+        persistent.Persistent.get_instance().star_data_dir = self.stardata_dir
 
 
 def get_catalog_stars() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -201,7 +218,7 @@ class MockStarCam:
     """Camera to generate artificial images of the sky"""
 
     def __init__(self):
-        _, cam_file = get_test_context()
+        cam_file = TestingMaterial(use_existing=True).cam_file
         self.rng = np.random.default_rng(42)
         intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
             cam_file

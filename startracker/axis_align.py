@@ -230,10 +230,7 @@ class WebApp:
 def main():
 
     if "STARTRACKER_DEBUG" in os.environ or True:
-        data_dir, cam_file = testing_utils.get_test_context(use_existing=True)
-        pers = persistent.Persistent.get_instance()
-        pers.cam_file = cam_file
-        pers.star_data_dir = data_dir
+        testing_utils.TestingMaterial(use_existing=True).patch_persistent()
 
     logging.basicConfig(
         level=logging.INFO,
