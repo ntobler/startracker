@@ -15,13 +15,14 @@ from typing import Tuple
 
 def get_test_context(use_existing: bool = False):
     testing_dir = persistent.Persistent.get_instance().testing_dir
+    testing_dir.mkdir(exist_ok=True)
     cam_file = testing_dir / "calibration.json"
     data_dir = testing_dir / "stardata"
-    data_dir.mkdir(exist_ok=True)
 
-    if not cam_file.exists() and not use_existing:
+    if (not cam_file.exists()) or (not use_existing):
         calibration.CameraCalibration.make_dummy().save_json(cam_file)
-    if not data_dir.exists() and not use_existing:
+    if (not data_dir.exists()) or (not use_existing):
+        data_dir.mkdir(exist_ok=True)
         cots_star_tracker.create_catalog(cam_file, data_dir, b_thresh=5.5, verbose=True)
     return data_dir, cam_file
 
