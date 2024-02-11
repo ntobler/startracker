@@ -5,4 +5,5 @@ flask
 flask-sock
 pyserial
 dynaconf
+pycairo
 git+https://github.com/ntobler/COTS-Star-Tracker.git@simplification

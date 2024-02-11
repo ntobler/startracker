@@ -63,7 +63,8 @@ sudo pip3 install picamera2 --upgrade
 Install startracker git repo
 ``` bash
 cd ~
-git clone ssh://git@github.com:ntobler/startracker.git
+sudo apt install -y git libcairo2-dev
+git clone https://github.com/ntobler/startracker.git
 pip install startracker
 sudo startracker/install_service.sh
 ```
