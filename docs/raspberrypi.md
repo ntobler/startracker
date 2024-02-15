@@ -65,7 +65,7 @@ Install startracker git repo
 cd ~
 sudo apt install -y git libcairo2-dev
 git clone https://github.com/ntobler/startracker.git
-pip install startracker
+pip install ./startracker
 sudo startracker/install_service.sh
 ```
 Your Startracker is ready to go.

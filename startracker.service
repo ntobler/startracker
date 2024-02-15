@@ -14,7 +14,7 @@ After=serial-getty.target
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/
-ExecStart=/home/pi/.local/bin/startracer --enable-shutdown
+ExecStart=/home/pi/.local/bin/startracker --enable-shutdown
 ExecStop=pkill --signal SIGINT -x startracker
 TimeoutStopSec=2
 
