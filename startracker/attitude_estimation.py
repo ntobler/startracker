@@ -5,6 +5,7 @@ import pathlib
 import logging
 import time
 import threading
+import dataclasses
 
 import numpy as np
 import scipy.spatial.transform
@@ -16,6 +17,22 @@ from . import persistent
 from . import kalkam
 
 from typing import Optional, Union, Tuple
+
+
+@dataclasses.dataclass(frozen=True)
+class AttitudeEstimationResult:
+    quat: np.ndarray
+    """Quaternion [x, y, z, w], transforms from the camera frame to the star frame."""
+    n_matches: int
+    """Number of matched stars."""
+    image_xyz: np.ndarray
+    """Camera frame XYZ coordinates of the image coordinates of the matches."""
+    cat_xyz: np.ndarray
+    """Camera frame XYZ coordinates of the catalog coordinates of the matches."""
+    star_ids: np.ndarray
+    """Catalog ids of all matched stars."""
+    mags: np.ndarray
+    """Magnitudes of all matched stars."""
 
 
 class AttitudeEstimator:
@@ -49,8 +66,9 @@ class AttitudeEstimator:
         self._k = np.load(data_dir / "k.npy")
         self._m = np.load(data_dir / "m.npy")
         self._q = np.load(data_dir / "q.npy")
-        self._x_cat = np.load(data_dir / "u.npy")
+        self.cat_xyz = np.load(data_dir / "u.npy")
         self._indexed_star_pairs = np.load(data_dir / "indexed_star_pairs.npy")
+        self.cat_mag = np.load(data_dir / "mag.npy")
 
         # Inter start angle threshold
         self._intrinsic, _, self._dist_coeffs = cots_star_tracker.read_cam_json(
@@ -71,7 +89,7 @@ class AttitudeEstimator:
 
     def __call__(
         self, image: np.ndarray, darkframe: Optional[np.ndarray] = None
-    ) -> Tuple[np.ndarray, int, np.ndarray, np.ndarray]:
+    ) -> AttitudeEstimationResult:
         """
         Perform attitude estimation on a camera image of stars.
 
@@ -80,11 +98,7 @@ class AttitudeEstimator:
             darkframe: Grayscale darkframe image (Captured with lid on).
 
         Returns:
-            Tuple[np.ndarray, int, np.ndarray, np.ndarray]:
-                - Quaternion [x, y, z, w], transforms from the camera frame to the star frame.
-                - Number of matched stars.
-                - Camera frame XYZ coordinates of the image coordinates of the matches.
-                - Camera frame XYZ coordinates of the catalog coordinates of the matches.
+            AttitudeEstimationResult: attitude estimation result object.
         """
         q_est, id_match, n_matches, x_obs, _ = cots_star_tracker.star_tracker(
             image,
@@ -92,7 +106,7 @@ class AttitudeEstimator:
             darkframe=darkframe,
             m=self._m,
             q=self._q,
-            x_cat=self._x_cat,
+            x_cat=self.cat_xyz,
             k=self._k,
             indexed_star_pairs=self._indexed_star_pairs,
             graphics=False,
@@ -103,11 +117,14 @@ class AttitudeEstimator:
         )
 
         image_xyz = x_obs.T
-        cat_xyz = self._x_cat.T[id_match][:, 0]
+        cat_xyz = self.cat_xyz.T[id_match][:, 0]
+        star_mags = self.cat_mag[id_match][:, 0]
 
         cat_xyz = scipy.spatial.transform.Rotation.from_quat(q_est).inv().apply(cat_xyz)
 
-        return q_est, n_matches, image_xyz, cat_xyz
+        return AttitudeEstimationResult(
+            q_est, n_matches, image_xyz, cat_xyz, id_match, star_mags
+        )
 
 
 class AttitudeFilter:
@@ -214,14 +231,15 @@ class ImageAcquisitioner:
                     self._logger.info(f"image mean: {image.mean()}")
 
                     try:
-                        quat, n_matches, image_xyz, _ = self._attitude_estimator(image)
-                        self._attitude_filter.put_quat(quat)
+                        att_res = self._attitude_estimator(image)
+                        self._attitude_filter.put_quat(att_res.quat)
+                        self.n_matches = att_res.n_matches
+                        image_xyz = att_res.image_xyz
                     except Exception:
                         # TODO use cots_star_tracker.StartrackerException (not exposed yet)
-                        n_matches = 0
+                        self.n_matches = 0
                         image_xyz = np.zeros((0, 3))
 
-                    self.n_matches = n_matches
                     self.positions = (
                         self._attitude_estimator.image_xyz_to_xy(image_xyz)
                         / image.shape[1]

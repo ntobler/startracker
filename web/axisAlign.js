@@ -127,7 +127,7 @@ function drawStars(ctx) {
     for (let i = 0; i < state.cat_xyz.length; i++) {
         let coord = state.cat_xyz[i]
         let mag = state.cat_mags[i]
-        mag = Math.pow(100, (-mag / 5 / 2)) * 0.2
+        mag = Math.pow(100, (-mag / 5 / 2)) * ui_zoom * 0.7
         ctx.beginPath()
         ctx.arc(coord[0] * ui_zoom, coord[1] * ui_zoom, mag, 0, 2 * Math.PI)
         ctx.fill()
@@ -139,7 +139,7 @@ function drawStars(ctx) {
     for (let i = 0; i < state.star_coords.length; i++) {
         let coord = state.star_coords[i]
         ctx.beginPath()
-        ctx.arc(coord[0] * ui_zoom, coord[1] * ui_zoom, 0.3, 0, 2 * Math.PI)
+        ctx.arc(coord[0] * ui_zoom, coord[1] * ui_zoom, ui_zoom, 0, 2 * Math.PI)
         ctx.stroke()
     }
 

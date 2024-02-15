@@ -24,19 +24,19 @@ def test_attutude_estimation():
     for vector in vectors:
         image, gt_xy, mag = sig(vector, [0, 1, 0])
 
-        quat, n_matches, image_xyz, cat_xyz = ae(image)
+        att_res = ae(image)
 
-        image_xy = (sig.intrinsic @ image_xyz.T).T
+        image_xy = (sig.intrinsic @ att_res.image_xyz.T).T
         image_xy = image_xy[..., :2] / image_xy[..., 2:]
         if sig.distorter is not None:
             image_xy = sig.distorter.distort(image_xy)
 
-        cat_xy = (sig.intrinsic @ cat_xyz.T).T
+        cat_xy = (sig.intrinsic @ att_res.cat_xyz.T).T
         cat_xy = cat_xy[..., :2] / cat_xy[..., 2:]
         if sig.distorter is not None:
             cat_xy = sig.distorter.distort(cat_xy)
 
-        rot = scipy.spatial.transform.Rotation.from_quat(quat)
+        rot = scipy.spatial.transform.Rotation.from_quat(att_res.quat)
         res = rot.apply([0, 0, 1])
 
         delta_angle = np.degrees(np.arccos(np.dot(vector, res)))
@@ -54,6 +54,7 @@ def test_attutude_estimation():
             for (x, y), m in zip(gt_xy, mag):
                 ax.text(x, y, f" {m:.1f}")
             fig.suptitle(
-                f"quat: {quat}, n_matches: {n_matches}, delta_angle: {delta_angle:.3f}"
+                f"quat: {att_res.quat}, n_matches: {att_res.n_matches}, "
+                f"delta_angle: {delta_angle:.3f}"
             )
             plt.show()

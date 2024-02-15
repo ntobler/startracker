@@ -12,7 +12,6 @@ import queue
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_sock import Sock, Server, ConnectionClosed
 import numpy as np
-import cots_star_tracker
 import scipy.spatial.transform
 
 from . import calibration
@@ -72,32 +71,46 @@ class App:
         )[:3, :3]
         self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
 
-        self._cat_xyz, self._cat_mags, _ = cots_star_tracker.read_star_catalog(
-            cots_star_tracker.get_star_cat_file(), 4
-        )
+        self._cat_xyz = self._attitude_est.cat_xyz.T
+        self._cat_mags = self._attitude_est.cat_mag
+
+        bright = self._cat_mags <= 4
+        self._cat_xyz = self._cat_xyz[bright]
+        self._cat_mags = self._cat_mags[bright]
 
     def _get_stars(self):
         image = self._cam()
 
         with TimeMeasurer() as tm:
-            quat, n_matches, image_xyz, _ = self._attitude_est(image)
+            att_res = self._attitude_est(image)
 
-            inverse_rotation = scipy.spatial.transform.Rotation.from_quat(quat).inv()
-            cat_xyz = inverse_rotation.apply(self._cat_xyz.T)
+            inverse_rotation = scipy.spatial.transform.Rotation.from_quat(
+                att_res.quat
+            ).inv()
+
+            # Rotate into camera coordinate frame
+            cat_xyz = inverse_rotation.apply(self._cat_xyz)
             north_south = inverse_rotation.apply([[0, 0, 1], [0, 0, -1]])
 
-            star_coords = self.axis_rot.apply(image_xyz)
+            # Merge catalog stars and detected stars (so both are displayed in the GUI)
+            cat_xyz = np.concatenate((cat_xyz, att_res.cat_xyz), axis=0)
+            cat_mags = np.concatenate((self._cat_mags, att_res.mags), axis=0)
+
+            # Rotate into the axis coordinate frame
+            star_coords = self.axis_rot.apply(att_res.image_xyz)
             cat_xyz = self.axis_rot.apply(cat_xyz)
             north_south = self.axis_rot.apply(north_south)
 
+            # Calculate alignment error
             alignment_error = np.arccos(north_south[0, 2]) * (180 / np.pi)
             alignment_error = (
                 180 - alignment_error if alignment_error > 90 else alignment_error
             )
 
+            # Only show hemisphere
             pos_z = cat_xyz[:, 2] > 0
             cat_xyz = cat_xyz[pos_z]
-            cat_mags = self._cat_mags[pos_z]
+            cat_mags = cat_mags[pos_z]
 
             star_coords = xyz2radial(star_coords)
             cat_xyz = xyz2radial(cat_xyz)
@@ -105,7 +118,7 @@ class App:
 
         d = {
             "star_coords": star_coords.tolist(),
-            "n_matches": n_matches,
+            "n_matches": att_res.n_matches,
             "alignment_error": alignment_error,
             "cat_xyz": cat_xyz.tolist(),
             "cat_mags": cat_mags.tolist(),
