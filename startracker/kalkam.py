@@ -3,17 +3,21 @@
 import abc
 import pathlib
 import json
-import pkg_resources
-import pickle
 import time
-import datetime
 
 import numpy as np
 import cairo
 import cv2
 
-from typing import Union, Tuple, Iterable, Optional, Union, Sequence
+from typing import Union, Tuple, Iterable, Optional, Sequence
 from numpy.typing import ArrayLike
+
+
+def _parse_version(version_str: str) -> int:
+    version_float = 0
+    for i, x in enumerate(version_str.split(".")):
+        version_float += int(x) * 10 ** (-5 * i)
+    return version_float
 
 
 class CalibrationPattern(abc.ABC):
@@ -329,9 +333,7 @@ class ChArUcoPattern(CalibrationPattern):
         cv2.cornerSubPix(image, image_points_accurate, (11, 11), (-1, -1), criteria)
 
         # CV2 has different pattern alignments depending on the version
-        if pkg_resources.parse_version(cv2.__version__) < pkg_resources.parse_version(
-            "4.6"
-        ):
+        if _parse_version(cv2.__version__) < _parse_version("4.6"):
             # Flip object points vertically to align with aruco detection
             object_points = self.object_points.reshape(
                 (self.height - 1, self.width - 1, 3)

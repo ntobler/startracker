@@ -341,7 +341,7 @@ def gen_code_with_dependencies(
 
     def check_msg(msg):
         for v in msg._fields.values():
-            if type(v.dtype) != str:
+            if not isinstance(v.dtype, str):
                 dependencies.append(v.dtype)
                 check_msg(v.dtype)
             elif isinstance(v, EnumField):

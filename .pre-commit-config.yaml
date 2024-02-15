@@ -9,11 +9,20 @@ repos:
     rev: 22.10.0
     hooks:
     -   id: black
-# -   repo: https://github.com/pycqa/flake8 #TODO enable flake8 etc.
-#     rev: '6.0.0'
-#     hooks:
-#     -   id: flake8
-# -   repo: https://github.com/jsh9/pydoclint
+-   repo: https://github.com/pycqa/flake8
+    rev: '7.0.0'
+    hooks:
+    -   id: flake8
+        additional_dependencies: [Flake8-pyproject==1.2.3]
+-   repo: local
+    hooks:
+    -   id: pytest-check
+        name: pytest-check
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+# -   repo: https://github.com/jsh9/pydoclint #TODO enable
 #     rev: '0.3.2'
 #     hooks:
 #     -   id: pydoclint

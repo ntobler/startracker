@@ -8,13 +8,11 @@ import threading
 
 import numpy as np
 import scipy.spatial.transform
-import cv2
 
 import cots_star_tracker
 
 from . import camera
 from . import persistent
-from . import image_processing
 from . import kalkam
 
 from typing import Optional, Union, Tuple

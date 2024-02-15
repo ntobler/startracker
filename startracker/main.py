@@ -2,7 +2,6 @@
 
 import sys
 import logging
-import pathlib
 import enum
 import argparse
 import subprocess
@@ -144,6 +143,7 @@ class SetSettings(communication.Command):
 
     def execute(self, request: Settings) -> Acknowledge:
         settings = request
+        _ = settings
         # TODO add logic
         return ACK
 

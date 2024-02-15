@@ -1,6 +1,5 @@
 import numpy as np
 import scipy.spatial.transform
-import matplotlib.pyplot as plt
 import cots_star_tracker
 
 from . import attitude_estimation

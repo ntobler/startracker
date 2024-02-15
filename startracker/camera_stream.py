@@ -112,7 +112,7 @@ def main():
     print(picam2.camera_properties)
     print(picam2.sensor_modes)
 
-    assert type(CROP_FACTOR) == int
+    assert isinstance(CROP_FACTOR, int)
     w, h = picam2.camera_properties["PixelArraySize"]
     crop = (
         (w // 2) - (w // CROP_FACTOR),

@@ -29,13 +29,13 @@ class CameraSettings:
     """Number of exposure to average when recording darkframe."""
 
     def validate(self):
-        if not self.digital_gain in [1, 2, 4]:
+        if self.digital_gain not in [1, 2, 4]:
             raise ValueError("digital_gain must be 1, 2, or 4")
-        if not self.analog_gain in [1, 2, 3, 4, 5]:
+        if self.analog_gain not in [1, 2, 3, 4, 5]:
             raise ValueError("analog_gain must be between 1 and 5")
         if 1 > self.stack > 16:
             raise ValueError("stack must be between 1 and 15")
-        if not self.binning in [1, 2, 4, 8]:
+        if self.binning not in [1, 2, 4, 8]:
             raise ValueError("binning must be 1, 2 or 4")
         if self.stack * self.digital_gain > 16:
             raise ValueError(

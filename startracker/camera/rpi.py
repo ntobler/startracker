@@ -80,7 +80,7 @@ class RpiCamera(camera.Camera):
         self._check_context_manager()
         with self._lock:
             t0 = time.time()
-            self._logger.info(f"Taking image")
+            self._logger.info("Taking image")
             raw = self._picam2.capture_array("raw")
             self._logger.info(f"Capturing took:{time.time() - t0:.2f}s")
             bayer = image_processing.decode_srggb10(raw)
@@ -100,7 +100,7 @@ class RpiCamera(camera.Camera):
 
             # Correct bias
             if self.settings.bias is not None:
-                cv2.subtract(image, self.settings.bias, dst=image)
+                cv2.subtract(raw, self.settings.bias, dst=raw)
 
             if accumulated is None:
                 accumulated = raw
