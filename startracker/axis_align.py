@@ -60,7 +60,13 @@ class TimeMeasurer:
 
 
 class App:
+
+    terminate: bool
+    """Set True to terminate the application loop."""
+
     def __init__(self) -> None:
+
+        self.terminate = False
 
         self.status = QueueDistributingStatus()
 
@@ -167,7 +173,7 @@ class App:
             }
         )
 
-        while True:
+        while not self.terminate:
             if self.status.number_of_users():
                 self.status.update(self._get_stars())
             time.sleep(1)
@@ -250,14 +256,16 @@ class WebApp:
             self.app.status.unregister(q)
 
     def run(self):
-        self._app_thread.start()
-        self.flask_app.run(debug=True, host="127.0.0.1", use_reloader=False)
+        try:
+            self._app_thread.start()
+            self.flask_app.run(debug=True, host="127.0.0.1", use_reloader=False)
+        finally:
+            logging.info("Terminated. Clean up app..")
+            self.app.terminate = True
+            self._app_thread.join()
 
 
 def main():
-
-    if "STARTRACKER_DEBUG" in os.environ or True:
-        testing_utils.TestingMaterial(use_existing=True).patch_persistent()
 
     logging.basicConfig(
         level=logging.INFO,
@@ -265,6 +273,10 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[logging.StreamHandler()],
     )
+
+    if "STARTRACKER_DEBUG" in os.environ or True:
+        logging.warning("Using debug data")
+        testing_utils.TestingMaterial(use_existing=True).patch_persistent()
 
     webapp = WebApp()
     webapp.run()
