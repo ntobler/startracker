@@ -14,7 +14,7 @@ function resize() {
 }
 
 
-const zoomHandler = new ZoomHandler(0.25, 3, (zoom) => {
+const zoomHandler = new ZoomHandler(0.25, 5, (zoom) => {
     ui_zoom = zoom
     redraw()
 });
@@ -90,13 +90,20 @@ function drawRings(ctx) {
     const S = Math.sin(ANGLE)
     ctx.save()
 
-    ctx.strokeStyle = "#333"
-    ctx.fillStyle = "#333"
-    for (let r of [1, 3, 5, 10, 20, 30, 45, 60, 90]) {
+    ctx.strokeStyle = "#333F"
+    ctx.fillStyle = "#333F"
+    for (let deg of [0.5, 1, 2, 5, 10, 20, 30, 45, 60, 90]) {
+        let r = deg * ui_zoom
+        let f = Math.min(1, Math.max(0, (r - 0.8) * 0.4))
+        if (f == 0) continue;
+        let c = `rgba(40, 40, 40, ${f})`;
+        ctx.strokeStyle = c
+        ctx.fillStyle = c
+
         ctx.beginPath()
-        ctx.arc(0, 0, r * ui_zoom, 0, 2 * Math.PI)
+        ctx.arc(0, 0, r, 0, 2 * Math.PI)
         ctx.stroke()
-        ctx.fillText(r + "°", C * (r * ui_zoom + R_MARGIN), S * (r * ui_zoom + R_MARGIN));
+        ctx.fillText(deg + "°", C * (r + R_MARGIN), S * (r + R_MARGIN));
     }
     ctx.restore()
 }
@@ -167,20 +174,13 @@ function drawStars(ctx) {
 }
 
 
-function transformNormalizedXyz2Radial(x, y, z) {
-    let len = Math.sqrt(x * x + y * y)
-    let s = Math.atan(len / z)
-    s *= 180 / Math.PI * ui_zoom / len
-    return [x * s, y * s]
-}
-
-function rotate(xyz, rotm) {
-    const [x, y, z] = xyz
-    return [
-        rotm[0] * x + rotm[1] * y + rotm[2] * z,
-        rotm[3] * x + rotm[4] * y + rotm[5] * z,
-        rotm[6] * x + rotm[7] * y + rotm[8] * z,
-    ]
+function parseSize(size) {
+    let unit
+    for (unit of ["B", "kB", "MB", "GB"]) {
+        if (size < 10) return size.toFixed(1) + unit
+        if (size < 100) return size.toFixed(0) + unit
+        size /= 1024
+    }
 }
 
 let url = 'ws://' + window.location.host + "/state"
@@ -191,6 +191,7 @@ ws.onmessage = response => {
     document.getElementById("trackedStars").innerHTML = `Tracked stars: ${state.n_matches}`
     document.getElementById("alignmentError").innerHTML = `Alignment error: ${state.alignment_error.toFixed(3)}°`
     document.getElementById("processingTime").innerHTML = `Processing time: ${state.processing_time}ms`
+    document.getElementById("packetSize").innerHTML = `Packet size: ${parseSize(response.data.length)}`
 }
 
 document.getElementById('canvas').onclick = () => {

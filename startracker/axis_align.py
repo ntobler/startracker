@@ -20,8 +20,10 @@ from . import persistent
 from . import kalkam
 from . import testing_utils
 
+from typing import Optional
 
-def xyz2radial(xyz: np.ndarray) -> np.ndarray:
+
+def project_radial(xyz: np.ndarray) -> np.ndarray:
     """Return radial projection around +z of xyz vector."""
     xyz = xyz / np.linalg.norm(xyz, axis=1, keepdims=True)
     x, y, z = np.moveaxis(xyz, -1, 0)
@@ -29,6 +31,18 @@ def xyz2radial(xyz: np.ndarray) -> np.ndarray:
     s = np.arctan2(r, z)
     s *= (180 / np.pi) / r
     return np.stack((x * s, y * s), axis=-1)
+
+
+def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None):
+    """
+    Convert numpy array in a list of rounded floats.
+
+    JSON serialization is able to correcty truncate floats to the desired length.
+    """
+    x = np.array(x, dtype=np.float64, copy=False)
+    if decimals is not None:
+        x = x.round(decimals)
+    return x.tolist()
 
 
 class TimeMeasurer:
@@ -112,17 +126,17 @@ class App:
             cat_xyz = cat_xyz[pos_z]
             cat_mags = cat_mags[pos_z]
 
-            star_coords = xyz2radial(star_coords)
-            cat_xyz = xyz2radial(cat_xyz)
-            north_south = xyz2radial(north_south)
+            star_coords = project_radial(star_coords)
+            cat_xyz = project_radial(cat_xyz)
+            north_south = project_radial(north_south)
 
         d = {
-            "star_coords": star_coords.tolist(),
+            "star_coords": to_rounded_list(star_coords, 2),
             "n_matches": att_res.n_matches,
             "alignment_error": alignment_error,
-            "cat_xyz": cat_xyz.tolist(),
-            "cat_mags": cat_mags.tolist(),
-            "north_south": north_south.tolist(),
+            "cat_xyz": to_rounded_list(cat_xyz, 2),
+            "cat_mags": to_rounded_list(cat_mags, 2),
+            "north_south": to_rounded_list(north_south, 2),
             "processing_time": int(tm.t * 1000),
         }
 
@@ -132,7 +146,7 @@ class App:
         xf = np.arange(segments_per_side * 4) / segments_per_side
         points = self._cam_cal.get_frame_corners()
         points = np.array([np.interp(xf, np.arange(len(d)), d) for d in points.T]).T
-        points = xyz2radial(self.axis_rot.apply(points))
+        points = project_radial(self.axis_rot.apply(points))
         return points
 
     def run(self):
@@ -141,7 +155,7 @@ class App:
         fx, fy, tx, ty, width, height = self._cam_cal.intrinsic_params()
         self.status.update(
             {
-                "frame_points": self._get_camera_frame().T.tolist(),
+                "frame_points": to_rounded_list(self._get_camera_frame().T, 2),
                 "camera_params": {
                     "fx": fx,
                     "fy": fy,
