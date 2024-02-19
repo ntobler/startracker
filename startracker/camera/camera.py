@@ -111,10 +111,14 @@ class MockCamera(Camera):
     """Mock Camera implementation to replace the Raspberry Pi camera if not available"""
 
     def capture_raw(self):
-        return np.zeros((1080, 1920), np.uint16)
+        frame = np.zeros((1080, 1920), np.uint16)
+        frame[32:-32, 32:-32] = 100
+        return frame
 
     def capture(self) -> np.ndarray:
-        return np.zeros((540, 960), np.uint8)
+        frame = np.zeros((540, 960), np.uint8)
+        frame[32:-32, 32:-32] = 100
+        return frame
 
     def record_darkframe(self):
         pass

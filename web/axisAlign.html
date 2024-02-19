@@ -6,15 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="zoomHandler.js" type="module"></script>
     <script src="axisAlign.js" type="module"></script>
+    <link rel="stylesheet" type="text/css" href="style.css">
     <style>
-        body {
-            position: fixed;
-            margin: 0;
-            width: 100%;
-            height: 100%;
-            font-family: roboto sans-serif;
-        }
-
         #canvas {
             position: fixed;
             width: 100%;
@@ -23,23 +16,6 @@
             left: 0;
             image-rendering: pixelated;
             background-color: black;
-        }
-
-        #footerBar {
-            position: fixed;
-            width: 100%;
-            left: 0;
-            bottom: 0;
-            color: red;
-            background-color: #00000080;
-            display: flex;
-            flex-direction: row;
-            font-family: Consolas;
-        }
-
-        #footerBar div {
-            line-height: 2em;
-            margin: 0 1em;
         }
     </style>
 </head>

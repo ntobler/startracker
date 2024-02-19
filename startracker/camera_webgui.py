@@ -6,7 +6,7 @@ import queue
 import threading
 import logging
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_sock import Sock
 import numpy as np
 import cv2
@@ -140,6 +140,11 @@ def index():
     return render_template("cameraWebgui.html")
 
 
+@app.route("/<path:filename>")
+def serve_file(filename: str):
+    return send_from_directory("../web", filename)
+
+
 @app.post("/capture")
 def capture():
     params = request.get_json()
@@ -179,7 +184,7 @@ def cli():
         handlers=[logging.StreamHandler()],
     )
 
-    app.run(debug=False, host="127.0.0.1")
+    app.run(debug=True, host="127.0.0.1", use_reloader=False)
 
 
 if __name__ == "__main__":

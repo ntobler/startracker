@@ -1,0 +1,41 @@
+body {
+    position: fixed;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    font-family: Consolas, monospace;
+    background-color: #111;
+}
+
+#footerBar {
+    position: fixed;
+    width: 100%;
+    left: 0;
+    bottom: 0;
+    color: red;
+    background-color: #00000080;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+#footerBar div {
+    line-height: 2em;
+    margin: 0 1em;
+}
+
+input[type=number] {
+    width: 4em;
+    font-family: Consolas, monospace;
+    border: 2px solid red;
+    background-color: #0000;
+    color: red;
+}
+
+button[type=button] {
+    font-family: Consolas, monospace;
+    border: 2px solid red;
+    border-radius: 4px;
+    background-color: #0000;
+    color: red;
+}
