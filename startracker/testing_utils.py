@@ -7,12 +7,13 @@ import cv2
 import numpy as np
 import scipy.spatial.transform
 
-from . import calibration
-from . import kalkam
-from . import persistent
-from . import transform
+from startracker import calibration
+from startracker import kalkam
+from startracker import persistent
+from startracker import transform
+from startracker import camera
 
-from typing import Tuple
+from typing import Tuple, Literal, Optional
 
 
 class TestingMaterial:
@@ -230,3 +231,31 @@ class MockStarCam:
         vector /= np.linalg.norm(vector, axis=-1, keepdims=True)
         image, _, _ = self.sig(vector, [0, 1, 0])
         return image
+
+
+class DebugCamera(camera.Camera):
+    """Camera to generate artificial images of the sky"""
+
+    mode: Literal["stars"] = "stars"
+
+    def __init__(
+        self,
+        camera_settings: camera.CameraSettings,
+        mode: Optional[Literal["stars"]] = None,
+    ):
+        super().__init__(camera_settings)
+        if mode is not None:
+            self.mode = mode
+        self._functions = {
+            "stars": MockStarCam(),
+        }
+
+    def capture_raw(self):
+        return self.capture()
+
+    def capture(self) -> np.ndarray:
+        frame = self._functions[self.mode]()
+        return frame
+
+    def record_darkframe(self):
+        pass

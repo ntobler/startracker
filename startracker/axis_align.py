@@ -14,11 +14,12 @@ from flask_sock import Sock, Server, ConnectionClosed
 import numpy as np
 import scipy.spatial.transform
 
-from . import calibration
-from . import attitude_estimation
-from . import persistent
-from . import kalkam
-from . import testing_utils
+from startracker import camera
+from startracker import calibration
+from startracker import attitude_estimation
+from startracker import persistent
+from startracker import kalkam
+from startracker import testing_utils
 
 from typing import Optional
 
@@ -76,8 +77,9 @@ class App:
 
         pers = persistent.Persistent.get_instance()
 
-        # TODO replace with actual camera
-        self._cam = testing_utils.MockStarCam()
+        # TODO load real settings
+        settings = camera.CameraSettings()
+        self._cam = camera.RpiCamera(settings)
 
         self._attitude_est = attitude_estimation.AttitudeEstimator(
             pers.cam_file,
@@ -99,7 +101,7 @@ class App:
         self._cat_mags = self._cat_mags[bright]
 
     def _get_stars(self):
-        image = self._cam()
+        image = self._cam.capture()
 
         with TimeMeasurer() as tm:
             att_res = self._attitude_est(image)
@@ -274,9 +276,10 @@ def main():
         handlers=[logging.StreamHandler()],
     )
 
-    if "STARTRACKER_DEBUG" in os.environ or True:
+    if "STARTRACKER_DEBUG" in os.environ:
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
+        camera.RpiCamera = testing_utils.DebugCamera
 
     webapp = WebApp()
     webapp.run()

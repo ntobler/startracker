@@ -10,8 +10,10 @@ try:
     from startracker.camera.rpi import RpiCamera
 except ImportError:
     from startracker.camera.camera import MockCamera as RpiCamera
+    from startracker.camera.camera import Camera
 
 __all__ = (
+    Camera,
     CameraSettings,
     RpiCamera,
 )
