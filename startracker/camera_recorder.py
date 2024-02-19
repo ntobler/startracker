@@ -19,12 +19,12 @@ def main():
     )
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("output_dir", "o", type=str, required=False, default=".")
-    parser.add_argument("interval", "i", type=float, required=False, default=2.0)
-    parser.add_argument("exposure", "e", type=float, required=False, default=30.0)
-    parser.add_argument("analog_gain", "a", type=int, required=False, default=1)
-    parser.add_argument("number", "n", type=int, required=False, default=1000)
-    parser.add_argument("binning", "b", type=int, required=False, default=1)
+    parser.add_argument("--output_dir", "-o", type=str, required=False, default=".")
+    parser.add_argument("--interval", "-i", type=float, required=False, default=2.0)
+    parser.add_argument("--exposure", "-e", type=float, required=False, default=30.0)
+    parser.add_argument("--analog_gain", "-a", type=int, required=False, default=1)
+    parser.add_argument("--number", "-n", type=int, required=False, default=1000)
+    parser.add_argument("--binning", "-b", type=int, required=False, default=1)
     args = parser.parse_args()
 
     output_dir = pathlib.Path(args.output_dir)

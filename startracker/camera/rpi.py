@@ -94,7 +94,7 @@ class RpiCamera(camera.Camera):
             np.ndarray: uint8 image
         """
         accumulated = None
-        for _ in range(self.settings.darkframe_averaging):
+        for _ in range(self.settings.stack):
 
             raw = self.capture_raw()
 

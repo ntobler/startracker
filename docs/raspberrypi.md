@@ -49,23 +49,14 @@ mkdir temp && cd temp
 wget -O install_pivariety_pkgs.sh https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh
 chmod +x install_pivariety_pkgs.sh
 ./install_pivariety_pkgs.sh -p libcamera_dev
-./install_pivariety_pkgs.sh -p libcamera_apps
-```
-
-Install Picamera2 dependencies
-``` bash
-sudo apt install -y python3-kms++
-sudo apt install -y python3-pyqt5 python3-prctl libatlas-base-dev ffmpeg python3-pip
-sudo pip3 install numpy --upgrade
-sudo pip3 install picamera2 --upgrade
 ```
 
 Install startracker git repo
 ``` bash
 cd ~
-sudo apt install -y git libcairo2-dev
+sudo apt install -y git libcairo2-dev python3-pip vim
 git clone https://github.com/ntobler/startracker.git
-pip install ./startracker
+sudo pip3 install ./startracker
 sudo startracker/install_service.sh
 ```
 Your Startracker is ready to go.
