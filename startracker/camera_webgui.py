@@ -5,14 +5,15 @@ Flask web application to capture images using a smartphone browser or any other 
 import queue
 import threading
 import logging
+import os
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
-from flask_sock import Sock
+from flask_sock import Sock, Server, ConnectionClosed
 import numpy as np
 import cv2
 
-from . import camera
-from . import persistent
+from startracker import camera
+from startracker import persistent
 
 
 class ImageData:
@@ -54,15 +55,7 @@ class IntrinsicCalibrator:
         self.index = 0
 
 
-class Main:
-    _instance = None
-
-    @classmethod
-    def get_instance(cls):
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
+class App:
     def __init__(self):
         self.input_queue = queue.Queue()
         self.image_container = ImageData()
@@ -71,9 +64,7 @@ class Main:
         self._image_cache = None
         self._intrinsic_calibrator = IntrinsicCalibrator()
 
-        threading.Thread(target=self.run, daemon=True).start()
-
-    def singleton_interface(fun):
+    def queue_abstract(fun):
         def inner(*args):
             return_event = threading.Event()
             self = args[0]
@@ -89,7 +80,7 @@ class Main:
         }
         return state
 
-    @singleton_interface
+    @queue_abstract
     def capture(
         self, exposure_ms: float, analog_gain: int, digital_gain: int, binning: int
     ):
@@ -107,18 +98,25 @@ class Main:
 
         self._image_cache = image
 
-    @singleton_interface
+    @queue_abstract
     def put_calibration_image(self):
         image = self._image_cache
         if image is not None:
             self._intrinsic_calibrator.put_image(image)
 
-    @singleton_interface
+    @queue_abstract
     def reset_calibration(self):
         self._intrinsic_calibrator.reset()
 
+    @queue_abstract
+    def calibrate(self):
+        print("calibrate")
+        import time
+
+        time.sleep(3)
+        print("done")
+
     def run(self):
-        """Thread run method."""
         print("starting Main")
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
@@ -129,54 +127,77 @@ class Main:
                 return_event.set()
 
 
-main = Main.get_instance()
+class WebApp:
 
-app = Flask(__name__, template_folder="../web")
-sock = Sock(app)
+    flask_app = None
+    app = None
+
+    def __init__(self):
+
+        self._app_thread = threading.Thread(target=self._run_app)
+
+        self.flask_app = Flask(__name__, template_folder="../web")
+        self.sock = Sock(self.flask_app)
+
+        self.flask_app.route("/")(self._index)
+        self.flask_app.route("/<path:filename>")(self._serve_file)
+        self.flask_app.post("/capture")(self._capture)
+        self.flask_app.post("/put_calibration_image")(self._put_calibration_image)
+        self.flask_app.post("/reset_calibration")(self._reset_calibration)
+        self.flask_app.post("/calibrate")(self._calibrate)
+        self.sock.route("/image")(self._image)
+
+    def _run_app(self):
+        self.app = App()
+        self.app.run()
+
+    def _index(self):
+        return render_template("cameraWebgui.html")
+
+    def _serve_file(self, filename: str):
+        return send_from_directory("../web", filename)
+
+    def run(self):
+        try:
+            self._app_thread.start()
+            self.flask_app.run(debug=True, host="127.0.0.1", use_reloader=False)
+        finally:
+            logging.info("Terminated. Clean up app..")
+            self.app.terminate = True
+            self._app_thread.join()
+
+    def _capture(self):
+        params = request.get_json()
+        d = self.app.capture(
+            float(params["exposure_ms"]),
+            int(params["gain"]),
+            int(params["digital_gain"]),
+            int(params["binning"]),
+        )
+        return jsonify(d)
+
+    def _put_calibration_image(self):
+        d = self.app.put_calibration_image()
+        return jsonify(d)
+
+    def _reset_calibration(self):
+        d = self.app.reset_calibration()
+        return jsonify(d)
+
+    def _calibrate(self):
+        d = self.app.calibrate()
+        return jsonify(d)
+
+    def _image(self, ws: Server):
+        try:
+            while True:
+                image_data = self.app.image_container.get_blocking()
+                ws.send(image_data)
+        except ConnectionClosed:
+            pass
 
 
-@app.route("/")
-def index():
-    return render_template("cameraWebgui.html")
-
-
-@app.route("/<path:filename>")
-def serve_file(filename: str):
-    return send_from_directory("../web", filename)
-
-
-@app.post("/capture")
-def capture():
-    params = request.get_json()
-    d = main.capture(
-        float(params["exposure_ms"]),
-        int(params["gain"]),
-        int(params["digital_gain"]),
-        int(params["binning"]),
-    )
-    return jsonify(d)
-
-
-@app.post("/put_calibration_image")
-def put_calibration_image():
-    d = main.put_calibration_image()
-    return jsonify(d)
-
-
-@app.post("/reset_calibration")
-def reset_calibration():
-    d = main.reset_calibration()
-    return jsonify(d)
-
-
-@sock.route("/image")
-def image(ws):
-    while True:
-        image_data = main.image_container.get_blocking()
-        ws.send(image_data)
-
-
-def cli():
+def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -184,8 +205,16 @@ def cli():
         handlers=[logging.StreamHandler()],
     )
 
-    app.run(debug=True, host="127.0.0.1", use_reloader=False)
+    if "STARTRACKER_DEBUG" in os.environ:
+        from startracker import testing_utils
+
+        logging.warning("Using debug data")
+        testing_utils.TestingMaterial(use_existing=True).patch_persistent()
+        camera.RpiCamera = testing_utils.DebugCamera
+
+    webapp = WebApp()
+    webapp.run()
 
 
 if __name__ == "__main__":
-    cli()
+    main()

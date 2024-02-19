@@ -19,7 +19,6 @@ from startracker import calibration
 from startracker import attitude_estimation
 from startracker import persistent
 from startracker import kalkam
-from startracker import testing_utils
 
 from typing import Optional
 
@@ -277,6 +276,8 @@ def main():
     )
 
     if "STARTRACKER_DEBUG" in os.environ:
+        from startracker import testing_utils
+
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
         camera.RpiCamera = testing_utils.DebugCamera

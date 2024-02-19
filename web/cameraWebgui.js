@@ -21,7 +21,7 @@ document.getElementById('capture').onclick = () => {
     }
     fetch('/capture', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     }).then(response => response.json()).then((data) => {
         updateState(data)
@@ -46,6 +46,26 @@ document.getElementById('reset_calibration').onclick = () => {
     }).then(response => response.json()).then((data) => {
         updateState(data)
     }).catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+document.getElementById('calibrate').onclick = () => {
+
+    let interval = setInterval(function () {
+        let el = document.getElementById('calibrate')
+        el.innerHTML += "."
+    }, 1000)
+
+    fetch('/calibrate', {
+        method: 'POST',
+    }).then(response => response.json()).then((data) => {
+        document.getElementById('calibrate').innerHTML = "Calibrate"
+        clearInterval(interval)
+        updateState(data)
+    }).catch(error => {
+        document.getElementById('calibrate').innerHTML = "Calibrate"
+        clearInterval(interval)
         console.error('Error:', error);
     });
 }
