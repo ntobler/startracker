@@ -24,15 +24,25 @@ class AttitudeEstimationResult:
     quat: np.ndarray
     """Quaternion [x, y, z, w], transforms from the camera frame to the star frame."""
     n_matches: int
-    """Number of matched stars."""
+    """Number of matched stars that are within tolerance."""
     image_xyz: np.ndarray
-    """Camera frame XYZ coordinates of the image coordinates of the matches."""
+    """Camera frame XYZ coordinates of the image coordinates of all matches."""
     cat_xyz: np.ndarray
-    """Camera frame XYZ coordinates of the catalog coordinates of the matches."""
+    """Camera frame XYZ coordinates of the catalog coordinates of all matches."""
     star_ids: np.ndarray
     """Catalog ids of all matched stars."""
     mags: np.ndarray
     """Magnitudes of all matched stars."""
+
+
+ERROR_ATTITUDE_RESULT = AttitudeEstimationResult(
+    quat=np.array((1, 0, 0, 0), dtype=np.float64),
+    n_matches=0,
+    image_xyz=np.empty((0, 3), dtype=np.float64),
+    cat_xyz=np.empty((0, 3), dtype=np.float64),
+    star_ids=np.empty((0,), dtype=np.int32),
+    mags=np.empty((0,), dtype=np.float64),
+)
 
 
 class AttitudeEstimator:
@@ -56,19 +66,19 @@ class AttitudeEstimator:
             n_match: Required minimum number of matches for a successful attitude lock.
             star_match_pixel_tol: Tolerance in pixels for a star to be recognized as match.
         """
-        data_dir = pathlib.Path(data_dir)
-
+        self._data_dir = pathlib.Path(data_dir)
         self._cam_file = pathlib.Path(calibration_file)
+
         self._min_star_area = min_star_area
         self._max_star_area = max_star_area
         self._n_match = n_match
 
-        self._k = np.load(data_dir / "k.npy")
-        self._m = np.load(data_dir / "m.npy")
-        self._q = np.load(data_dir / "q.npy")
-        self.cat_xyz = np.load(data_dir / "u.npy")
-        self._indexed_star_pairs = np.load(data_dir / "indexed_star_pairs.npy")
-        self.cat_mag = np.load(data_dir / "mag.npy")
+        self._k = np.load(self._data_dir / "k.npy")
+        self._m = np.load(self._data_dir / "m.npy")
+        self._q = np.load(self._data_dir / "q.npy")
+        self.cat_xyz = np.load(self._data_dir / "u.npy")
+        self._indexed_star_pairs = np.load(self._data_dir / "indexed_star_pairs.npy")
+        self.cat_mag = np.load(self._data_dir / "mag.npy")
 
         # Inter start angle threshold
         self._intrinsic, _, self._dist_coeffs = cots_star_tracker.read_cam_json(
@@ -100,26 +110,29 @@ class AttitudeEstimator:
         Returns:
             AttitudeEstimationResult: attitude estimation result object.
         """
-        q_est, id_match, n_matches, x_obs, _ = cots_star_tracker.star_tracker(
-            image,
-            str(self._cam_file),
-            darkframe=darkframe,
-            m=self._m,
-            q=self._q,
-            x_cat=self.cat_xyz,
-            k=self._k,
-            indexed_star_pairs=self._indexed_star_pairs,
-            graphics=False,
-            min_star_area=self._min_star_area,
-            max_star_area=self._max_star_area,
-            isa_thresh=self._isa_thresh,
-            nmatch=self._n_match,
-        )
+        try:
+            q_est, id_match, n_matches, x_obs, _ = cots_star_tracker.star_tracker(
+                image,
+                str(self._cam_file),
+                darkframe=darkframe,
+                m=self._m,
+                q=self._q,
+                x_cat=self.cat_xyz,
+                k=self._k,
+                indexed_star_pairs=self._indexed_star_pairs,
+                graphics=False,
+                min_star_area=self._min_star_area,
+                max_star_area=self._max_star_area,
+                isa_thresh=self._isa_thresh,
+                nmatch=self._n_match,
+            )
+        except cots_star_tracker.StartrackerError:
+            return ERROR_ATTITUDE_RESULT
 
+        id_match = id_match[:, 0]
         image_xyz = x_obs.T
-        cat_xyz = self.cat_xyz.T[id_match][:, 0]
-        star_mags = self.cat_mag[id_match][:, 0]
-
+        cat_xyz = self.cat_xyz.T[id_match]
+        star_mags = self.cat_mag[id_match]
         cat_xyz = scipy.spatial.transform.Rotation.from_quat(q_est).inv().apply(cat_xyz)
 
         return AttitudeEstimationResult(
@@ -137,7 +150,7 @@ class AttitudeFilter:
         self.attitude_quat = None
         self.estimation_id = 0
 
-    def put_quat(self, quat: np.ndarray, time: float):
+    def put_quat(self, quat: np.ndarray, confidence, time: float):
         """
         Add quaternion sample to be filtered.
 
@@ -212,7 +225,7 @@ class ImageAcquisitioner:
         self._dark_frame_file = pers.dark_frame_file
         try:
             self._dark_frame = np.load(self._dark_frame_file)
-        except Exception:
+        except OSError:
             self._dark_frame = None
 
     def start_thread(self):
@@ -230,15 +243,13 @@ class ImageAcquisitioner:
                     image = cam.capture()
                     self._logger.info(f"image mean: {image.mean()}")
 
-                    try:
-                        att_res = self._attitude_estimator(image)
-                        self._attitude_filter.put_quat(att_res.quat)
-                        self.n_matches = att_res.n_matches
-                        image_xyz = att_res.image_xyz
-                    except Exception:
-                        # TODO use cots_star_tracker.StartrackerException (not exposed yet)
-                        self.n_matches = 0
-                        image_xyz = np.zeros((0, 3))
+                    att_res = self._attitude_estimator(image)
+                    confidence = self._confidence_function(att_res.n_matches)
+                    self._attitude_filter.put_quat(
+                        att_res.quat, confidence, time.monotonic()
+                    )
+                    self.n_matches = att_res.n_matches
+                    image_xyz = att_res.image_xyz
 
                     self.positions = (
                         self._attitude_estimator.image_xyz_to_xy(image_xyz)
@@ -254,3 +265,7 @@ class ImageAcquisitioner:
                     time.sleep(0.1)
                 else:
                     time.sleep(0.1)
+
+    @staticmethod
+    def _confidence_function(n_matches: int) -> float:
+        return float(np.clip((n_matches - 5) / 5, 0, 1))

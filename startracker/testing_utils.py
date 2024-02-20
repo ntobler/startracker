@@ -56,16 +56,24 @@ def get_catalog_stars() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 class StarImageGenerator:
-    def __init__(self, intrinsic=None, imsize=None, dist_coeffs=None):
+    def __init__(
+        self,
+        intrinsic: Optional[np.ndarray] = None,
+        imsize: Optional[Tuple[int, int]] = None,
+        dist_coeffs: Optional[np.ndarray] = None,
+        exposure: float = 15.0,
+        blur: float = 0.7,
+        noise_sigma: float = 1.0,
+        black_level: float = 4.5,
+    ):
         if imsize is None:
             imsize = (1920, 1080)
 
         self.width, self.height = imsize
-
-        self.exposure = 15
-        self.blur = 0.7
-        self.noise_sigma = 1
-        self.black_level = 4.5
+        self.exposure = exposure
+        self.blur = blur
+        self.noise_sigma = noise_sigma
+        self.black_level = black_level
 
         if intrinsic is None:
             lens_focal_distance = 12

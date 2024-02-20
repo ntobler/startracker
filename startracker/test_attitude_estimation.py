@@ -6,6 +6,25 @@ from . import attitude_estimation
 from . import testing_utils
 
 
+def test_attutude_estimation_error():
+    tm = testing_utils.TestingMaterial(use_existing=True)
+
+    ae = attitude_estimation.AttitudeEstimator(tm.cam_file, tm.stardata_dir)
+    intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
+        tm.cam_file
+    )
+
+    sig = testing_utils.StarImageGenerator(
+        intrinsic, (width, height), dist_coeffs, noise_sigma=10
+    )
+
+    # Get noisy image
+    image, _, _ = sig([0, 0, 1], [0, 1, 0])
+
+    att_res = ae(image)
+    assert att_res == attitude_estimation.ERROR_ATTITUDE_RESULT
+
+
 def test_attutude_estimation():
     tm = testing_utils.TestingMaterial(use_existing=True)
 
