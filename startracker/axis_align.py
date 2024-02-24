@@ -9,7 +9,7 @@ import threading
 import os
 import queue
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify, send_from_directory
 from flask_sock import Sock, Server, ConnectionClosed
 import numpy as np
 import scipy.spatial.transform
@@ -19,8 +19,10 @@ from startracker import calibration
 from startracker import attitude_estimation
 from startracker import persistent
 from startracker import kalkam
+from startracker import webutil
+from startracker import transform
 
-from typing import Optional
+from typing import Optional, List
 
 
 def project_radial(xyz: np.ndarray) -> np.ndarray:
@@ -59,12 +61,13 @@ class TimeMeasurer:
         self.t = time.monotonic() - self._t0
 
 
-class App:
+class App(webutil.QueueAbstractClass):
 
     terminate: bool
     """Set True to terminate the application loop."""
 
     def __init__(self) -> None:
+        super().__init__()
 
         self.terminate = False
 
@@ -99,11 +102,16 @@ class App:
         self._cat_xyz = self._cat_xyz[bright]
         self._cat_mags = self._cat_mags[bright]
 
+        self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
+        self._calibration_rots: List[attitude_estimation.AttitudeEstimationResult] = []
+
     def _get_stars(self):
         image = self._cam.capture()
 
         with TimeMeasurer() as tm:
             att_res = self._attitude_est(image)
+
+            self._last_attitude_res = att_res
 
             inverse_rotation = scipy.spatial.transform.Rotation.from_quat(
                 att_res.quat
@@ -156,28 +164,54 @@ class App:
         points = project_radial(self.axis_rot.apply(points))
         return points
 
-    def run(self):
-        """App logic."""
+    @webutil.QueueAbstractClass.queue_abstract
+    def add_to_calibration(self):
+        if self._last_attitude_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:
+            self._calibration_rots.append(self._last_attitude_res.quat)
+        return {"calibration_orientations": len(self._calibration_rots)}
 
-        fx, fy, tx, ty, width, height = self._cam_cal.intrinsic_params()
+    def reset_calibration(self):
+        self._calibration_rots.clear()
+        return {"calibration_orientations": len(self._calibration_rots)}
+
+    @webutil.QueueAbstractClass.queue_abstract
+    def calibrate(self):
+        if len(self._calibration_rots) < 2:
+            raise ValueError("Not enough data to calibrate")
+
+        axis_vec, error_std = transform.find_common_rotation_axis(
+            np.array(self._calibration_rots)
+        )
+
+        # Make sure vector points in general direction of camera
+        axis_vec = axis_vec if axis_vec[2] > 0 else -axis_vec
+        # Create camea rotation to axis, such that camera is horizontal
+        axis_rotm = kalkam.look_at_extrinsic(axis_vec, [0, 0, 0], [0, -1, 0])[:3, :3]
+        self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
+
+        self._update_camera_frame()
+        return {
+            "axis_vec": axis_vec.tolist(),
+            "calibration_error_deg": np.degrees(error_std),
+        }
+
+    def _update_camera_frame(self):
         self.status.update(
             {
                 "frame_points": to_rounded_list(self._get_camera_frame().T, 2),
-                "camera_params": {
-                    "fx": fx,
-                    "fy": fy,
-                    "tx": tx,
-                    "ty": ty,
-                    "width": width,
-                    "height": height,
-                },
             }
         )
+
+    def run(self):
+        """App logic."""
+
+        self._update_camera_frame()
 
         while not self.terminate:
             if self.status.number_of_users():
                 self.status.update(self._get_stars())
-            time.sleep(1)
+            self._process_pending_calls()
+            time.sleep(0.25)
 
 
 class QueueDistributingStatus:
@@ -221,7 +255,8 @@ class WebApp:
 
         self.flask_app.route("/")(self._index)
         self.flask_app.route("/<path:filename>")(self._serve_file)
-        self.flask_app.post("/test")(self.test)
+        self.flask_app.post("/add_to_calibration")(self.add_to_calibration)
+        self.flask_app.post("/calibrate")(self.calibrate)
 
         self.sock.route("/state")(self._state)
 
@@ -235,9 +270,18 @@ class WebApp:
     def _serve_file(self, filename: str):
         return send_from_directory("../web", filename)
 
-    def test(self):
-        params = request.get_json()
-        d = {"test": params}
+    def add_to_calibration(self):
+        # params = request.get_json()
+        d = self.app.add_to_calibration()
+        return jsonify(d)
+
+    def reset_calibration(self):
+        d = self.app.reset_calibration()
+        return jsonify(d)
+
+    def calibrate(self):
+        # params = request.get_json()
+        d = self.app.calibrate()
         return jsonify(d)
 
     def _state(self, ws: Server):
@@ -281,6 +325,7 @@ def main():
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
         camera.RpiCamera = testing_utils.DebugCamera
+        camera.RpiCamera.mode = "axis_align_calibration"
 
     webapp = WebApp()
     webapp.run()

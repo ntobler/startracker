@@ -228,23 +228,70 @@ class MockStarCam:
 
     def __init__(self):
         cam_file = TestingMaterial(use_existing=True).cam_file
-        self.rng = np.random.default_rng(42)
+        self._rng = np.random.default_rng(42)
         intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
             cam_file
         )
-        self.sig = StarImageGenerator(intrinsic, (width, height), dist_coeffs)
+        self._sig = StarImageGenerator(intrinsic, (width, height), dist_coeffs)
 
-    def __call__(self):
-        vector = self.rng.normal(size=(3)) * 0.3 + [0, 0, 5]
+
+class RandomStarCam(MockStarCam):
+    """Star camera pointing in a random direction and wiggeling."""
+
+    def __init__(self):
+        super().__init__()
+        self._vector = self._rng.normal(size=(2, 3)) * 0.3
+
+    def __call__(self) -> np.ndarray:
+        self._vector *= 0.9
+        self._vector += 0.1 * self._rng.normal(size=(2, 3)) * 0.3
+        vector = self._vector + [[0, 0, 5], [0, 10, 0]]
         vector /= np.linalg.norm(vector, axis=-1, keepdims=True)
-        image, _, _ = self.sig(vector, [0, 1, 0])
+        image, _, _ = self._sig(vector[0], vector[1])
+        return image
+
+
+class AxisAlignCalibrationTestCam(MockStarCam):
+    """Star camera rotating around a random axis."""
+
+    def __init__(self):
+        super().__init__()
+        vectors = self._rng.normal(size=(2, 3))
+        vectors /= np.linalg.norm(vectors, axis=-1, keepdims=True)
+
+        self.axis_vector = vectors[0]
+        up_vector = vectors[1]
+
+        rot_matrix = kalkam.look_at_extrinsic(self.axis_vector, [0, 0, 0], up_vector)[
+            :3, :3
+        ]
+        self.axis_attitude = scipy.spatial.transform.Rotation.from_matrix(rot_matrix)
+        self.align_error_deg = self.axis_attitude.magnitude() * (180 / np.pi)
+
+        self.camera_rot = scipy.spatial.transform.Rotation.from_euler(
+            "zxy", [2, 8, 12], degrees=True
+        )
+
+        self.axis_angle = 0.0
+
+    def __call__(self) -> np.ndarray:
+
+        self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
+        rotvec = np.array([0, 0, 1.0]) * self.axis_angle
+        around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(
+            rotvec, degrees=False
+        )
+
+        quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat()
+
+        image, _, _ = self._sig.image_from_quaternion(quat)
         return image
 
 
 class DebugCamera(camera.Camera):
     """Camera to generate artificial images of the sky"""
 
-    mode: Literal["stars"] = "stars"
+    mode: Literal["stars", "axis_align_calibration"] = "stars"
 
     def __init__(
         self,
@@ -255,7 +302,8 @@ class DebugCamera(camera.Camera):
         if mode is not None:
             self.mode = mode
         self._functions = {
-            "stars": MockStarCam(),
+            "stars": RandomStarCam(),
+            "axis_align_calibration": AxisAlignCalibrationTestCam(),
         }
 
     def capture_raw(self):

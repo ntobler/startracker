@@ -151,11 +151,24 @@ function drawStars(ctx) {
     }
 
     ctx.save()
-    ctx.strokeStyle = "blue"
     const w = 10
     const h = 10
-    for (let ns of state.north_south) {
-        ctx.translate(ns[0] * ui_zoom, ns[1] * ui_zoom)
+    for (let i of [0, 1]) {
+        let pos = state.north_south[i]
+        let name = ["north", "south"][i]
+        let color = ["red", "blue"][i]
+
+        let x = pos[0]
+        let y = pos[1]
+
+        if (x * x + y * y > 90 * 90) continue;
+
+        ctx.save()
+
+        ctx.strokeStyle = color
+        ctx.fillStyle = color
+
+        ctx.translate(x * ui_zoom, y * ui_zoom)
         ctx.beginPath()
         ctx.moveTo(-w, 0)
         ctx.lineTo(w, 0)
@@ -166,7 +179,8 @@ function drawStars(ctx) {
 
         ctx.translate(0, -h)
         ctx.rotate(Math.PI / 2)
-        ctx.fillText("North", 0, 0)
+        ctx.fillText(name, 0, 0)
+
         ctx.restore()
     }
 
@@ -204,6 +218,46 @@ document.getElementById('canvas').onclick = () => {
         body: JSON.stringify(payload)
     }).then(response => response.json()).then((data) => {
     }).catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+document.getElementById('add_to_calibration').onclick = () => {
+    fetch('/add_to_calibration', {
+        method: 'POST',
+    }).then(response => response.json()).then((data) => {
+        console.log(data)
+    }).catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+document.getElementById('reset_calibration').onclick = () => {
+    fetch('/reset_calibration', {
+        method: 'POST',
+    }).then(response => response.json()).then((data) => {
+        console.log(data)
+    }).catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+document.getElementById('calibrate').onclick = () => {
+
+    let interval = setInterval(function () {
+        let el = document.getElementById('calibrate')
+        el.innerHTML += "."
+    }, 1000)
+
+    fetch('/calibrate', {
+        method: 'POST',
+    }).then(response => response.json()).then((data) => {
+        document.getElementById('calibrate').innerHTML = "Calibrate"
+        clearInterval(interval)
+        console.log(data)
+    }).catch(error => {
+        document.getElementById('calibrate').innerHTML = "Calibrate"
+        clearInterval(interval)
         console.error('Error:', error);
     });
 }
