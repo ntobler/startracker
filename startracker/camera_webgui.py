@@ -2,7 +2,6 @@
 Flask web application to capture images using a smartphone browser or any other browser.
 """
 
-import queue
 import threading
 import logging
 import os
@@ -14,29 +13,7 @@ import cv2
 
 from startracker import camera
 from startracker import persistent
-
-
-class ImageData:
-    def __init__(self):
-        self._image = None
-        self._data_lock = threading.Lock()
-        self._data_changed = threading.Condition(lock=self._data_lock)
-
-    def put(self, image):
-        success, encoded_array = cv2.imencode(".png", image)
-        if not success:
-            return
-        image_data = encoded_array.tobytes()
-
-        self._image = image_data
-        with self._data_lock:
-            self._data_changed.notify_all()
-
-    def get_blocking(self):
-        with self._data_lock:
-            self._data_changed.wait()
-        assert self._image is not None
-        return self._image
+from startracker import webutil
 
 
 class IntrinsicCalibrator:
@@ -55,32 +32,22 @@ class IntrinsicCalibrator:
         self.index = 0
 
 
-class App:
+class App(webutil.QueueAbstractClass):
     def __init__(self):
-        self.input_queue = queue.Queue()
-        self.image_container = ImageData()
+        super().__init__()
+        self.image_container = webutil.ImageData()
 
         self._logger = logging.getLogger("Camera")
         self._image_cache = None
         self._intrinsic_calibrator = IntrinsicCalibrator()
 
-    def queue_abstract(fun):
-        def inner(*args):
-            return_event = threading.Event()
-            self = args[0]
-            self.input_queue.put((fun, args, return_event))
-            return_event.wait(10)
-            return self._get_state()
-
-        return inner
-
-    def _get_state(self):
+    def _get_state(self) -> dict:
         state = {
             "intrinic_image_count": self._intrinsic_calibrator.index,
         }
         return state
 
-    @queue_abstract
+    @webutil.QueueAbstractClass.queue_abstract
     def capture(
         self, exposure_ms: float, analog_gain: int, digital_gain: int, binning: int
     ):
@@ -97,24 +64,28 @@ class App:
         self.image_container.put(image)
 
         self._image_cache = image
+        return self._get_state()
 
-    @queue_abstract
+    @webutil.QueueAbstractClass.queue_abstract
     def put_calibration_image(self):
         image = self._image_cache
         if image is not None:
             self._intrinsic_calibrator.put_image(image)
+        return self._get_state()
 
-    @queue_abstract
+    @webutil.QueueAbstractClass.queue_abstract
     def reset_calibration(self):
         self._intrinsic_calibrator.reset()
+        return self._get_state()
 
-    @queue_abstract
+    @webutil.QueueAbstractClass.queue_abstract
     def calibrate(self):
         print("calibrate")
         import time
 
         time.sleep(3)
         print("done")
+        return self._get_state()
 
     def run(self):
         print("starting Main")
@@ -122,9 +93,7 @@ class App:
         self._cam = camera.RpiCamera(settings)
         with self._cam:
             while True:
-                method, args, return_event = self.input_queue.get()
-                method(*args)
-                return_event.set()
+                self._process_pending_calls()
 
 
 class WebApp:
