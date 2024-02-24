@@ -100,6 +100,41 @@ class CameraCalibration:
         ).T
         return corners
 
+    def get_distorted_camera_frame(self, segments_per_side: int = 10) -> np.ndarray:
+        """
+        Get a numpy array representing a polygon of the distorted camera frame in cartesian space.
+
+        Returns:
+            np.ndarray: Points xyz shape=[segments_per_side * 4, 3]
+        """
+        xf = np.arange(segments_per_side * 4) / segments_per_side
+
+        p = self.intrinsic_params()
+        x0 = -0.5
+        x1 = p.width - 0.5
+        y0 = -0.5
+        y1 = p.height - 0.5
+
+        corners = np.array(
+            ((x0, x1, x1, x0, x0), (y0, y0, y1, y1, y0), (1, 1, 1, 1, 1)),
+            dtype=np.float32,
+        )
+        points = np.array([np.interp(xf, np.arange(len(d)), d) for d in corners]).T
+
+        c = kalkam.PointUndistorter(
+            kalkam.Calibration(
+                np.array(self.cal_dict["camera_matrix"]),
+                np.array(self.cal_dict["dist_coefs"]),
+                0,
+                0,
+                None,
+            )  # TODO Ewwwwww fix this
+        ).undisort(points[:, :2])
+
+        points[:, :2] = (c - [p.tx, p.ty]) / [p.fx, p.fy]
+
+        return points
+
     def save_json(self, filename: Union[str, pathlib.Path]):
         """
         Save calibration to JSON.
@@ -109,6 +144,18 @@ class CameraCalibration:
         """
         with open(filename, "w") as f:
             json.dump(self.cal_dict, f)
+
+    @classmethod
+    def from_json(cls, filename: Union[str, pathlib.Path]):
+        """
+        Create calibration from JSON.
+
+        Args:
+            filename: JSON file name
+        """
+        with open(filename, "r") as f:
+            cal_dict = json.load(f)
+        return CameraCalibration(cal_dict)
 
     @classmethod
     def make_from_images(cls, files: Sequence[Union[str, pathlib.Path]]):

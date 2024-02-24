@@ -158,9 +158,7 @@ class App(webutil.QueueAbstractClass):
         return d
 
     def _get_camera_frame(self, segments_per_side: int = 10) -> np.ndarray:
-        xf = np.arange(segments_per_side * 4) / segments_per_side
-        points = self._cam_cal.get_frame_corners()
-        points = np.array([np.interp(xf, np.arange(len(d)), d) for d in points.T]).T
+        points = self._cam_cal.get_distorted_camera_frame(segments_per_side)
         points = project_radial(self.axis_rot.apply(points))
         return points
 
@@ -271,7 +269,6 @@ class WebApp:
         return send_from_directory("../web", filename)
 
     def add_to_calibration(self):
-        # params = request.get_json()
         d = self.app.add_to_calibration()
         return jsonify(d)
 
@@ -280,7 +277,6 @@ class WebApp:
         return jsonify(d)
 
     def calibrate(self):
-        # params = request.get_json()
         d = self.app.calibrate()
         return jsonify(d)
 
