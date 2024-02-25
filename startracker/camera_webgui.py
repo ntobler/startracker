@@ -36,8 +36,15 @@ class IntrinsicCalibrator:
 
 
 class App(webutil.QueueAbstractClass):
+
+    terminate: bool
+    """Set True to terminate the application loop."""
+
     def __init__(self):
         super().__init__()
+
+        self.terminate = False
+
         self.image_container = webutil.ImageData()
 
         self._logger = logging.getLogger("Camera")
@@ -104,12 +111,12 @@ class App(webutil.QueueAbstractClass):
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
         with self._cam:
-            while True:
+            while not self.terminate:
 
                 if self._camera_job == "darkframe":
                     self._cam.record_darkframe()
                     self._camera_job = "stop"
-                elif self._camera_job in ["single, continuous"]:
+                elif self._camera_job in ["single", "continuous"]:
                     self._logger.info("Capture image ...")
                     image = self._cam.capture()
                     time.sleep(0.2)
