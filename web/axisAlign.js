@@ -129,6 +129,9 @@ function drawCameraFrame(ctx) {
 }
 
 function drawStars(ctx) {
+
+    if (state.cat_xyz === undefined) return
+
     ctx.save()
 
     for (let i = 0; i < state.cat_xyz.length; i++) {

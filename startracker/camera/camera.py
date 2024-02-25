@@ -117,7 +117,7 @@ class MockCamera(Camera):
 
     def capture(self) -> np.ndarray:
         frame = np.zeros((540, 960), np.uint8)
-        frame[32:-32, 32:-32] = 100
+        frame[32:-32, 32:-32] = 100 + np.random.randint(-20, 20)
         return frame
 
     def record_darkframe(self):

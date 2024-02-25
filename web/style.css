@@ -24,6 +24,11 @@ body {
     margin: 0 1em;
 }
 
+#footerBar div {
+    line-height: 2em;
+    margin: 0 1em;
+}
+
 input[type=number] {
     width: 4em;
     font-family: Consolas, monospace;
@@ -38,4 +43,14 @@ button[type=button] {
     border-radius: 4px;
     background-color: #0000;
     color: red;
+}
+
+button[type=button]:hover {
+    border-color: white;
+    color: white;
+}
+
+button[type=button]:active {
+    border-color: rgb(182, 182, 182);
+    color: rgb(201, 201, 201);
 }

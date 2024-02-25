@@ -93,7 +93,7 @@ class RpiCamera(camera.Camera):
         Returns:
             np.ndarray: uint8 image
         """
-        accumulated = None
+        image = None
         for _ in range(self.settings.stack):
 
             raw = self.capture_raw()
@@ -102,15 +102,17 @@ class RpiCamera(camera.Camera):
             if self.settings.bias is not None:
                 cv2.subtract(raw, self.settings.bias, dst=raw)
 
-            if accumulated is None:
-                accumulated = raw
+            if image is None:
+                image = raw
             else:
-                accumulated += raw
+                image += raw
 
-        image = image_processing.binning(accumulated, factor=2)
+        binning = self.settings.binning
+        if binning in [2, 4, 8]:
+            image = image_processing.binning(image, factor=binning)
 
         if self.settings.digital_gain in [1, 2]:
-            image //= 4 // self._digital_gain
+            image //= 4 // self.settings.digital_gain
         image = image.astype(np.uint8)
 
         return image

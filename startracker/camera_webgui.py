@@ -3,6 +3,7 @@ Flask web application to capture images using a smartphone browser or any other 
 """
 
 import threading
+import time
 import logging
 import os
 
@@ -14,6 +15,8 @@ import cv2
 from startracker import camera
 from startracker import persistent
 from startracker import webutil
+
+from typing import Literal
 
 
 class IntrinsicCalibrator:
@@ -41,6 +44,8 @@ class App(webutil.QueueAbstractClass):
         self._image_cache = None
         self._intrinsic_calibrator = IntrinsicCalibrator()
 
+        self._camera_job = "stop"
+
     def _get_state(self) -> dict:
         state = {
             "intrinic_image_count": self._intrinsic_calibrator.index,
@@ -48,22 +53,29 @@ class App(webutil.QueueAbstractClass):
         return state
 
     @webutil.QueueAbstractClass.queue_abstract
-    def capture(
+    def set_settings(
         self, exposure_ms: float, analog_gain: int, digital_gain: int, binning: int
     ):
-        self._logger.info(f"Capture e={exposure_ms} g={analog_gain}")
-
         settings = self._cam.settings
         settings.exposure_ms = exposure_ms
         settings.analog_gain = analog_gain
         settings.digital_gain = digital_gain
+        settings.binning = binning
         self._cam.settings = settings
 
-        image = self._cam.capture()
+        self._logger.info(f"Setting settings {settings}")
 
-        self.image_container.put(image)
+        return self._get_state()
 
-        self._image_cache = image
+    @webutil.QueueAbstractClass.queue_abstract
+    def capture(self, mode: Literal["single", "continuous", "stop"]):
+        if mode not in ["single", "continuous", "stop"]:
+            raise ValueError(f"Unknown mode: {mode}")
+
+        self._logger.info(f"Capture {mode}")
+
+        self._camera_job = mode
+
         return self._get_state()
 
     @webutil.QueueAbstractClass.queue_abstract
@@ -93,6 +105,16 @@ class App(webutil.QueueAbstractClass):
         self._cam = camera.RpiCamera(settings)
         with self._cam:
             while True:
+
+                if self._camera_job != "stop":
+                    self._logger.info("Capture image ...")
+                    image = self._cam.capture()
+                    time.sleep(0.2)
+                    self.image_container.put(image)
+                    self._image_cache = image
+                    if self._camera_job == "single":
+                        self._camera_job = "stop"
+
                 self._process_pending_calls()
 
 
@@ -110,6 +132,7 @@ class WebApp:
 
         self.flask_app.route("/")(self._index)
         self.flask_app.route("/<path:filename>")(self._serve_file)
+        self.flask_app.post("/set_settings")(self._set_settings)
         self.flask_app.post("/capture")(self._capture)
         self.flask_app.post("/put_calibration_image")(self._put_calibration_image)
         self.flask_app.post("/reset_calibration")(self._reset_calibration)
@@ -129,20 +152,25 @@ class WebApp:
     def run(self):
         try:
             self._app_thread.start()
-            self.flask_app.run(debug=True, host="127.0.0.1", use_reloader=False)
+            self.flask_app.run(debug=True, use_reloader=False)
         finally:
             logging.info("Terminated. Clean up app..")
             self.app.terminate = True
             self._app_thread.join()
 
-    def _capture(self):
+    def _set_settings(self):
         params = request.get_json()
-        d = self.app.capture(
+        d = self.app.set_settings(
             float(params["exposure_ms"]),
             int(params["gain"]),
             int(params["digital_gain"]),
             int(params["binning"]),
         )
+        return jsonify(d)
+
+    def _capture(self):
+        params = request.get_json()
+        d = self.app.capture(str(params["mode"]))
         return jsonify(d)
 
     def _put_calibration_image(self):

@@ -12,7 +12,7 @@ function updateState(state) {
     console.log(state)
 }
 
-document.getElementById('capture').onclick = () => {
+function setSettings() {
     let payload = {
         exposure_ms: document.getElementById('exposure').value,
         gain: document.getElementById('gain').value,
@@ -28,6 +28,33 @@ document.getElementById('capture').onclick = () => {
     }).catch(error => {
         console.error('Error:', error);
     });
+}
+
+function capture(mode) {
+    let payload = {
+        mode: mode
+    }
+    fetch('/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(response => response.json()).then((data) => {
+        updateState(data)
+    }).catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+document.getElementById('capture_single').onclick = () => {
+    capture("single")
+}
+
+document.getElementById('capture_continuous').onclick = () => {
+    capture("continuous")
+}
+
+document.getElementById('capture_stop').onclick = () => {
+    capture("stop")
 }
 
 document.getElementById('put_calibration_image').onclick = () => {
