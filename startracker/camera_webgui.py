@@ -68,8 +68,8 @@ class App(webutil.QueueAbstractClass):
         return self._get_state()
 
     @webutil.QueueAbstractClass.queue_abstract
-    def capture(self, mode: Literal["single", "continuous", "stop"]):
-        if mode not in ["single", "continuous", "stop"]:
+    def capture(self, mode: Literal["single", "continuous", "stop", "darkframe"]):
+        if mode not in ["single", "continuous", "stop", "darkframe"]:
             raise ValueError(f"Unknown mode: {mode}")
 
         self._logger.info(f"Capture {mode}")
@@ -106,7 +106,10 @@ class App(webutil.QueueAbstractClass):
         with self._cam:
             while True:
 
-                if self._camera_job != "stop":
+                if self._camera_job == "darkframe":
+                    self._cam.record_darkframe()
+                    self._camera_job = "stop"
+                elif self._camera_job in ["single, continuous"]:
                     self._logger.info("Capture image ...")
                     image = self._cam.capture()
                     time.sleep(0.2)
@@ -152,7 +155,7 @@ class WebApp:
     def run(self):
         try:
             self._app_thread.start()
-            self.flask_app.run(debug=True, use_reloader=False)
+            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False)
         finally:
             logging.info("Terminated. Clean up app..")
             self.app.terminate = True

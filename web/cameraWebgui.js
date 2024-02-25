@@ -19,7 +19,7 @@ function setSettings() {
         digital_gain: document.getElementById('digital_gain').value,
         binning: document.getElementById('binning').value,
     }
-    fetch('/capture', {
+    fetch('/set_settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -29,6 +29,11 @@ function setSettings() {
         console.error('Error:', error);
     });
 }
+
+document.getElementById("exposure").onchange = setSettings
+document.getElementById("gain").onchange = setSettings
+document.getElementById("digital_gain").onchange = setSettings
+document.getElementById("binning").onchange = setSettings
 
 function capture(mode) {
     let payload = {
@@ -55,6 +60,10 @@ document.getElementById('capture_continuous').onclick = () => {
 
 document.getElementById('capture_stop').onclick = () => {
     capture("stop")
+}
+
+document.getElementById('capture_darkframe').onclick = () => {
+    capture("darkframe")
 }
 
 document.getElementById('put_calibration_image').onclick = () => {

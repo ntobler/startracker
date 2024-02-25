@@ -299,7 +299,7 @@ class WebApp:
     def run(self):
         try:
             self._app_thread.start()
-            self.flask_app.run(debug=True, use_reloader=False)
+            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False)
         finally:
             logging.info("Terminated. Clean up app..")
             self.app.terminate = True
