@@ -5,3 +5,4 @@
 test_images*
 build
 startracker.egg-info
+poetry.lock
