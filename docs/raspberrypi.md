@@ -8,10 +8,7 @@ Make sure you are using a new version of the Raspberry Pi Imager https://www.ras
 sudo apt install rpi-imager
 ```
 
-Choose `Raspberry Pi OS (other)` -> `Raspberry Pi OS Lite (64-bit) Legacy` and flash it on your SD Card.
-> Make sure to use the legacy `Bullseye` Raspberry Pi OS, as it is required for the camera driver to work
-  Check the Raspberry Pi Linux kernel version >6.1.21, as needed for the `Pivariety` dirver.
-  Check with `hostnamectl`
+Choose `Raspberry Pi OS (other)` -> `Raspberry Pi OS Lite (64-bit)` and flash it on your SD Card.
 
 Under Advanced options enter following settings:
 - Set hostname `starpi`
@@ -39,7 +36,7 @@ SSH to the Pi with `ssh pi@starpi` and setup with following commands:
 Update system and enable the `Pivariety` kernel driver. Requires a reboot.
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo bash -c "echo 'dtoverlay=arducam-pivariety' >> /boot/config.txt"
+sudo bash -c "echo 'dtoverlay=arducam-pivariety' >> /boot/firmware/config.txt"
 sudo reboot now
 ```
 
@@ -49,14 +46,19 @@ mkdir temp && cd temp
 wget -O install_pivariety_pkgs.sh https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh
 chmod +x install_pivariety_pkgs.sh
 ./install_pivariety_pkgs.sh -p libcamera_dev
+./install_pivariety_pkgs.sh -p kernel_driver
+sudo reboot now
+./install_pivariety_pkgs.sh -p libcamera_apps
 ```
 
 Install startracker git repo
 ``` bash
 cd ~
-sudo apt install -y git libcairo2-dev python3-pip vim
+sudo apt install -y git libcairo2-dev python3-pip vim python3-virtualenv
 git clone https://github.com/ntobler/startracker.git
-sudo pip3 install ./startracker
+virtualenv venv --system-site-packages
+. venv/bin/activate
+pip install -e ./startracker
 sudo startracker/install_service.sh
 ```
 Your Startracker is ready to go.

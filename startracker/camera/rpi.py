@@ -125,5 +125,5 @@ class RpiCamera(camera.Camera):
                 darkframe = self.capture_raw()
             else:
                 darkframe += self.capture_raw()
-        darkframe /= self.settings.darkframe_averaging
+        darkframe //= self.settings.darkframe_averaging
         self.settings.bias = darkframe
