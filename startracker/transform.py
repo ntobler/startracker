@@ -44,7 +44,7 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
     Returns:
         Tuple[np.ndarray, float]:
             - Common rotation axis
-            - Angular standard deviation in rads
+            - Angular standard deviation estimate in rads, can be NaN
     """
     rots = scipy.spatial.transform.Rotation.from_quat(quats)
     inv_rots = rots.inv()
@@ -79,7 +79,11 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
     axis_vec /= np.linalg.norm(axis_vec, axis=-1, keepdims=True)
 
     # calculate estimate of certainty
-    angular_errors = np.arccos(np.sum(axis_vecs * axis_vec[None], axis=-1))
-    std_deg = float(np.sqrt(np.mean(angular_errors**2) / len(angular_errors)))
+    if len(axis_vecs) > 2:
+        angular_errors = np.arccos(np.sum(axis_vecs * axis_vec[None], axis=-1))
+        std_deg = float(np.sqrt(np.mean(angular_errors**2) / len(angular_errors)))
+    else:
+        # Error cannot be calculated from two rotations
+        std_deg = np.nan
 
     return axis_vec, std_deg
