@@ -1,6 +1,8 @@
 """Various helper function and classes for testing, especially for star and camera simulation"""
 
 import pathlib
+import time
+import dataclasses
 
 import cots_star_tracker
 import cv2
@@ -13,7 +15,7 @@ from startracker import persistent
 from startracker import transform
 from startracker import camera
 
-from typing import Tuple, Literal, Optional
+from typing import Tuple, List, Optional
 
 
 class TestingMaterial:
@@ -110,7 +112,10 @@ class StarImageGenerator:
         )
 
     def __call__(
-        self, target_vector: np.ndarray, up_vector: np.ndarray
+        self,
+        target_vector: np.ndarray,
+        up_vector: np.ndarray,
+        grid: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Create image of stars.
@@ -120,6 +125,7 @@ class StarImageGenerator:
                 coordinate system e.g. north=[0,0,1]
             up_vector: shape=[3] Up-facing vector of the camera in astronomical coordinate system
                 e.g. north=[0,0,1]
+            grid: Display longitude and latitude overlay
 
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -134,19 +140,24 @@ class StarImageGenerator:
         up_vector /= np.linalg.norm(up_vector, axis=0)
         extrinsic = kalkam.look_at_extrinsic(target_vector, [0, 0, 0], up_vector)
 
-        return self.image_from_extrinsic(extrinsic)
+        return self.image_from_extrinsic(extrinsic, grid=grid)
 
     def image_from_quaternion(
-        self, quat: np.ndarray
+        self, quat: np.ndarray, grid: bool = False
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         rot = scipy.spatial.transform.Rotation.from_quat(quat)
         extrinsic = np.concatenate((rot.as_matrix().T, np.zeros((3, 1))), axis=-1)
-        return self.image_from_extrinsic(extrinsic)
+        return self.image_from_extrinsic(extrinsic, grid=grid)
 
-    def image_from_extrinsic(self, extrinsic):
-        UINT8_MAX = 255
+    def _project_points(self, points: np.ndarray, extrinsic: np.ndarray) -> np.ndarray:
+        """Project star coordinates to pixels."""
+        pp = kalkam.PointProjector(intrinsic=self.intrinsic, extrinsic=extrinsic)
+        points = pp.obj2pix(points, axis=-1)
+        if self.distorter is not None:
+            points = self.distorter.distort(points)
+        return points
 
-        width, height = self.width, self.height
+    def stars_from_extrinsic(self, extrinsic: np.ndarray):
 
         # Take z image vector of the inverted extrinsic
         target_vector = extrinsic[2, :3]
@@ -156,15 +167,17 @@ class StarImageGenerator:
         stars_nwu = self.stars_nwu[in_frame]
         stars_mags = self.stars_mags[in_frame]
 
-        # Convert star magnitude (visible flux) to a pixel value (may be way above 255)
-        star_brightness = (100 ** (1 / 5)) ** (-stars_mags)
-        star_brightness = star_brightness * (self.exposure * UINT8_MAX)
-
         # Convert stars to pixels
-        pp = kalkam.PointProjector(intrinsic=self.intrinsic, extrinsic=extrinsic)
-        stars_xy = pp.obj2pix(stars_nwu, axis=-1)
-        if self.distorter is not None:
-            stars_xy = self.distorter.distort(pp.obj2pix(stars_nwu, axis=-1))
+        stars_xy = self._project_points(stars_nwu, extrinsic)
+
+        return stars_mags, stars_xy
+
+    def image_from_extrinsic(self, extrinsic: np.ndarray, grid: bool = False):
+        UINT8_MAX = 255
+
+        width, height = self.width, self.height
+
+        stars_mags, stars_xy = self.stars_from_extrinsic(extrinsic)
 
         if False:
             import matplotlib.pyplot as plt
@@ -180,6 +193,10 @@ class StarImageGenerator:
         pixel_coords = pixel_coords + self._offset
         pixel_coords = pixel_coords.reshape((-1, 2))
         pixel_remainder = np.mod(stars_xy, 1)
+
+        # Convert star magnitude (visible flux) to a pixel value (may be way above 255)
+        star_brightness = (100 ** (1 / 5)) ** (-stars_mags)
+        star_brightness = star_brightness * (self.exposure * UINT8_MAX)
 
         # Distribute the brightness to each pixel of the quad according to the distance
         pixel_mags = np.broadcast_to(
@@ -220,13 +237,135 @@ class StarImageGenerator:
         stars_xy = stars_xy[mask]
         stars_mags = stars_mags[mask]
 
+        if grid:
+
+            latitudes = np.radians(np.linspace(-90, 90, 18 * 2))
+            longitudes = np.radians(np.arange(0, 361, 15))
+
+            lat, lon = np.meshgrid(latitudes, longitudes)
+
+            x = np.cos(lon) * np.cos(lat)
+            y = np.sin(lon) * np.cos(lat)
+            z = np.sin(lat)
+            points = np.stack((x, y, z), axis=-1)
+
+            # Get in-frame point
+            target_vector = extrinsic[2, :3]
+            mask = np.inner(points, target_vector) > self._cos_phi
+            points = self._project_points(points, extrinsic)
+
+            c = 30
+            t = 1
+
+            points = np.round(points).astype(np.int32)
+            it = zip(
+                [points, np.swapaxes(points, 1, 0)],
+                [mask, np.swapaxes(mask, 1, 0)],
+            )
+            for points, mask in it:
+                for line, mask_line in zip(points, mask):
+                    last_xy = None
+                    for xy, m in zip(line, mask_line):
+                        if last_xy is not None:
+                            canvas = cv2.line(canvas, last_xy, xy, c, t)
+                        if not m:
+                            last_xy = None
+                        else:
+                            last_xy = xy
+
         return canvas, stars_xy, stars_mags
 
 
-class MockStarCam:
+class CameraTester:
+    """Show matplotlib GUI to play with a debug camera."""
+
+    @dataclasses.dataclass
+    class Slider:
+        name: str
+        min: float
+        max: float
+        init: float
+        step: float
+        dtype: float
+
+    sliders: List[Slider]
+
+    def __init__(self, cam: camera.Camera):
+        self._cam = cam
+        self.sliders = []
+
+    def add_arg(
+        self,
+        name: str,
+        min: float = 0,
+        max: float = 100,
+        init: Optional[float] = None,
+        step: Optional[float] = None,
+        dtype=int,
+    ):
+        """Add slider for a numerial attribute of the camera."""
+        init = (min + max) / 2 if init is None else init
+        step = (max - min) / 100 if step is None else step
+        self.sliders.append(self.Slider(name, min, max, init, step, dtype))
+
+    def run(self):
+        """Run matplotlib GUI."""
+
+        import matplotlib.pyplot as plt
+        import matplotlib.widgets
+
+        # Create a figure and axes
+        fig, ax = plt.subplots()
+        plt.subplots_adjust(bottom=0.25)
+
+        # Generate initial image
+        for slider in self.sliders:
+            value = slider.dtype(slider.init)
+            cam.__setattr__(slider.name, value)
+        initial_image = cam.capture()
+        img = ax.imshow(initial_image, cmap="viridis", vmax=255)
+
+        plt_sliders = []
+
+        # Callback function to update the image
+        def update(val):
+            for slider, plt_slider in zip(self.sliders, plt_sliders):
+                value = slider.dtype(plt_slider.val)
+                cam.__setattr__(slider.name, value)
+
+            updated_image = cam.capture()
+
+            img.set_data(updated_image)
+            plt.draw()
+
+        # Add two horizontal sliders
+        for i, slider in enumerate(self.sliders):
+            pos = 0.1 * (i + 1) / len(self.sliders)
+            ax = plt.axes([0.1, pos, 0.65, 0.03], facecolor="lightgoldenrodyellow")
+            plt_slider = matplotlib.widgets.Slider(
+                ax,
+                slider.name,
+                slider.min,
+                slider.max,
+                valinit=slider.init,
+                valstep=slider.step,
+            )
+            plt_slider.on_changed(update)
+            plt_sliders.append(plt_slider)
+
+        plt.show()
+
+
+class MockStarCam(camera.Camera):
     """Camera to generate artificial images of the sky"""
 
-    def __init__(self):
+    t: Optional[float] = None
+    """Capture time in seconds."""
+    grid: bool = False
+    """Display longitude and latitude grid overlay."""
+
+    def __init__(self, camera_settings: camera.CameraSettings):
+        super().__init__(camera_settings)
         cam_file = TestingMaterial(use_existing=True).cam_file
         self._rng = np.random.default_rng(42)
         intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
@@ -234,28 +373,40 @@ class MockStarCam:
         )
         self._sig = StarImageGenerator(intrinsic, (width, height), dist_coeffs)
 
+    def capture_raw(self):
+        return self.capture()
+
+    def record_darkframe(self):
+        pass
+
+    def gui(self):
+        """Play with this camera in a GUI."""
+        ct = CameraTester(self)
+        ct.add_arg("t", 0, 60 * 60 * 24, init=0, dtype=float)
+        ct.run()
+
 
 class RandomStarCam(MockStarCam):
     """Star camera pointing in a random direction and wiggeling."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, camera_settings: camera.CameraSettings):
+        super().__init__(camera_settings)
         self._vector = self._rng.normal(size=(2, 3)) * 0.3
 
-    def __call__(self) -> np.ndarray:
+    def capture(self) -> np.ndarray:
         self._vector *= 0.9
         self._vector += 0.1 * self._rng.normal(size=(2, 3)) * 0.3
         vector = self._vector + [[0, 0, 5], [0, 10, 0]]
         vector /= np.linalg.norm(vector, axis=-1, keepdims=True)
-        image, _, _ = self._sig(vector[0], vector[1])
+        image, _, _ = self._sig(vector[0], vector[1], grid=self.grid)
         return image
 
 
 class AxisAlignCalibrationTestCam(MockStarCam):
     """Star camera rotating around a random axis."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, camera_settings: camera.CameraSettings):
+        super().__init__(camera_settings)
         vectors = self._rng.normal(size=(2, 3))
         vectors /= np.linalg.norm(vectors, axis=-1, keepdims=True)
 
@@ -266,7 +417,6 @@ class AxisAlignCalibrationTestCam(MockStarCam):
             :3, :3
         ]
         self.axis_attitude = scipy.spatial.transform.Rotation.from_matrix(rot_matrix)
-        self.align_error_deg = self.axis_attitude.magnitude() * (180 / np.pi)
 
         self.camera_rot = scipy.spatial.transform.Rotation.from_euler(
             "zxy", [2, 8, 12], degrees=True
@@ -274,9 +424,15 @@ class AxisAlignCalibrationTestCam(MockStarCam):
 
         self.axis_angle = 0.0
 
-    def __call__(self) -> np.ndarray:
+    def capture(self) -> np.ndarray:
+
+        if self.t is None:
+            t = time.monotonic()
+        else:
+            t = self.t
 
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
+        self.axis_angle = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
         rotvec = np.array([0, 0, 1.0]) * self.axis_angle
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(
             rotvec, degrees=False
@@ -284,34 +440,61 @@ class AxisAlignCalibrationTestCam(MockStarCam):
 
         quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat()
 
-        image, _, _ = self._sig.image_from_quaternion(quat)
+        image, _, _ = self._sig.image_from_quaternion(quat, grid=self.grid)
         return image
 
 
-class DebugCamera(camera.Camera):
-    """Camera to generate artificial images of the sky"""
+class StarCameraCalibrationTestCam(MockStarCam):
+    """Star camera steadily facing a random direction."""
 
-    mode: Literal["stars", "axis_align_calibration"] = "stars"
+    theta: float
+    """Elevation angle 0 is equatorial, pi/2 is to north pole, -pi/2 is to south pole."""
+    epsilon: float
+    """Roll component about the camera axis."""
+    phi: float
+    """Star angle, rotation about the north sourth axis."""
 
-    def __init__(
-        self,
-        camera_settings: camera.CameraSettings,
-        mode: Optional[Literal["stars"]] = None,
-    ):
+    def __init__(self, camera_settings: camera.CameraSettings):
         super().__init__(camera_settings)
-        if mode is not None:
-            self.mode = mode
-        self._functions = {
-            "stars": RandomStarCam(),
-            "axis_align_calibration": AxisAlignCalibrationTestCam(),
-        }
 
-    def capture_raw(self):
-        return self.capture()
+        self.theta = self._rng.uniform(-np.pi / 2, np.pi / 2)
+        self.epsilon = self._rng.uniform(-np.pi / 2, np.pi / 2)
+        self.phi = 0
+
+    def get_extrinsic(self) -> np.ndarray:
+        if self.t is None:
+            t = time.monotonic()
+        else:
+            t = self.t
+
+        self.phi = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
+
+        r = scipy.spatial.transform.Rotation.from_euler(
+            "zxz", (self.epsilon, np.pi / 2 - self.theta, self.phi), degrees=False
+        )
+
+        rot_matrix = r.as_matrix()
+        extrinsic = np.concatenate((rot_matrix.T, np.zeros((3, 1))), axis=1)
+        return extrinsic
 
     def capture(self) -> np.ndarray:
-        frame = self._functions[self.mode]()
-        return frame
+        extrinsic = self.get_extrinsic()
+        image, _, _ = self._sig.image_from_extrinsic(extrinsic, grid=self.grid)
+        return image
 
-    def record_darkframe(self):
-        pass
+    def gui(self):
+        ct = CameraTester(self)
+        ct.add_arg("t", 0, 60 * 60 * 24, init=0, dtype=float)
+        ct.add_arg("theta", -np.pi / 2, np.pi / 2, dtype=float)
+        ct.add_arg("epsilon", -np.pi, np.pi, dtype=float)
+        ct.run()
+
+
+if __name__ == "__main__":
+    settings = camera.CameraSettings()
+    cam = StarCameraCalibrationTestCam(settings)
+    cam.theta = np.pi / 2
+    cam.t = 0
+    cam.grid = True
+
+    cam.gui()

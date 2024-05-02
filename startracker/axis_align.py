@@ -320,8 +320,7 @@ def main():
 
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
-        camera.RpiCamera = testing_utils.DebugCamera
-        camera.RpiCamera.mode = "axis_align_calibration"
+        camera.RpiCamera = testing_utils.AxisAlignCalibrationTestCam
 
     webapp = WebApp()
     webapp.run()

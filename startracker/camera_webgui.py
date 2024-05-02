@@ -217,7 +217,7 @@ def main():
 
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
-        camera.RpiCamera = testing_utils.DebugCamera
+        camera.RpiCamera = testing_utils.RandomStarCam
 
     webapp = WebApp()
     webapp.run()
