@@ -59,6 +59,6 @@ git clone https://github.com/ntobler/startracker.git
 virtualenv venv --system-site-packages
 . venv/bin/activate
 pip install -e ./startracker
-sudo startracker/install_service.sh
+sudo startracker/install/install_service.sh
 ```
 Your Startracker is ready to go.
