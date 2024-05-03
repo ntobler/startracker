@@ -60,11 +60,11 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
     # Get rotation difference between pairs
     axis_vecs = (most_perpendicular_inv_rots * rots).as_rotvec()
     norm = np.linalg.norm(axis_vecs, axis=-1, keepdims=True)
+    axis_vecs /= norm
 
     # Calculate a weight factor that is 1 if the rotation difference
     # is close to 90 degrees. 0 and 180 degrees get weight = 0
     weights = np.abs(np.sin(norm))
-    axis_vecs /= norm
 
     # Make sure all axes have a positive z compoenent
     # This will make sure the axis points in the general direciton
@@ -80,7 +80,8 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
 
     # calculate estimate of certainty
     if len(axis_vecs) > 2:
-        angular_errors = np.arccos(np.sum(axis_vecs * axis_vec[None], axis=-1))
+        cos_error = np.clip(np.sum(axis_vecs * axis_vec[None], axis=-1), -1, 1)
+        angular_errors = np.arccos(cos_error)
         std_deg = float(np.sqrt(np.mean(angular_errors**2) / len(angular_errors)))
     else:
         # Error cannot be calculated from two rotations
