@@ -4,12 +4,11 @@ import pathlib
 import json
 import collections
 
-import cv2
 import numpy as np
 
 from . import kalkam
 
-from typing import Union, Sequence, Dict
+from typing import Union, Dict, Optional
 
 
 IntrinsicParams = collections.namedtuple(
@@ -122,12 +121,9 @@ class CameraCalibration:
         points = np.array([np.interp(xf, np.arange(len(d)), d) for d in corners]).T
 
         c = kalkam.PointUndistorter(
-            kalkam.Calibration(
+            kalkam.IntrinsicCalibration(
                 np.array(self.cal_dict["camera_matrix"]),
                 np.array(self.cal_dict["dist_coefs"]),
-                0,
-                0,
-                None,
             )  # TODO Ewwwwww fix this
         ).undisort(points[:, :2])
 
@@ -158,28 +154,46 @@ class CameraCalibration:
         return CameraCalibration(cal_dict)
 
     @classmethod
-    def make_from_images(cls, files: Sequence[Union[str, pathlib.Path]]):
-        pattern = kalkam.ChArUcoPattern(19, 11, int(283 / 6))
-        cal = kalkam.Calibration.make_from_image_files(files, pattern, plot=True)
+    def make(
+        cls,
+        intrinsic: np.ndarray,
+        width: int,
+        height: int,
+        dist_coeffs: Optional[np.ndarray] = None,
+        error: float = np.nan,
+    ) -> "CameraCalibration":
+        """
+        Return calibration from given parameters.
 
-        # dist coeffs are always present if made from calibration
-        assert cal.dist_coeffs is not None
+        Args:
+            intrinsic: 3x3 intrinsic camera matrix
+            width: Width of the camera frame in pixels
+            height: Height of the camera frame in pixels
+            dist_coeffs: Distortion coefficients as defined by OpenCV
+            error: reprojection error
+
+        Returns:
+            CameraCalibration: Calibration instance with dummy values.
+        """
+
+        if dist_coeffs is None:
+            dist_coeffs = np.zeros((1, 5), dtype=np.float32)
 
         cal_dict = {
-            "camera_matrix": cal.intrinsic.tolist(),
-            "dist_coefs": cal.dist_coeffs.tolist(),
-            "resolution": list(cv2.imread(str(files[0])).shape[:2][::-1]),
+            "camera_matrix": intrinsic.tolist(),
+            "dist_coefs": dist_coeffs.tolist(),
+            "resolution": [width, height],
             "camera_model": "Brown",
-            "k1": cal.dist_coeffs[0, 0].item(),
-            "k2": cal.dist_coeffs[0, 1].item(),
-            "k3": cal.dist_coeffs[0, 4].item(),
-            "p1": cal.dist_coeffs[0, 2].item(),
-            "p2": cal.dist_coeffs[0, 3].item(),
-            "fx": cal.intrinsic[0, 0].item(),
-            "fy": cal.intrinsic[1, 1].item(),
-            "up": cal.intrinsic[0, 2].item(),
-            "vp": cal.intrinsic[1, 2].item(),
-            "skew": cal.intrinsic[0, 1].item(),
-            "RMS_reproj_err_pix": cal.rms_error,
+            "k1": dist_coeffs[0, 0].item(),
+            "k2": dist_coeffs[0, 1].item(),
+            "k3": dist_coeffs[0, 4].item(),
+            "p1": dist_coeffs[0, 2].item(),
+            "p2": dist_coeffs[0, 3].item(),
+            "fx": intrinsic[0, 0].item(),
+            "fy": intrinsic[1, 1].item(),
+            "up": intrinsic[0, 2].item(),
+            "vp": intrinsic[1, 2].item(),
+            "skew": intrinsic[0, 1].item(),
+            "RMS_reproj_err_pix": error,
         }
         return cls(cal_dict)

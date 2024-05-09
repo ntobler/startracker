@@ -87,7 +87,7 @@ class StarImageGenerator:
 
         if dist_coeffs is not None:
             self.distorter = kalkam.PointUndistorter(
-                kalkam.Calibration(intrinsic, dist_coeffs, 0, 0)
+                kalkam.IntrinsicCalibration(intrinsic, dist_coeffs)
             )
         else:
             self.distorter = None

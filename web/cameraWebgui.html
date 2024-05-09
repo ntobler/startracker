@@ -22,17 +22,34 @@
 <body>
     <img id="image" src="" alt="Image">
     <div id="footerBar">
-        <div>Exposure <input type="number" step="10" value="1.00" id="exposure" name="exposure" size="2" /> ms</div>
-        <div>Gain <input type="number" value="1" id="gain" name="gain"  size="2" /></div>
-        <div>Digital gain <input type="number" value="1" id="digital_gain" name="digital_gain"  size="2" /></div>
-        <div>Binning <input type="number" value="2" id="binning" name="binning"  size="2" /></div>
-        <div><button type="button" id="capture_single">Single</button></div>
-        <div><button type="button" id="capture_continuous">Continuous</button></div>
-        <div><button type="button" id="capture_stop">Stop</button></div>
-        <div><button type="button" id="capture_darkframe">Record darkframe</button></div>
-        <div><button type="button" id="put_calibration_image">Put to calibration</button></div>
-        <div><button type="button" id="reset_calibration">Reset calibration</button></div>
-        <div><button type="button" id="calibrate">Calibrate</button></div>
+        <div>Exposure <input type="number" step="10" value="1.00" id="exposure" name="exposure" style="width: 4em" /> ms</div>
+        <div>Gain <input type="number" value="1" id="gain" name="gain" /></div>
+        <div>Digital gain <input type="number" value="1" id="digital_gain" name="digital_gain" /></div>
+        <div>Binning <input type="number" value="2" id="binning" name="binning" /></div>
+        <div>
+            Capture
+            <button type="button" id="capture_single">Single</button>
+            <button type="button" id="capture_continuous">Continuous</button>
+            <button type="button" id="capture_stop">Stop</button>
+            <button type="button" id="capture_darkframe">Darkframe</button>
+        </div>
+        <div>
+            Pattern
+            <input type="number" value="13" id="pattern_w" name="binning"  size="0" />
+            x
+            <input type="number" value="9" id="pattern_h" name="binning"  size="1" />
+            @
+            <input type="number" value="40" id="pattern_s" name="binning"  size="1" />
+            mm
+            <button type="button" onclick="window.open('calibration_pattern', '_blank'); return false;">Open</button>
+        </div>
+        <div>
+            Calibration
+            <button type="button" id="put_calibration_image">Put</button>
+            <button type="button" id="reset_calibration">Reset</button>
+            <button type="button" id="calibrate">Calibrate</button>
+            <button type="button" onclick="window.open('calibration_result', '_blank'); return false;">Result</button>
+        </div>
     </div>
 </body>
 

@@ -10,6 +10,12 @@ ws.onmessage = function (event) {
 
 function updateState(state) {
     console.log(state)
+
+    if (state.intrinsic_image_count > 0) {
+        document.getElementById('put_calibration_image').innerHTML = `Put (${state.intrinsic_image_count})`
+    } else {
+        document.getElementById('put_calibration_image').innerHTML = `Put`
+    }
 }
 
 function setSettings() {
@@ -18,6 +24,9 @@ function setSettings() {
         gain: document.getElementById('gain').value,
         digital_gain: document.getElementById('digital_gain').value,
         binning: document.getElementById('binning').value,
+        pattern_width: document.getElementById('pattern_w').value,
+        pattern_height: document.getElementById('pattern_h').value,
+        pattern_size: document.getElementById('pattern_s').value,
     }
     fetch('/set_settings', {
         method: 'POST',
@@ -34,6 +43,9 @@ document.getElementById("exposure").onchange = setSettings
 document.getElementById("gain").onchange = setSettings
 document.getElementById("digital_gain").onchange = setSettings
 document.getElementById("binning").onchange = setSettings
+document.getElementById("pattern_w").onchange = setSettings
+document.getElementById("pattern_h").onchange = setSettings
+document.getElementById("pattern_s").onchange = setSettings
 
 function capture(mode) {
     let payload = {

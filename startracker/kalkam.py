@@ -4,12 +4,13 @@ import abc
 import pathlib
 import json
 import time
+import dataclasses
 
 import numpy as np
 import cairo
 import cv2
 
-from typing import Union, Tuple, Iterable, Optional, Sequence
+from typing import Union, Tuple, Iterable, Optional, Sequence, List
 from numpy.typing import ArrayLike
 
 
@@ -311,12 +312,18 @@ class ChArUcoPattern(CalibrationPattern):
 
         all_corners, all_ids = self._aruco.detect(image)
 
+        if all_ids is None or len(all_ids) < len(self.marker_positions) / 2:
+            raise ValueError("Pattern not found")
+
         num_corners, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
             all_corners, all_ids, image, board=self.charuco_board
         )
 
-        if all_ids is None or len(all_ids) < len(self.marker_positions) / 2:
-            raise ValueError("Pattern not found")
+        if num_corners == 0:
+            raise ValueError(
+                "Pattern not found, but ArUco markers detected. "
+                "Pattern config is likely to be wrong."
+            )
 
         all_ids = all_ids.flatten()
         all_corners = np.asarray(all_corners)[:, 0]
@@ -427,237 +434,306 @@ class ArUco:
         return charuco_board
 
 
-class Calibration:
-    """Make camera intrinsic calibration from image data."""
+@dataclasses.dataclass
+class IntrinsicCalibration:
+    """Intrinsic calibration data."""
 
     intrinsic: np.ndarray
     """3x3 intrinsic matrix."""
     dist_coeffs: Optional[np.ndarray]
-    """opencv distortion coefficients"""
+    """Opencv distortion coefficients"""
+
+
+@dataclasses.dataclass
+class IntrinsicCalibrationWithData(IntrinsicCalibration):
+    """Intrinsic calibration data with additional information."""
+
+    image_size: Tuple[int, int]
+    """Width and height in pixels."""
     rms_error: float
-    """root mean squared calibration error in pixels"""
+    """Root mean squared calibration error in pixels"""
     max_error: float
-    """maximum calibration error in pixels"""
+    """Maximum calibration error in pixels"""
     timestamp: Optional[int]
-    """unix timestamp in milliseconds"""
+    """Unix timestamp in milliseconds"""
+    image_points_batch: List[np.ndarray]
+    """List of images point arrays in pixels [x, y]."""
+    squared_error_distances: List[np.ndarray]
+    """Squared reprojection error distance for all image points."""
 
-    def __init__(
+    def plot(self, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
+        import matplotlib.pyplot as plt
+        from scipy.interpolate import griddata
+
+        pix = np.concatenate(self.image_points_batch, axis=0).reshape((-1, 2))
+        error = np.sqrt(np.concatenate(self.squared_error_distances, axis=0).ravel())
+
+        width, height = self.image_size
+
+        grid_x, grid_y = np.mgrid[0:height, 0:width]
+        error_image = griddata(pix, error, (grid_y, grid_x), method="linear").astype(
+            np.float32
+        )
+        mask = np.isnan(error_image)
+
+        factor = np.nanmax(error_image) / 255.0
+        src = (np.where(mask, 0.0, error_image) / factor).astype(np.uint8)
+        extrapolated = cv2.inpaint(
+            src, mask.astype(np.uint8), 10, cv2.INPAINT_NS
+        ).astype(np.float32)
+        extrapolated *= factor
+        error_image = np.where(mask, extrapolated, error_image)
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        im = ax.imshow(error_image)
+        plt.colorbar(im, ax=ax)
+
+        for pix in self.image_points_batch:
+            ax.plot(pix[:, 0], pix[:, 1], "+", color="white")
+
+        ax.set_title("Estimated euclidian error distance in pixels")
+
+        if save is not None:
+            fig.savefig(save)
+
+        if show:
+            fig.show()
+
+        plt.close(fig)
+
+    def plot_opencv(
         self,
-        intrinsic: np.ndarray,
-        dist_coeffs: Optional[np.ndarray],
-        rms_error: float,
-        max_error: float,
-        timestamp: Optional[int] = None,
+        red_level: Optional[float] = None,
+        green_level: Optional[float] = None,
+        show_points: bool = True,
+        show_legend: bool = True,
     ):
-        self.intrinsic = intrinsic
-        self.dist_coeffs = dist_coeffs
-        self.rms_error = rms_error
-        self.max_error = max_error
-        self.timestamp = timestamp
+        """Plot calibration quality using OpenCV functions only."""
 
-    @classmethod
-    def make_from_image_files(
-        cls,
-        image_files: Sequence[Union[pathlib.Path, str]],
-        marker_pattern: CalibrationPattern,
-        fraction: float = 1,
-        verbose: bool = False,
-        plot: bool = False,
-    ) -> "Calibration":
-        if not image_files:
-            raise ValueError("image_file must not be empty")
+        w, h = self.image_size
 
-        def gen():
-            for file in image_files:
-                img = cv2.imread(str(file))
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                yield gray
+        # Minimum and maximum levels for ample color scheme
+        if red_level is None:
+            red_level = np.minimum(h, w) / 10
+        if green_level is None:
+            green_level = 0.1
 
-        return cls.make_from_images(
-            images=gen(),
-            marker_pattern=marker_pattern,
-            fraction=fraction,
-            verbose=verbose,
-            plot=plot,
-        )
+        red_level_log = np.log10(red_level)
+        green_level_log = np.log10(green_level)
+        mid_level = 10 ** ((red_level_log + green_level_log) * 0.5)
 
-    @classmethod
-    def make_from_images(
-        cls,
-        images: Iterable[np.ndarray],
-        marker_pattern: CalibrationPattern,
-        fraction: float = 1,
-        verbose: bool = False,
-        plot: bool = False,
-    ) -> "Calibration":
-        """Generate new calibration from images and chessboard object."""
+        # Average voronoi plots
+        img = np.zeros((h, w), dtype=np.float32)
+        for points, squared_errors in zip(
+            self.image_points_batch, self.squared_error_distances
+        ):
+            intensities = np.sqrt(squared_errors)
 
-        # Arrays to store object points and image points from all the images.
-        object_points_batch = []  # 3d point in real world space
-        image_points_batch = []  # 2d points in image plane.
+            rect = (0, 0, w, h)
+            subdiv = cv2.Subdiv2D(rect)
+            subdiv.insert(points)
 
-        image = None
-        for i, image in enumerate(images):
-            if image.ndim == 3:
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            img_voronoi = np.zeros((h, w), dtype=np.float32)
+            facets, _ = subdiv.getVoronoiFacetList([])
+            for poly, value in zip(facets, intensities):
+                color = float(value)
+                poly = poly.astype(int)
+                cv2.fillConvexPoly(img_voronoi, poly, color, cv2.LINE_4, 0)
+            img += img_voronoi
 
-            try:
-                image_points, object_points = marker_pattern.find_in_image(image)
-                image_points_batch.append(image_points)
-                object_points_batch.append(object_points)
-                if verbose:
-                    print(f"calibration pattern detected : {i}")
-            except ValueError:
-                if verbose:
-                    print(f"calibration pattern not found : {i}")
+        # Convert image to log
+        np.log10(img, out=img)
 
-        if image is None:
-            raise ValueError("images may not be empty")
+        if show_legend:
+            img[-20:] = np.linspace(red_level_log, green_level_log, img.shape[1])
 
-        return cls.make(
-            object_points_batch,
-            image_points_batch,
-            image.shape[::-1],
-            fraction=fraction,
-            verbose=verbose,
-            plot=plot,
-        )
+        # Map values to green yellow red color map
+        img -= red_level_log
+        img *= 120 / (green_level_log - red_level_log)
 
-    @classmethod
-    def make(
-        cls,
-        object_points_batch: Sequence,
-        image_points_batch: Sequence,
-        image_size: tuple,
-        fraction: float = 1,
-        verbose: bool = False,
-        plot: bool = False,
-    ) -> "Calibration":
-        """
-        Generate new calibration from object points and image points
+        np.clip(img, 0, 120, out=img)
+        img = np.stack([img] + [np.ones_like(img)] * 2, axis=-1)
+        cv2.cvtColor(img, cv2.COLOR_HSV2BGR, dst=img)
+        img *= 255
+        img = img.astype(np.uint8)
 
-        Args:
-            fraction (float): Fraction of Images used to calibrate.
-                If fraction < 1, the calibration is performed twice where
-                for the second time, only a fraction of the images is used.
-        """
+        if show_legend:
+            color = (0, 0, 0)
+            font = cv2.FONT_HERSHEY_SIMPLEX
 
-        if verbose:
-            print("Calibrate ...")
+            texts = {
+                4: (f"{red_level:.2f}px", 0),
+                w - 4: (f"{green_level:.2f}px", 1),
+                w // 2: (f"{mid_level:.2f}px", 0.5),
+            }
 
-        rms_error, intrinsic, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
-            object_points_batch,
-            image_points_batch,
-            image_size,
-            None,
-            None,
-        )
+            for x, (text, pos) in texts.items():
+                x -= int(pos * cv2.getTextSize(text, font, 0.5, 1)[0][0])
+                cv2.putText(img, text, (x, h - 1 - 4), font, 0.5, color, 1, cv2.LINE_AA)
 
-        if fraction != 1:
-            # test calibration accuracy
-            inverted_scores = []
-            for obj, pix, rvec, tvec in zip(
-                object_points_batch, image_points_batch, rvecs, tvecs
-            ):
-                pix_calculated, _ = cv2.projectPoints(
-                    obj, rvec, tvec, intrinsic, dist_coeffs
-                )
-                inverted_score = np.sum((pix - pix_calculated[:, 0]) ** 2)
-                inverted_scores.append(inverted_score)
+        # plot image points in black
+        if show_points:
+            color = (0, 0, 0)
+            for points in np.concatenate(self.image_points_batch, axis=0).astype(int):
+                cv2.circle(img, points, 2, color, cv2.FILLED, cv2.LINE_4, 0)
 
-            # set threshold to fraction percentile
-            threshold_score = np.sort(inverted_scores)[
-                int(len(inverted_scores) * fraction)
-            ]
+        return img
 
-            # pick images that are better than the threshold
-            object_points_batch2 = []
-            image_points_batch2 = []
-            for obj, pix, inverted_score in zip(
-                object_points_batch, image_points_batch, inverted_scores
-            ):
-                if inverted_score < threshold_score:
-                    object_points_batch2.append(obj)
-                    image_points_batch2.append(pix)
-            object_points_batch = object_points_batch2
-            image_points_batch = image_points_batch2
 
+def calibration_from_image_files(
+    image_files: Sequence[Union[pathlib.Path, str]],
+    marker_pattern: CalibrationPattern,
+    fraction: float = 1.0,
+    verbose: bool = False,
+    plot: bool = False,
+) -> "IntrinsicCalibrationWithData":
+    """Generate new calibration from image files."""
+    if not image_files:
+        raise ValueError("image_file must not be empty")
+
+    def gen():
+        for file in image_files:
+            yield cv2.imread(str(file), flags=cv2.IMREAD_GRAYSCALE)
+
+    return calibration_from_images(
+        images=gen(),
+        marker_pattern=marker_pattern,
+        fraction=fraction,
+        verbose=verbose,
+    )
+
+
+def calibration_from_images(
+    images: Iterable[np.ndarray],
+    marker_pattern: CalibrationPattern,
+    fraction: float = 1.0,
+    verbose: bool = False,
+) -> "IntrinsicCalibrationWithData":
+    """Generate new calibration from images and chessboard object."""
+
+    # Arrays to store object points and image points from all the images.
+    object_points_batch = []  # 3d point in real world space
+    image_points_batch = []  # 2d points in image plane.
+
+    image = None
+    for i, image in enumerate(images):
+        if image.ndim == 3:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        try:
+            image_points, object_points = marker_pattern.find_in_image(image)
+            image_points_batch.append(image_points)
+            object_points_batch.append(object_points)
             if verbose:
-                print(
-                    f"Calibrate again using better {int(fraction*100)}th percentile ..."
-                )
+                print(f"Calibration pattern detected : {i}")
+        except ValueError:
+            if verbose:
+                print(f"Calibration pattern not found : {i}")
 
-            # redo calibration with most accurate source images only
-            rms_error, intrinsic, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
-                object_points_batch, image_points_batch, image_size, None, None
-            )
+    if image is None:
+        raise ValueError("images may not be empty")
 
+    if not len(image_points):
+        raise ValueError("No points to calibrate found")
+
+    height, width = image.shape[:2]
+
+    return calibration_from_points(
+        object_points_batch,
+        image_points_batch,
+        (width, height),
+        fraction=fraction,
+        verbose=verbose,
+    )
+
+
+def calibration_from_points(
+    object_points_batch: Sequence,
+    image_points_batch: Sequence,
+    image_size: Tuple[int, int],
+    fraction: float = 1.0,
+    verbose: bool = False,
+) -> "IntrinsicCalibrationWithData":
+    """
+    Generate new calibration from object points and image points
+
+    Args:
+        fraction (float): Fraction of Images used to calibrate.
+            If fraction < 1, the calibration is performed twice where
+            for the second time, only a fraction of the images is used.
+    """
+
+    if verbose:
+        print("Calibrate ...")
+
+    rms_error, intrinsic, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
+        object_points_batch, image_points_batch, image_size, None, None
+    )
+
+    if fraction < 1:
         # test calibration accuracy
-        squared_error_distances = []
+        inverted_scores = []
         for obj, pix, rvec, tvec in zip(
             object_points_batch, image_points_batch, rvecs, tvecs
         ):
             pix_calculated, _ = cv2.projectPoints(
                 obj, rvec, tvec, intrinsic, dist_coeffs
             )
-            squared_error_distance = (
-                np.linalg.norm(pix - pix_calculated[:, 0], axis=-1) ** 2
+            inverted_score = np.sum((pix - pix_calculated[:, 0]) ** 2)
+            inverted_scores.append(inverted_score)
+
+        # set threshold to fraction percentile
+        threshold_score = np.sort(inverted_scores)[int(len(inverted_scores) * fraction)]
+
+        # pick images that are better than the threshold
+        object_points_batch2 = []
+        image_points_batch2 = []
+        for obj, pix, inverted_score in zip(
+            object_points_batch, image_points_batch, inverted_scores
+        ):
+            if inverted_score < threshold_score:
+                object_points_batch2.append(obj)
+                image_points_batch2.append(pix)
+        object_points_batch = object_points_batch2
+        image_points_batch = image_points_batch2
+
+        if verbose:
+            print(
+                f"Calibrate again using better {int(fraction * 100)}th percentile ..."
             )
-            squared_error_distances.append(squared_error_distance)
 
-        if plot:
-            import matplotlib.pyplot as plt
-            from scipy.interpolate import griddata
-            from scipy import ndimage
-
-            pix = np.concatenate(image_points_batch, axis=0).reshape((-1, 2))
-            error = np.sqrt(np.concatenate(squared_error_distances, axis=0).flatten())
-
-            grid_x, grid_y = np.mgrid[0 : image_size[0], 0 : image_size[1]]
-            error_image = griddata(
-                pix, error, (grid_x, grid_y), method="linear"
-            ).astype(np.float32)
-            mask = np.isnan(error_image)
-
-            factor = np.nanmax(error_image) / 255.0
-            src = (np.where(mask, 0.0, error_image) / factor).astype(np.uint8)
-            extrapolated = cv2.inpaint(
-                src, mask.astype(np.uint8), 10, cv2.INPAINT_NS
-            ).astype(np.float32)
-            extrapolated *= factor
-            error_image = np.where(mask, extrapolated, error_image)
-
-            error_image = ndimage.gaussian_filter(
-                error_image, image_size[0] // 50
-            ).astype(np.float32)
-            error_image *= (~mask).astype(np.float32)
-
-            im = plt.imshow(error_image.astype(np.float32).T)
-            plt.colorbar(im)
-            plt.title("Estimated euclidian error distance in pixels")
-            plt.show()
-
-            im = plt.imshow(
-                np.ones_like(error_image.astype(np.float32).T),
-                cmap="gray",
-                vmin=0,
-                vmax=1.2,
-            )
-            for pix in image_points_batch:
-                plt.plot(pix[:, 0], pix[:, 1], "+")
-            plt.axis("equal")
-            plt.title("Calibration point coverage")
-            plt.show()
-
-        max_error = float(
-            np.sqrt(np.max(np.concatenate(squared_error_distances, axis=0)))
+        # redo calibration with most accurate source images only
+        rms_error, intrinsic, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
+            object_points_batch, image_points_batch, image_size, None, None
         )
 
-        timestamp = int(time.time() * 1000)
+    # test calibration accuracy
+    squared_error_distances = []
+    for obj, pix, rvec, tvec in zip(
+        object_points_batch, image_points_batch, rvecs, tvecs
+    ):
+        pix_calculated, _ = cv2.projectPoints(obj, rvec, tvec, intrinsic, dist_coeffs)
+        squared_error_distance = (
+            np.linalg.norm(pix - pix_calculated[:, 0], axis=-1) ** 2
+        )
+        squared_error_distances.append(squared_error_distance)
 
-        instance = cls(intrinsic, dist_coeffs, rms_error, max_error, timestamp)
+    max_error = float(np.sqrt(np.max(np.concatenate(squared_error_distances, axis=0))))
 
-        return instance
+    timestamp = int(time.time() * 1000)
+
+    instance = IntrinsicCalibrationWithData(
+        intrinsic,
+        dist_coeffs,
+        image_size,
+        rms_error,
+        max_error,
+        timestamp,
+        image_points_batch,
+        squared_error_distances,
+    )
+
+    return instance
 
 
 def look_at_extrinsic(
@@ -788,9 +864,9 @@ class PointProjector:
 
     def __init__(
         self,
-        camera_mat: "Union[np.ndarray, None]" = None,
-        intrinsic: "Union[np.ndarray, None]" = None,
-        extrinsic: "Union[np.ndarray, None]" = None,
+        camera_mat: Union[np.ndarray, None] = None,
+        intrinsic: Union[np.ndarray, None] = None,
+        extrinsic: Union[np.ndarray, None] = None,
     ):
         if camera_mat is None:
             if intrinsic is None or extrinsic is None:
@@ -811,9 +887,9 @@ class PointProjector:
 
     def update(
         self,
-        camera_mat: "Union[np.ndarray, None]" = None,
-        intrinsic: "Union[np.ndarray, None]" = None,
-        extrinsic: "Union[np.ndarray, None]" = None,
+        camera_mat: Union[np.ndarray, None] = None,
+        intrinsic: Union[np.ndarray, None] = None,
+        extrinsic: Union[np.ndarray, None] = None,
     ):
         """
         Update the camera matrix, intrinsic or extrinsic
@@ -828,7 +904,7 @@ class PointProjector:
             self.__init__(camera_mat, intrinsic, extrinsic)
 
     def pix2obj(
-        self, xy: ArrayLike, Z: "Union[ArrayLike, float]" = 0.0, axis: int = -1
+        self, xy: ArrayLike, Z: Union[ArrayLike, float] = 0.0, axis: int = -1
     ) -> np.ndarray:
         """
         Convert pixel coordiantes to object coordinates

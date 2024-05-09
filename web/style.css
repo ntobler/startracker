@@ -5,6 +5,7 @@ body {
     height: 100%;
     font-family: Consolas, monospace;
     background-color: #111;
+    font-size: 0.8em;
 }
 
 #footerBar {
@@ -30,7 +31,7 @@ body {
 }
 
 input[type=number] {
-    width: 4em;
+    width: 3em;
     font-family: Consolas, monospace;
     border: 2px solid red;
     background-color: #0000;
