@@ -19,6 +19,33 @@ from . import kalkam
 from typing import Optional, Union, Tuple
 
 
+def create_catalog(
+    cal: kalkam.IntrinsicCalibration,
+    data_dir: Union[pathlib.Path, str],
+    magnitude_threshold: float = 5.5,
+    verbose: bool = False,
+):
+    """
+    Create a new star catalog.
+
+    Args:
+        cal: Calibration object.
+        data_dir: Directory to store catalog in.
+        magnitude_threshold: Star magnitudes to include in the catalog.
+        verbose: Print information.
+    """
+    cots_star_tracker.create_catalog(
+        _get_camera_params(cal), data_dir, b_thresh=magnitude_threshold, verbose=verbose
+    )
+
+
+def _get_camera_params(
+    cal: kalkam.IntrinsicCalibration,
+) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    """Return arguments for cots_star_tracker function"""
+    return (cal.intrinsic, np.array(cal.image_size), cal.dist_coeffs)
+
+
 @dataclasses.dataclass(frozen=True)
 class AttitudeEstimationResult:
     quat: np.ndarray
@@ -45,15 +72,24 @@ ERROR_ATTITUDE_RESULT = AttitudeEstimationResult(
 )
 
 
+@dataclasses.dataclass
+class AttitudeEstimatorConfig:
+    min_star_area: int = 3
+    """Minimum area in pixels for a star to be detected."""
+    max_star_area: int = 100
+    """Maximum area in pixels for a star to be detected"""
+    n_match: int = 5
+    """Number of required star matches for a sucessful attitude estimation."""
+    star_match_pixel_tol: float = 2.0
+    """Tolerance in pixels for a star to be recognized as match."""
+
+
 class AttitudeEstimator:
     def __init__(
         self,
-        calibration_file: Union[pathlib.Path, str],
+        cal: kalkam.IntrinsicCalibration,
         data_dir: Union[pathlib.Path, str],
-        min_star_area: int = 3,
-        max_star_area: int = 100,
-        n_match: int = 5,
-        star_match_pixel_tol: float = 2.0,
+        config: Optional[AttitudeEstimatorConfig] = None,
     ):
         """
         Star based attitude estimation.
@@ -61,17 +97,14 @@ class AttitudeEstimator:
         Args:
             calibration_file: Camera calibration json file.
             data_dir: Star catalog data directory.
-            min_star_area: Minimum area in pixels for a star to be detected.
-            max_star_area: Maximum area in pixels for a star to be detected.
-            n_match: Required minimum number of matches for a successful attitude lock.
-            star_match_pixel_tol: Tolerance in pixels for a star to be recognized as match.
+            config: Attitude estimation configuration to be used
         """
-        self._data_dir = pathlib.Path(data_dir)
-        self._cam_file = pathlib.Path(calibration_file)
 
-        self._min_star_area = min_star_area
-        self._max_star_area = max_star_area
-        self._n_match = n_match
+        if config is None:
+            config = AttitudeEstimatorConfig()
+
+        self._data_dir = pathlib.Path(data_dir)
+        self.cal = cal
 
         self._k = np.load(self._data_dir / "k.npy")
         self._m = np.load(self._data_dir / "m.npy")
@@ -80,15 +113,23 @@ class AttitudeEstimator:
         self._indexed_star_pairs = np.load(self._data_dir / "indexed_star_pairs.npy")
         self.cat_mag = np.load(self._data_dir / "mag.npy")
 
-        # Inter start angle threshold
-        self._intrinsic, _, self._dist_coeffs = cots_star_tracker.read_cam_json(
-            calibration_file
-        )
-        dx = self._intrinsic[0, 0]
-        self._isa_thresh = star_match_pixel_tol * (1 / dx)
+        self._isa_thresh = 0.0
 
-    def image_xyz_to_xy(self, image_xyz):
-        image_xy = (self._intrinsic @ image_xyz.T).T
+        self.config = config
+
+    @property
+    def config(self) -> AttitudeEstimatorConfig:
+        return self._config.copy()
+
+    @config.setter
+    def config(self, config: AttitudeEstimatorConfig):
+        self._config = config
+
+        fx = float(self.cal.intrinsic[0, 0])
+        self._isa_thresh = config.star_match_pixel_tol / fx
+
+    def image_xyz_to_xy(self, image_xyz: np.ndarray) -> np.ndarray:
+        image_xy = (self.cal.intrinsic @ image_xyz.T).T
         image_xy = image_xy[..., :2] / image_xy[..., 2:]
         image_xy = kalkam.PointUndistorter(self.cal).distort(image_xy)
         return image_xy
@@ -109,7 +150,7 @@ class AttitudeEstimator:
         try:
             q_est, id_match, n_matches, x_obs, _ = cots_star_tracker.star_tracker(
                 image,
-                str(self._cam_file),
+                _get_camera_params(self.cal),
                 darkframe=darkframe,
                 m=self._m,
                 q=self._q,
@@ -117,16 +158,17 @@ class AttitudeEstimator:
                 k=self._k,
                 indexed_star_pairs=self._indexed_star_pairs,
                 graphics=False,
-                min_star_area=self._min_star_area,
-                max_star_area=self._max_star_area,
+                min_star_area=self._config.min_star_area,
+                max_star_area=self._config.max_star_area,
                 isa_thresh=self._isa_thresh,
-                nmatch=self._n_match,
+                nmatch=self._config.n_match,
             )
         except cots_star_tracker.StartrackerError:
             return ERROR_ATTITUDE_RESULT
 
         id_match = id_match[:, 0]
-        image_xyz = x_obs.T
+        image_xyz = x_obs.T[id_match != -1]
+        id_match = id_match[id_match != -1]
         cat_xyz = self.cat_xyz.T[id_match]
         star_mags = self.cat_mag[id_match]
         cat_xyz = scipy.spatial.transform.Rotation.from_quat(q_est).inv().apply(cat_xyz)
@@ -146,12 +188,13 @@ class AttitudeFilter:
         self.attitude_quat = None
         self.estimation_id = 0
 
-    def put_quat(self, quat: np.ndarray, confidence, time: float):
+    def put_quat(self, quat: np.ndarray, confidence: float, time: float):
         """
         Add quaternion sample to be filtered.
 
         Args:
             quat: Quaternion.
+            confidence: Confidence weight
             time: Observation time of the quaternion in seconds
                 relative to an arbitrary point in time.
         """
@@ -214,7 +257,7 @@ class ImageAcquisitioner:
             self.mode = AttitudeEstimationModeEnum.FAULT
         else:
             self._attitude_estimator = AttitudeEstimator(
-                pers.cam_file,
+                kalkam.IntrinsicCalibration.from_json(pers.cam_file),
                 pers.star_data_dir,
             )
 

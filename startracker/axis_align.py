@@ -75,17 +75,16 @@ class App(webutil.QueueAbstractClass):
 
         self._rng = np.random.default_rng(42)
 
-        self._cam_cal = calibration.CameraCalibration.make_dummy()
-
         pers = persistent.Persistent.get_instance()
+
+        self._cal = kalkam.IntrinsicCalibration.from_json(pers.cam_file)
 
         # TODO load real settings
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
 
         self._attitude_est = attitude_estimation.AttitudeEstimator(
-            pers.cam_file,
-            pers.star_data_dir,
+            self._cal, pers.star_data_dir
         )
 
         axis_relative_to_camera = self._rng.normal(size=(3,)) * 0.5 + [0, 0, 1]
@@ -158,7 +157,7 @@ class App(webutil.QueueAbstractClass):
         return d
 
     def _get_camera_frame(self, segments_per_side: int = 10) -> np.ndarray:
-        points = self._cam_cal.get_distorted_camera_frame(segments_per_side)
+        points = calibration.get_distorted_camera_frame(self._cal, segments_per_side)
         points = project_radial(self.axis_rot.apply(points))
         return points
 

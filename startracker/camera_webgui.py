@@ -21,12 +21,10 @@ from flask_sock import Sock, Server, ConnectionClosed
 import numpy as np
 import cv2
 import scipy.spatial
-import cots_star_tracker
 
 from startracker import camera
 from startracker import persistent
 from startracker import webutil
-from startracker import calibration
 from startracker import kalkam
 from startracker import image_utils
 from startracker import attitude_estimation
@@ -38,12 +36,16 @@ class IntrinsicCalibrator:
 
     cal: Optional[kalkam.IntrinsicCalibrationWithData]
 
-    def __init__(self, dir: pathlib.Path):
+    def __init__(self, dir: pathlib.Path, cal_file: pathlib.Path):
         self._dir = dir
+        self._cal_file = cal_file
         self.index = 0
         self._logger = logging.getLogger("Camera")
         self.set_pattern(19, 11, 283 / 6)
-        self.cal = None
+        try:
+            self.cal = kalkam.IntrinsicCalibration.from_json(cal_file)
+        except FileNotFoundError:
+            self.cal = None
 
     def set_pattern(self, width: int, height: int, size: float):
         """Set calibration pattern size."""
@@ -93,11 +95,7 @@ class IntrinsicCalibrator:
 
     def save(self):
         """Save calibration to the filesystem."""
-        width, height = self.cal.image_size
-        cal = calibration.CameraCalibration.make(
-            self.cal.intrinsic, width, height, self.cal.dist_coeffs, self.cal.rms_error
-        )
-        cal.save_json(self._dir / "calibration.json")
+        self.cal.to_json(self._cal_file)
 
 
 class App(webutil.QueueAbstractClass):
@@ -116,18 +114,23 @@ class App(webutil.QueueAbstractClass):
 
         self._logger = logging.getLogger("Camera")
         self._image_cache = None
-        self._intrinsic_calibrator = IntrinsicCalibrator(self.pers.calibration_dir)
+        self._intrinsic_calibrator = IntrinsicCalibrator(
+            self.pers.calibration_dir, self.pers.cam_file
+        )
 
         self._camera_job = "stop"
         self._cam = None
 
         self._attitude_overlay = False
         self.attitude = None
-        try:
-            self._ae = attitude_estimation.AttitudeEstimator(
-                self.pers.cam_file, self.pers.star_data_dir
-            )
-        except FileNotFoundError:
+        if self._intrinsic_calibrator.cal is not None:
+            try:
+                self._ae = attitude_estimation.AttitudeEstimator(
+                    self._intrinsic_calibrator.cal, self.pers.star_data_dir
+                )
+            except FileNotFoundError:
+                self._ae = None
+        else:
             self._ae = None
 
     def _get_state(self) -> dict:
@@ -217,8 +220,13 @@ class App(webutil.QueueAbstractClass):
 
     @webutil.QueueAbstractClass.queue_abstract
     def create_star_data(self):
-        cots_star_tracker.create_catalog(
-            self.pers.cam_file, self.pers.star_data_dir, b_thresh=5.5, verbose=True
+        if self._intrinsic_calibrator.cal is None:
+            raise ValueError("No calibration available")
+        attitude_estimation.create_catalog(
+            self._intrinsic_calibrator.cal,
+            self.pers.star_data_dir,
+            magnitude_threshold=5.5,
+            verbose=True,
         )
         return self._get_state()
 

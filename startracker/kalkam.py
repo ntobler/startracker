@@ -453,6 +453,38 @@ class IntrinsicCalibration:
             )
         )
 
+    @classmethod
+    def from_json(cls, file: Union[pathlib.Path, str]):
+        """
+        Create calibration from JSON.
+
+        Args:
+            filename: JSON file name
+        """
+        with open(file, "r") as f:
+            d = json.load(f)
+        intrinsic = np.array(d["intrinsic"])
+        dist_coeffs = np.array(d["dist_coeffs"]) if len(d["dist_coeffs"]) else None
+        image_size = tuple(d["image_size"])
+        return cls(intrinsic, dist_coeffs, image_size)
+
+    def to_json(self, file: Union[pathlib.Path, str]):
+        """
+        Save calibration to JSON.
+
+        Args:
+            filename: JSON file name
+        """
+        d = {
+            "intrinsic": self.intrinsic.tolist(),
+            "dist_coeffs": (
+                self.dist_coeffs.tolist() if self.dist_coeffs is not None else []
+            ),
+            "image_size": self.image_size,
+        }
+        with open(file, "w") as f:
+            json.dump(d, f)
+
 
 @dataclasses.dataclass
 class IntrinsicCalibrationWithData(IntrinsicCalibration):

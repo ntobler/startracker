@@ -15,6 +15,7 @@ from startracker import persistent
 from startracker import transform
 from startracker import camera
 from startracker import image_utils
+from startracker import attitude_estimation
 
 from typing import Tuple, List, Optional
 
@@ -32,15 +33,17 @@ class TestingMaterial:
         self.testing_dir = user_data_dir / "testing"
         self.testing_dir.mkdir(exist_ok=True)
 
+        cal = calibration.make_dummy()
+
         self.cam_file = self.testing_dir / "calibration.json"
         if (not self.cam_file.exists()) or (not use_existing):
-            calibration.CameraCalibration.make_dummy().save_json(self.cam_file)
+            cal.to_json(self.cam_file)
 
         self.stardata_dir = self.testing_dir / "stardata"
         if (not self.stardata_dir.exists()) or (not use_existing):
             self.stardata_dir.mkdir(exist_ok=True)
-            cots_star_tracker.create_catalog(
-                self.cam_file, self.stardata_dir, b_thresh=5.5, verbose=True
+            attitude_estimation.create_catalog(
+                cal, self.stardata_dir, magnitude_threshold=5.5, verbose=True
             )
 
     def patch_persistent(self):
@@ -58,7 +61,7 @@ def get_catalog_stars() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     return az, el, mag
 
 
-class StarImageGenerator:
+class StarImageGenerator:  # TODO use cal instead of single arguments
     def __init__(
         self,
         intrinsic: Optional[np.ndarray] = None,
@@ -328,10 +331,8 @@ class MockStarCam(camera.Camera):
         super().__init__(camera_settings)
         cam_file = TestingMaterial(use_existing=True).cam_file
         self._rng = np.random.default_rng(42)
-        intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
-            cam_file
-        )
-        self._sig = StarImageGenerator(intrinsic, (width, height), dist_coeffs)
+        cal = kalkam.IntrinsicCalibration.from_json(cam_file)
+        self._sig = StarImageGenerator(cal.intrinsic, cal.image_size, cal.dist_coeffs)
 
     def capture_raw(self):
         return self.capture()

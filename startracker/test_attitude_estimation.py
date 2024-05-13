@@ -1,18 +1,19 @@
 import numpy as np
 import scipy.spatial.transform
-import cots_star_tracker
 
 from . import attitude_estimation
 from . import testing_utils
+from . import kalkam
 
 
 def test_attutude_estimation_error():
     tm = testing_utils.TestingMaterial(use_existing=True)
 
-    ae = attitude_estimation.AttitudeEstimator(tm.cam_file, tm.stardata_dir)
-    intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
-        tm.cam_file
-    )
+    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    ae = attitude_estimation.AttitudeEstimator(cal, tm.stardata_dir)
+    intrinsic = cal.intrinsic
+    dist_coeffs = cal.dist_coeffs
+    width, height = cal.image_size
 
     sig = testing_utils.StarImageGenerator(
         intrinsic, (width, height), dist_coeffs, noise_sigma=10
@@ -30,10 +31,11 @@ def test_attutude_estimation():
 
     rng = np.random.default_rng(42)
 
-    ae = attitude_estimation.AttitudeEstimator(tm.cam_file, tm.stardata_dir)
-    intrinsic, (width, height), dist_coeffs = cots_star_tracker.read_cam_json(
-        tm.cam_file
-    )
+    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    ae = attitude_estimation.AttitudeEstimator(cal, tm.stardata_dir)
+    intrinsic = cal.intrinsic
+    width, height = cal.image_size
+    dist_coeffs = cal.dist_coeffs
 
     sig = testing_utils.StarImageGenerator(intrinsic, (width, height), dist_coeffs)
 
