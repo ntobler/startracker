@@ -20,43 +20,52 @@ from flask import (
 from flask_sock import Sock, Server, ConnectionClosed
 import numpy as np
 import cv2
+import scipy.spatial
+import cots_star_tracker
 
 from startracker import camera
 from startracker import persistent
 from startracker import webutil
 from startracker import calibration
 from startracker import kalkam
+from startracker import image_utils
+from startracker import attitude_estimation
 
-from typing import Literal, Optional
+from typing import Literal, Optional, List, BinaryIO
 
 
 class IntrinsicCalibrator:
 
     cal: Optional[kalkam.IntrinsicCalibrationWithData]
 
-    def __init__(self):
-        self._dir = persistent.Persistent.get_instance().calibration_dir
+    def __init__(self, dir: pathlib.Path):
+        self._dir = dir
         self.index = 0
         self._logger = logging.getLogger("Camera")
         self.set_pattern(19, 11, 283 / 6)
         self.cal = None
 
     def set_pattern(self, width: int, height: int, size: float):
+        """Set calibration pattern size."""
         self.pattern = kalkam.ChArUcoPattern(width, height, size)
 
     def put_image(self, image: np.ndarray):
+        """Add an image to the calibration."""
         file = self._dir / f"image_{self.index:03d}.png"
         cv2.imwrite(str(file), image)
         self._logger.info(f"Put image {file.name}")
         self.index += 1
 
     def reset(self):
+        """Clear all images used for the calibration."""
         self.index = 0
 
-    def get_images(self):
+    def get_images(self) -> List[np.ndarray]:
+        """Get all calibration images."""
         return sorted(list(self._dir.glob("*.png")))
 
     def calibrate(self):
+        """Perform calibration."""
         image_files = self.get_images()
 
         if len(image_files) < 2:
@@ -67,7 +76,8 @@ class IntrinsicCalibrator:
         self.cal = kalkam.calibration_from_image_files(image_files, self.pattern)
         self._logger.info(f"Calibration finished rms error: {self.cal.rms_error}")
 
-    def plot_cal_png(self, filehandler) -> bytes:
+    def plot_cal_png(self, filehandler: BinaryIO) -> bytes:
+        """Plot calibration and return png in bytes"""
         if self.cal is None:
             return ValueError("No calibration present")
 
@@ -82,6 +92,7 @@ class IntrinsicCalibrator:
         filehandler.write(png)
 
     def save(self):
+        """Save calibration to the filesystem."""
         width, height = self.cal.image_size
         cal = calibration.CameraCalibration.make(
             self.cal.intrinsic, width, height, self.cal.dist_coeffs, self.cal.rms_error
@@ -97,20 +108,33 @@ class App(webutil.QueueAbstractClass):
     def __init__(self):
         super().__init__()
 
+        self.pers = persistent.Persistent.get_instance()
+
         self.terminate = False
 
         self.image_container = webutil.ImageData()
 
         self._logger = logging.getLogger("Camera")
         self._image_cache = None
-        self._intrinsic_calibrator = IntrinsicCalibrator()
+        self._intrinsic_calibrator = IntrinsicCalibrator(self.pers.calibration_dir)
 
         self._camera_job = "stop"
         self._cam = None
 
+        self._attitude_overlay = False
+        self.attitude = None
+        try:
+            self._ae = attitude_estimation.AttitudeEstimator(
+                self.pers.cam_file, self.pers.star_data_dir
+            )
+        except FileNotFoundError:
+            self._ae = None
+
     def _get_state(self) -> dict:
         state = {
             "intrinsic_image_count": self._intrinsic_calibrator.index,
+            "quat": self.attitude.quat.tolist() if self.attitude is not None else [],
+            "n_matches": self.attitude.n_matches if self.attitude is not None else 0,
         }
         return state
 
@@ -124,6 +148,7 @@ class App(webutil.QueueAbstractClass):
         pattern_width: int,
         pattern_height: int,
         pattern_size: float,
+        attitude_overlay: bool,
     ):
         if self._cam is None:
             raise ValueError("Camera is not initialized")
@@ -140,6 +165,8 @@ class App(webutil.QueueAbstractClass):
         )
 
         self._logger.info(f"Setting settings {settings}")
+
+        self._attitude_overlay = attitude_overlay
 
         return self._get_state()
 
@@ -188,26 +215,57 @@ class App(webutil.QueueAbstractClass):
             png = f.read()
         return png
 
+    @webutil.QueueAbstractClass.queue_abstract
+    def create_star_data(self):
+        cots_star_tracker.create_catalog(
+            self.pers.cam_file, self.pers.star_data_dir, b_thresh=5.5, verbose=True
+        )
+        return self._get_state()
+
+    def get_attitude(
+        self, image: np.ndarray
+    ) -> Optional[attitude_estimation.AttitudeEstimationResult]:
+        if self._ae is None:
+            return None
+        return self._ae(image)
+
     def run(self):
         print("starting Main")
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
         with self._cam:
             while not self.terminate:
+                self._tick()
 
-                if self._camera_job == "darkframe":
-                    self._cam.record_darkframe()
-                    self._camera_job = "stop"
-                elif self._camera_job in ["single", "continuous"]:
-                    self._logger.info("Capture image ...")
-                    image = self._cam.capture()
-                    time.sleep(0.2)
-                    self.image_container.put(image)
-                    self._image_cache = image
-                    if self._camera_job == "single":
-                        self._camera_job = "stop"
+    def _tick(self):
+        if self._camera_job == "darkframe":
+            self._cam.record_darkframe()
+            self._camera_job = "stop"
+        elif self._camera_job in ["single", "continuous"]:
+            self._logger.info("Capture image ...")
+            image = self._cam.capture()
+            time.sleep(0.2)
+            self._image_cache = image
+            self.attitude = self.get_attitude(image)
 
-                self._process_pending_calls()
+            # Draw overlay if possible and enabled
+            if (
+                self._attitude_overlay
+                and self.attitude is not None
+                and self._intrinsic_calibrator.cal is not None
+            ):
+                r = scipy.spatial.transform.Rotation.from_quat(self.attitude.quat)
+                extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
+                image = image_utils.draw_grid(
+                    image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
+                )
+
+            self.image_container.put(image)
+
+            if self._camera_job == "single":
+                self._camera_job = "stop"
+
+        self._process_pending_calls()
 
 
 class WebApp:
@@ -231,6 +289,7 @@ class WebApp:
         self.flask_app.post("/put_calibration_image")(self._put_calibration_image)
         self.flask_app.post("/reset_calibration")(self._reset_calibration)
         self.flask_app.post("/calibrate")(self._calibrate)
+        self.flask_app.post("/create_star_data")(self._calibrate)
         self.sock.route("/image")(self._image)
 
     def _run_app(self):
@@ -268,6 +327,7 @@ class WebApp:
             int(params["pattern_width"]),
             int(params["pattern_height"]),
             float(params["pattern_size"]),
+            bool(params["overlay"]),
         )
         return jsonify(d)
 
@@ -286,6 +346,10 @@ class WebApp:
 
     def _calibrate(self):
         d = self.app.calibrate()
+        return jsonify(d)
+
+    def _create_star_data(self):
+        d = self.app.create_star_data()
         return jsonify(d)
 
     def _image(self, ws: Server):

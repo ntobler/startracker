@@ -27,6 +27,7 @@ function setSettings() {
         pattern_width: document.getElementById('pattern_w').value,
         pattern_height: document.getElementById('pattern_h').value,
         pattern_size: document.getElementById('pattern_s').value,
+        overlay: document.getElementById('overlay').buttonValue == true,
     }
     fetch('/set_settings', {
         method: 'POST',
@@ -46,6 +47,13 @@ document.getElementById("binning").onchange = setSettings
 document.getElementById("pattern_w").onchange = setSettings
 document.getElementById("pattern_h").onchange = setSettings
 document.getElementById("pattern_s").onchange = setSettings
+document.getElementById("overlay").onclick = () => {
+    let el = document.getElementById("overlay")
+    let active = el.buttonValue == true ? false : true
+    el.buttonValue = active
+    el.classList = active ? ["active"] : []
+    setSettings()
+}
 
 function capture(mode) {
     let payload = {
@@ -113,6 +121,26 @@ document.getElementById('calibrate').onclick = () => {
         updateState(data)
     }).catch(error => {
         document.getElementById('calibrate').innerHTML = "Calibrate"
+        clearInterval(interval)
+        console.error('Error:', error);
+    });
+}
+
+document.getElementById('create_star_data').onclick = () => {
+
+    let interval = setInterval(function () {
+        let el = document.getElementById('create_star_data')
+        el.innerHTML += "."
+    }, 1000)
+
+    fetch('/create_star_data', {
+        method: 'POST',
+    }).then(response => response.json()).then((data) => {
+        document.getElementById('create_star_data').innerHTML = "Create"
+        clearInterval(interval)
+        updateState(data)
+    }).catch(error => {
+        document.getElementById('create_star_data').innerHTML = "Create"
         clearInterval(interval)
         console.error('Error:', error);
     });

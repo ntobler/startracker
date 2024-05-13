@@ -55,3 +55,8 @@ button[type=button]:active {
     border-color: rgb(182, 182, 182);
     color: rgb(201, 201, 201);
 }
+
+button[type=button].active {
+    background-color: red;
+    color: black;
+}
