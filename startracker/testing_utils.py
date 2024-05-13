@@ -14,6 +14,7 @@ from startracker import kalkam
 from startracker import persistent
 from startracker import transform
 from startracker import camera
+from startracker import image_utils
 
 from typing import Tuple, List, Optional
 
@@ -84,22 +85,21 @@ class StarImageGenerator:
                 lens_focal_distance, sensor_diagonal, self.width, self.height
             )
         self.intrinsic = intrinsic
+        self._dist_coeffs = dist_coeffs
+        self._cal = kalkam.IntrinsicCalibration(self.intrinsic, self._dist_coeffs)
 
-        if dist_coeffs is not None:
-            self.distorter = kalkam.PointUndistorter(
-                kalkam.IntrinsicCalibration(intrinsic, dist_coeffs)
-            )
+        ANGLE_MARGIN_FACTOR = 1.2
+        self._cos_phi = self._cal.cos_phi(
+            (self.width, self.height), ANGLE_MARGIN_FACTOR
+        )
+
+        if self._dist_coeffs is not None:
+            self.distorter = kalkam.PointUndistorter(self._cal)
         else:
             self.distorter = None
 
         az, el, self.stars_mags = get_catalog_stars()
         self.stars_nwu = transform.azel2nwu(np.stack((az, el), axis=-1))
-
-        ANGLE_MARGIN_FACTOR = 1.2
-        self._cos_phi = np.cos(
-            ANGLE_MARGIN_FACTOR
-            * np.arctan(np.linalg.norm(imsize) / intrinsic[0, 0] / 2)
-        )
 
         self._rng = np.random.default_rng(42)
 
@@ -149,26 +149,24 @@ class StarImageGenerator:
         extrinsic = np.concatenate((rot.as_matrix().T, np.zeros((3, 1))), axis=-1)
         return self.image_from_extrinsic(extrinsic, grid=grid)
 
-    def _project_points(self, points: np.ndarray, extrinsic: np.ndarray) -> np.ndarray:
-        """Project star coordinates to pixels."""
-        pp = kalkam.PointProjector(intrinsic=self.intrinsic, extrinsic=extrinsic)
-        points = pp.obj2pix(points, axis=-1)
-        if self.distorter is not None:
-            points = self.distorter.distort(points)
-        return points
-
     def stars_from_extrinsic(self, extrinsic: np.ndarray):
 
         # Take z image vector of the inverted extrinsic
         target_vector = extrinsic[2, :3]
 
+        pp = kalkam.PointProjector(
+            intrinsic=self.intrinsic, extrinsic=extrinsic, dist_coeffs=self._dist_coeffs
+        )
+
         # Select all stars that are roughly in frame
-        in_frame = np.inner(self.stars_nwu, target_vector) > self._cos_phi
+        in_frame = np.inner(self.stars_nwu, target_vector) > self._cal.cos_phi(
+            (self.width, self.height)
+        )
         stars_nwu = self.stars_nwu[in_frame]
         stars_mags = self.stars_mags[in_frame]
 
         # Convert stars to pixels
-        stars_xy = self._project_points(stars_nwu, extrinsic)
+        stars_xy = pp.obj2pix(stars_nwu, axis=-1)
 
         return stars_mags, stars_xy
 
@@ -238,40 +236,7 @@ class StarImageGenerator:
         stars_mags = stars_mags[mask]
 
         if grid:
-
-            latitudes = np.radians(np.linspace(-90, 90, 18 * 2))
-            longitudes = np.radians(np.arange(0, 361, 15))
-
-            lat, lon = np.meshgrid(latitudes, longitudes)
-
-            x = np.cos(lon) * np.cos(lat)
-            y = np.sin(lon) * np.cos(lat)
-            z = np.sin(lat)
-            points = np.stack((x, y, z), axis=-1)
-
-            # Get in-frame point
-            target_vector = extrinsic[2, :3]
-            mask = np.inner(points, target_vector) > self._cos_phi
-            points = self._project_points(points, extrinsic)
-
-            c = 30
-            t = 1
-
-            points = np.round(points).astype(np.int32)
-            it = zip(
-                [points, np.swapaxes(points, 1, 0)],
-                [mask, np.swapaxes(mask, 1, 0)],
-            )
-            for points, mask in it:
-                for line, mask_line in zip(points, mask):
-                    last_xy = None
-                    for xy, m in zip(line, mask_line):
-                        if last_xy is not None:
-                            canvas = cv2.line(canvas, last_xy, xy, c, t)
-                        if not m:
-                            last_xy = None
-                        else:
-                            last_xy = xy
+            image_utils.draw_grid(canvas, extrinsic, self._cal, inplace=True)
 
         return canvas, stars_xy, stars_mags
 

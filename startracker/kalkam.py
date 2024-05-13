@@ -443,6 +443,14 @@ class IntrinsicCalibration:
     dist_coeffs: Optional[np.ndarray]
     """Opencv distortion coefficients"""
 
+    def cos_phi(self, imsize: Tuple[int, int], angle_margin_factor: float = 1) -> float:
+        return float(
+            np.cos(
+                angle_margin_factor
+                * np.arctan(np.linalg.norm(imsize) / self.intrinsic[0, 0] / 2)
+            )
+        )
+
 
 @dataclasses.dataclass
 class IntrinsicCalibrationWithData(IntrinsicCalibration):
@@ -849,11 +857,7 @@ def decompose_cammat(cammat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 class PointProjector:
-    """
-    Object to project points from 3D space to 2D space.
-
-    Does not take distortion into account.
-    """
+    """Object to project points from 3D space to 2D space."""
 
     camera_mat: np.ndarray
     """4x3 projection camera matrix."""
@@ -861,12 +865,15 @@ class PointProjector:
     """3x3 intrinsic camera matrix."""
     extrinsic: np.ndarray
     """4x3 extrinsic camera matrix."""
+    dist_coeffs: Optional[np.ndarray]
+    """Distortion coefficients or None."""
 
     def __init__(
         self,
-        camera_mat: Union[np.ndarray, None] = None,
-        intrinsic: Union[np.ndarray, None] = None,
-        extrinsic: Union[np.ndarray, None] = None,
+        camera_mat: Optional[np.ndarray] = None,
+        intrinsic: Optional[np.ndarray] = None,
+        extrinsic: Optional[np.ndarray] = None,
+        dist_coeffs: Optional[np.ndarray] = None,
     ):
         if camera_mat is None:
             if intrinsic is None or extrinsic is None:
@@ -885,23 +892,11 @@ class PointProjector:
             self.intrinsic = intrinsic[:3, :3]
             self.extrinsic = extrinsic[:3, :4]
 
-    def update(
-        self,
-        camera_mat: Union[np.ndarray, None] = None,
-        intrinsic: Union[np.ndarray, None] = None,
-        extrinsic: Union[np.ndarray, None] = None,
-    ):
-        """
-        Update the camera matrix, intrinsic or extrinsic
-
-        Fast function that uses cache if possible.
-        """
-        if camera_mat is None or np.allclose(self.camera_mat, camera_mat):
-            self.__init__(camera_mat, intrinsic, extrinsic)
-        if intrinsic is None or np.allclose(self.intrinsic, intrinsic):
-            self.__init__(camera_mat, intrinsic, extrinsic)
-        if extrinsic is None or np.allclose(self.extrinsic, extrinsic):
-            self.__init__(camera_mat, intrinsic, extrinsic)
+        self.dist_coeffs = dist_coeffs
+        if dist_coeffs is not None:
+            self._undistorter = PointUndistorter(
+                IntrinsicCalibration(self.intrinsic, self.dist_coeffs)
+            )
 
     def pix2obj(
         self, xy: ArrayLike, Z: Union[ArrayLike, float] = 0.0, axis: int = -1
@@ -918,6 +913,8 @@ class PointProjector:
             np.ndarray: object coordinates, shape=[3, n]
         """
         xy = np.swapaxes(xy, axis, -1)[..., None]
+        if self._undistorter is not None:
+            xy = self._undistorter.undisort(xy, axis=-1)
         Z = np.asarray(Z)
         if Z.ndim != 0:
             Z = np.swapaxes(Z, axis, -1)
@@ -940,5 +937,7 @@ class PointProjector:
         XYZ = np.swapaxes(XYZ, axis, -1)[..., None]
         pix_xys = self.camera_mat[:, :3] @ XYZ + self.camera_mat[:, 3:]
         pix_xy = pix_xys[..., :2, 0] / pix_xys[..., 2:, 0]
+        if self._undistorter is not None:
+            pix_xy = self._undistorter.distort(pix_xy, axis=-1)
         pix_xy = np.swapaxes(pix_xy, axis, -1)
         return pix_xy
