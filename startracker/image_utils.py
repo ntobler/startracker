@@ -25,11 +25,7 @@ def draw_grid(
     if not inplace:
         image = np.copy(image)
 
-    pp = kalkam.PointProjector(
-        intrinsic=cal.intrinsic, extrinsic=rot_mat, dist_coeffs=cal.dist_coeffs
-    )
-
-    height, width = image.shape[:2]
+    pp = kalkam.PointProjector(cal, rot_mat)
 
     latitudes = np.radians(np.linspace(-90, 90, 18 * 2))
     longitudes = np.radians(np.arange(0, 361, 15))
@@ -43,9 +39,7 @@ def draw_grid(
 
     # Get in-frame point
     target_vector = rot_mat[2, :3]
-    mask = np.inner(points, target_vector) > cal.cos_phi(
-        (width, height), angle_margin_factor=1.3
-    )
+    mask = np.inner(points, target_vector) > cal.cos_phi(angle_margin_factor=1.3)
     points = pp.obj2pix(points, axis=-1)
 
     c = 30

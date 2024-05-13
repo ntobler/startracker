@@ -442,12 +442,14 @@ class IntrinsicCalibration:
     """3x3 intrinsic matrix."""
     dist_coeffs: Optional[np.ndarray]
     """Opencv distortion coefficients"""
+    image_size: Tuple[int, int]
+    """Width and height in pixels."""
 
-    def cos_phi(self, imsize: Tuple[int, int], angle_margin_factor: float = 1) -> float:
+    def cos_phi(self, angle_margin_factor: float = 1) -> float:
         return float(
             np.cos(
                 angle_margin_factor
-                * np.arctan(np.linalg.norm(imsize) / self.intrinsic[0, 0] / 2)
+                * np.arctan(np.linalg.norm(self.image_size) / self.intrinsic[0, 0] / 2)
             )
         )
 
@@ -456,8 +458,6 @@ class IntrinsicCalibration:
 class IntrinsicCalibrationWithData(IntrinsicCalibration):
     """Intrinsic calibration data with additional information."""
 
-    image_size: Tuple[int, int]
-    """Width and height in pixels."""
     rms_error: float
     """Root mean squared calibration error in pixels"""
     max_error: float
@@ -870,33 +870,17 @@ class PointProjector:
 
     def __init__(
         self,
-        camera_mat: Optional[np.ndarray] = None,
-        intrinsic: Optional[np.ndarray] = None,
+        cal: IntrinsicCalibration,
         extrinsic: Optional[np.ndarray] = None,
-        dist_coeffs: Optional[np.ndarray] = None,
     ):
-        if camera_mat is None:
-            if intrinsic is None or extrinsic is None:
-                raise ValueError(
-                    "Either camera_mat or intrinsic and extrinsic must be given"
-                )
-            self.camera_mat = intrinsic[:3, :3] @ extrinsic[:3, :4]
-        else:
-            self.camera_mat = camera_mat
-
+        self.camera_mat = cal.intrinsic[:3, :3] @ extrinsic[:3, :4]
         self.camera_mat_inverse = np.linalg.inv(self.camera_mat[:, :3])
         self._b = (self.camera_mat_inverse[2] @ self.camera_mat[:, 3:])[0]
-        if intrinsic is None or extrinsic is None:
-            self.intrinsic, self.extrinsic = decompose_cammat(self.camera_mat)
-        else:
-            self.intrinsic = intrinsic[:3, :3]
-            self.extrinsic = extrinsic[:3, :4]
-
-        self.dist_coeffs = dist_coeffs
-        if dist_coeffs is not None:
-            self._undistorter = PointUndistorter(
-                IntrinsicCalibration(self.intrinsic, self.dist_coeffs)
-            )
+        self.intrinsic = cal.intrinsic[:3, :3]
+        self.extrinsic = extrinsic[:3, :4]
+        self.dist_coeffs = cal.dist_coeffs
+        if cal.dist_coeffs is not None:
+            self._undistorter = PointUndistorter(cal)
 
     def pix2obj(
         self, xy: ArrayLike, Z: Union[ArrayLike, float] = 0.0, axis: int = -1

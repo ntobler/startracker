@@ -90,11 +90,7 @@ class AttitudeEstimator:
     def image_xyz_to_xy(self, image_xyz):
         image_xy = (self._intrinsic @ image_xyz.T).T
         image_xy = image_xy[..., :2] / image_xy[..., 2:]
-        image_xy = kalkam.PointUndistorter(
-            kalkam.IntrinsicCalibration(
-                self._intrinsic, self._dist_coeffs
-            )  # TODO Ewwwwww fix this
-        ).distort(image_xy)
+        image_xy = kalkam.PointUndistorter(self.cal).distort(image_xy)
         return image_xy
 
     def __call__(

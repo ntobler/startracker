@@ -124,6 +124,7 @@ class CameraCalibration:
             kalkam.IntrinsicCalibration(
                 np.array(self.cal_dict["camera_matrix"]),
                 np.array(self.cal_dict["dist_coefs"]),
+                (p.width, p.height),
             )  # TODO Ewwwwww fix this
         ).undisort(points[:, :2])
 

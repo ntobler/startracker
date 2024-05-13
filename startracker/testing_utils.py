@@ -86,12 +86,12 @@ class StarImageGenerator:
             )
         self.intrinsic = intrinsic
         self._dist_coeffs = dist_coeffs
-        self._cal = kalkam.IntrinsicCalibration(self.intrinsic, self._dist_coeffs)
+        self._cal = kalkam.IntrinsicCalibration(
+            self.intrinsic, self._dist_coeffs, imsize
+        )
 
         ANGLE_MARGIN_FACTOR = 1.2
-        self._cos_phi = self._cal.cos_phi(
-            (self.width, self.height), ANGLE_MARGIN_FACTOR
-        )
+        self._cos_phi = self._cal.cos_phi(ANGLE_MARGIN_FACTOR)
 
         if self._dist_coeffs is not None:
             self.distorter = kalkam.PointUndistorter(self._cal)
@@ -154,18 +154,13 @@ class StarImageGenerator:
         # Take z image vector of the inverted extrinsic
         target_vector = extrinsic[2, :3]
 
-        pp = kalkam.PointProjector(
-            intrinsic=self.intrinsic, extrinsic=extrinsic, dist_coeffs=self._dist_coeffs
-        )
-
         # Select all stars that are roughly in frame
-        in_frame = np.inner(self.stars_nwu, target_vector) > self._cal.cos_phi(
-            (self.width, self.height)
-        )
+        in_frame = np.inner(self.stars_nwu, target_vector) > self._cal.cos_phi()
         stars_nwu = self.stars_nwu[in_frame]
         stars_mags = self.stars_mags[in_frame]
 
         # Convert stars to pixels
+        pp = kalkam.PointProjector(self._cal, extrinsic)
         stars_xy = pp.obj2pix(stars_nwu, axis=-1)
 
         return stars_mags, stars_xy
