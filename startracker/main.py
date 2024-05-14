@@ -4,7 +4,7 @@ import sys
 import logging
 import enum
 import argparse
-import subprocess
+import time
 
 import serial
 import numpy as np
@@ -189,20 +189,20 @@ class Shutdown(communication.Command):
     request_type: Type[communication.Message] = EmptyMessage
     response_type: Type[communication.Message] = Acknowledge
 
-    def __init__(self, enable_shutdown: bool):
+    def __init__(self, enable_shutdown: bool, shutdown_delay: float):
         """
         Quit the application.
 
         Args:
-            enable_shutdown: Application is allowed to shutdown the system
+            enable_shutdown: Application is allowed to shutdown the system.
+            shutdown_delay: Duration in seconds to wait before shutdown is triggered.
         """
         self._enable_shutdown = enable_shutdown
+        self._shutdown_delay = shutdown_delay
 
     def execute(self, request: EmptyMessage) -> Acknowledge:
-        import time
-
-        time.sleep(2)
         if self._enable_shutdown:
+            time.sleep(self._shutdown_delay)
             raise ShutdownInterrupt()
         else:
             raise KeyboardInterrupt()
@@ -254,7 +254,7 @@ class GetStars(communication.Command):
 
 
 class App:
-    def __init__(self, enable_shutdown: bool):
+    def __init__(self, enable_shutdown: bool = True):
         """
         Production application class.
 
@@ -283,7 +283,7 @@ class App:
             GetStatus(af, tc, ia),
             SetSettings(),
             CalcTrajectory(af, tc),
-            Shutdown(enable_shutdown),
+            Shutdown(enable_shutdown, s.shutdown_delay),
             SetAttitudeEstimationMode(ia),
             GetStars(ia),
         ]
@@ -307,7 +307,7 @@ class App:
             pass
         except ShutdownInterrupt:
             logging.info("ShutdownInterrupt")
-            subprocess.Popen("shutdown -h +1")
+            return 5
         return 0
 
 
@@ -325,7 +325,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        return App(args.enable_shutdown)()
+        return App(enable_shutdown=args.enable_shutdown)()
     except Exception:
         logging.critical("Unhandled exception", exc_info=sys.exc_info())
         return -1

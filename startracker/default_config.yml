@@ -8,3 +8,4 @@ hardware:
 trajectory:
     max_seconds: 150
     max_dist: 10
+shutdown_delay: 5.0

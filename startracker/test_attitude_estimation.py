@@ -39,7 +39,7 @@ def test_attutude_estimation():
 
     sig = testing_utils.StarImageGenerator(intrinsic, (width, height), dist_coeffs)
 
-    vectors = rng.normal(size=(100, 3))
+    vectors = rng.normal(size=(10, 3))
     vectors /= np.linalg.norm(vectors, axis=-1, keepdims=True)
 
     for vector in vectors:

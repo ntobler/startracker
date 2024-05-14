@@ -18,6 +18,7 @@ settings = Dynaconf(
         Validator("hardware.motor_phi", cast=float, must_exist=True),
         Validator("trajectory.max_seconds", cast=float, must_exist=True),
         Validator("trajectory.max_dist", cast=float, must_exist=True),
+        Validator("shutdown_delay", cast=float, must_exist=True),
     ],
 )
 

@@ -7,6 +7,7 @@ from . import main
 from . import communication
 from . import attitude_estimation
 from . import testing_utils
+from . import config
 
 
 class MockSerial(serial.Serial):
@@ -89,7 +90,7 @@ class MasterEmulator:
                 response.attitude_estimation_mode
                 == attitude_estimation.AttitudeEstimationModeEnum.RECORD_DARKFRAME
             ):
-                time.sleep(0.3)
+                time.sleep(0.1)
             elif (
                 response.attitude_estimation_mode
                 == attitude_estimation.AttitudeEstimationModeEnum.IDLE
@@ -105,7 +106,7 @@ class MasterEmulator:
             ),
         )
 
-        time.sleep(4)
+        time.sleep(0.1)
 
         self.transceive(main.GetStars, main.EmptyMessage())
 
@@ -140,7 +141,9 @@ class MasterEmulator:
 def test_main():
     testing_utils.TestingMaterial(use_existing=True).patch_persistent()
 
-    m = main.App(False)
+    config.settings.shutdown_delay = 0.1
+
+    m = main.App()
 
     device_serial = MockSerial(m._ser)
     master_serial = MockSerialMaster(device_serial)
@@ -148,7 +151,9 @@ def test_main():
     MasterEmulator(packet_handler)
 
     m._ser = device_serial
-    m()
+    returncode = m()
+
+    assert returncode == 5
 
 
 if __name__ == "__main__":

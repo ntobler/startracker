@@ -29,6 +29,7 @@ pytest = "^8.0.2"
 matplotlib = "^3.8.3"
 flake8 = "^7.0.0"
 flake8-pyproject = "^1.2.3"
+pytest-xdist = "^3.6.1"
 
 [tool.poetry.group.experimental.dependencies]
 jax = {extras = ["cpu"], version = "^0.4.25"}
