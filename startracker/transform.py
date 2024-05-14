@@ -2,6 +2,7 @@
 
 import numpy as np
 import scipy.spatial.transform
+import scipy.optimize
 
 from typing import Tuple
 
@@ -37,6 +38,8 @@ def nwu2azel(nwu: np.ndarray, axis=-1, degrees: bool = False):
 def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
     """
     Find the common rotation axis of a set of rotations.
+
+    Find solution by averaging solutions between pairs of quaternions.
 
     Args:
         quats: array of input rotation quaterions, shape=[n, 4]
@@ -82,9 +85,64 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
     if len(axis_vecs) > 2:
         cos_error = np.clip(np.sum(axis_vecs * axis_vec[None], axis=-1), -1, 1)
         angular_errors = np.arccos(cos_error)
-        std_deg = float(np.sqrt(np.mean(angular_errors**2) / len(angular_errors)))
+        std_rad = float(np.sqrt(np.mean(angular_errors**2) / len(angular_errors)))
     else:
         # Error cannot be calculated from two rotations
-        std_deg = np.nan
+        std_rad = np.nan
 
-    return axis_vec, std_deg
+    return axis_vec, std_rad
+
+
+def find_common_rotation_axis_alt(
+    quats: np.ndarray,
+) -> Tuple[np.ndarray, float]:
+    """
+    Find the common rotation axis of a set of rotations.
+
+    Find solution by solving minimization problem.
+
+    Args:
+        quats: array of input rotation quaterions, shape=[n, 4]
+
+    Returns:
+        Tuple[np.ndarray, float]:
+            - Common rotation axis
+            - Angular standard deviation in rads
+    """
+    rots = scipy.spatial.transform.Rotation.from_quat(quats)
+    inv_rots = rots.inv()
+
+    mag_matrix = [(r * r_inv).magnitude() for r_inv in inv_rots for r in rots]
+    mag_matrix = np.array(mag_matrix).reshape((len(rots), len(rots)))
+
+    dist_to_90_deg = np.abs(np.abs(mag_matrix % np.pi) - np.pi / 2)
+    np.fill_diagonal(mag_matrix, 100)
+
+    a, b = np.unravel_index(np.argmin(dist_to_90_deg), (len(quats), len(quats)))
+
+    # Get rotation difference between pairs
+    axis_vec = (inv_rots[b] * rots[a]).as_rotvec()
+    axis_vec /= np.linalg.norm(axis_vec)
+
+    inv_mrp = inv_rots[b].as_mrp()
+    x0 = np.concatenate((axis_vec, inv_mrp + 0.1), axis=0)
+
+    rot_mats = rots.as_matrix()
+
+    def func(x):
+        a, inv_mrp = x.reshape((2, 3))
+        a /= np.linalg.norm(a)
+        inv_rot = scipy.spatial.transform.Rotation.from_mrp(inv_mrp).as_matrix()
+        error = (inv_rot[None] @ rot_mats @ a[None, :, None])[..., 0] - a
+        return np.mean(error**2)
+
+    res = scipy.optimize.minimize(func, x0=x0)
+    error = res.fun
+
+    axis_vec, _ = res.x.reshape((2, 3))
+    axis_vec /= np.linalg.norm(axis_vec, axis=-1)
+
+    angular_errors = np.sqrt(error) * np.pi
+    std_rad = float(np.sqrt(angular_errors**2 / len(rot_mats)))
+
+    return axis_vec, std_rad

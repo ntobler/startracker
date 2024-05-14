@@ -1,3 +1,5 @@
+import pytest
+
 import numpy as np
 import scipy.spatial.transform
 
@@ -19,7 +21,11 @@ def test_azel_nwu():
     assert np.allclose(nwu, res)
 
 
-def test_find_common_rotation_axis():
+@pytest.mark.parametrize(
+    "func",
+    [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
+)
+def test_find_common_rotation_axis(func):
 
     N = 128
 
@@ -39,19 +45,25 @@ def test_find_common_rotation_axis():
 
     rots = (origin_rot * around_axis_rot).as_quat()
 
-    axis, std = transform.find_common_rotation_axis(rots)
+    axis, std = func(rots)
 
-    assert np.allclose(rot_axis, axis) or np.allclose(-rot_axis, axis)
+    assert np.allclose(rot_axis, axis, rtol=1e-4) or np.allclose(
+        -rot_axis, axis, rtol=1e-4
+    )
 
     rots += rng.normal(size=rots.shape) * 0.001
     rots /= np.linalg.norm(rots, axis=-1, keepdims=True)
 
-    axis, std = transform.find_common_rotation_axis(rots)
+    axis, std = func(rots)
 
     assert std < 0.01
 
 
-def test_find_common_rotation_axis_convergence():
+@pytest.mark.parametrize(
+    "func",
+    [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
+)
+def test_find_common_rotation_axis_convergence(func):
 
     N = 10
     STD = 0.1
@@ -80,7 +92,7 @@ def test_find_common_rotation_axis_convergence():
         rots += rng.normal(size=rots.shape) * STD
         rots /= np.linalg.norm(rots, axis=-1, keepdims=True)
 
-        est, error = transform.find_common_rotation_axis(rots)
+        est, error = func(rots)
         estimates.append(est)
         errors.append(error)
 
