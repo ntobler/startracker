@@ -61,42 +61,28 @@ def get_catalog_stars() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     return az, el, mag
 
 
-class StarImageGenerator:  # TODO use cal instead of single arguments
+class StarImageGenerator:
     def __init__(
         self,
-        intrinsic: Optional[np.ndarray] = None,
-        imsize: Optional[Tuple[int, int]] = None,
-        dist_coeffs: Optional[np.ndarray] = None,
+        cal: kalkam.IntrinsicCalibration,
         exposure: float = 15.0,
         blur: float = 0.7,
         noise_sigma: float = 1.0,
         black_level: float = 4.5,
     ):
-        if imsize is None:
-            imsize = (1920, 1080)
+        self._cal = cal
+        self.width, self.height = cal.image_size
+        self.intrinsic = cal.intrinsic
 
-        self.width, self.height = imsize
         self.exposure = exposure
         self.blur = blur
         self.noise_sigma = noise_sigma
         self.black_level = black_level
 
-        if intrinsic is None:
-            lens_focal_distance = 12
-            sensor_diagonal = 6.4
-            intrinsic = kalkam.intrinsic_from_camera_param(
-                lens_focal_distance, sensor_diagonal, self.width, self.height
-            )
-        self.intrinsic = intrinsic
-        self._dist_coeffs = dist_coeffs
-        self._cal = kalkam.IntrinsicCalibration(
-            self.intrinsic, self._dist_coeffs, imsize
-        )
-
         ANGLE_MARGIN_FACTOR = 1.2
         self._cos_phi = self._cal.cos_phi(ANGLE_MARGIN_FACTOR)
 
-        if self._dist_coeffs is not None:
+        if self._cal.dist_coeffs is not None:
             self.distorter = kalkam.PointUndistorter(self._cal)
         else:
             self.distorter = None
@@ -332,7 +318,7 @@ class MockStarCam(camera.Camera):
         cam_file = TestingMaterial(use_existing=True).cam_file
         self._rng = np.random.default_rng(42)
         cal = kalkam.IntrinsicCalibration.from_json(cam_file)
-        self._sig = StarImageGenerator(cal.intrinsic, cal.image_size, cal.dist_coeffs)
+        self._sig = StarImageGenerator(cal)
 
     def capture_raw(self):
         return self.capture()

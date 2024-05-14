@@ -11,13 +11,8 @@ def test_attutude_estimation_error():
 
     cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
     ae = attitude_estimation.AttitudeEstimator(cal, tm.stardata_dir)
-    intrinsic = cal.intrinsic
-    dist_coeffs = cal.dist_coeffs
-    width, height = cal.image_size
 
-    sig = testing_utils.StarImageGenerator(
-        intrinsic, (width, height), dist_coeffs, noise_sigma=10
-    )
+    sig = testing_utils.StarImageGenerator(cal, noise_sigma=10)
 
     # Get noisy image
     image, _, _ = sig([0, 0, 1], [0, 1, 0])
@@ -33,11 +28,7 @@ def test_attutude_estimation():
 
     cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
     ae = attitude_estimation.AttitudeEstimator(cal, tm.stardata_dir)
-    intrinsic = cal.intrinsic
-    width, height = cal.image_size
-    dist_coeffs = cal.dist_coeffs
-
-    sig = testing_utils.StarImageGenerator(intrinsic, (width, height), dist_coeffs)
+    sig = testing_utils.StarImageGenerator(cal)
 
     vectors = rng.normal(size=(10, 3))
     vectors /= np.linalg.norm(vectors, axis=-1, keepdims=True)
