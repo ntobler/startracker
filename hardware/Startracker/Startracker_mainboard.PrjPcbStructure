@@ -1,0 +1,3 @@
+Record=TopLevelDocument|FileName=Startracker_Mainboard.SchDoc|SheetNumber=1
+Record=SheetSymbol|SourceDocument=Startracker_Mainboard.SchDoc|Designator=U_Startracker_Power|SchDesignator=U_Startracker_Power|FileName=Startracker_Power.SchDoc|SheetNumber=2|SymbolType=Normal|RawFileName=Startracker_Power.SchDoc|DesignItemId= |SourceLibraryName= |ObjectKind=Sheet Symbol|RevisionGUID= |ItemGUID= |VaultGUID= 
+Record=SheetSymbol|SourceDocument=Startracker_Mainboard.SchDoc|Designator=U_Startracker_Stepper|SchDesignator=U_Startracker_Stepper|FileName=Startracker_Stepper.SchDoc|SheetNumber=3|SymbolType=Normal|RawFileName=Startracker_Stepper.SchDoc|DesignItemId= |SourceLibraryName= |ObjectKind=Sheet Symbol|RevisionGUID= |ItemGUID= |VaultGUID= 

@@ -1,0 +1,18 @@
+----------------------------------------------------------------------------------------------------------------------------------
+NCDrill File Report For: Startracker_mainboard.PcbDoc   15.11.2023  20:15:00
+----------------------------------------------------------------------------------------------------------------------------------
+
+Layer Pair : Top Layer to Bottom Layer
+ASCII RoundHoles File : Startracker_A00-RoundHoles.TXT
+ASCII SlotHoles File : Startracker_A00-SlotHoles.TXT
+
+Tool       Hole Size               Hole Tolerance               Hole Type       Hole Count   Plated         Tool Travel
+----------------------------------------------------------------------------------------------------------------------------------
+T1      0.2mm (8mil)                                              Round             253       PTH        585.25mm (23.04inch)
+T2      0.6mm (24mil)                                             Slot              4         PTH        43.35mm (1.71inch)
+T3      1mm (39mil)                                               Round             18        PTH        100.57mm (3.96inch)
+T4      1.2mm (47mil)                                             Round             4         PTH        7.62mm (0.30inch)
+----------------------------------------------------------------------------------------------------------------------------------
+Totals                                                                              279
+
+Total Processing Time (hh:mm:ss) : 00:00:01
