@@ -4,6 +4,7 @@ repos:
     hooks:
     -   id: check-yaml
     -   id: end-of-file-fixer
+        exclude: ^(stm32/|hardware/)
     -   id: trailing-whitespace
         exclude: ^(stm32/|hardware/)
 -   repo: https://github.com/psf/black
@@ -23,6 +24,7 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        args: ['-v']
 # -   repo: https://github.com/jsh9/pydoclint #TODO enable
 #     rev: '0.3.2'
 #     hooks:
