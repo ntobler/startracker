@@ -7,7 +7,7 @@ import scipy.optimize
 import scipy.spatial.transform
 
 
-def azel2nwu(az_el: np.ndarray, axis=-1, degrees: bool = False) -> np.ndarray:
+def azel2nwu(az_el: np.ndarray, axis=-1, *, degrees: bool = False) -> np.ndarray:
     """Convert azimuth, elevation to a unit vector in the north west up frame."""
     if degrees:
         az_el = np.radians(az_el)
@@ -22,7 +22,7 @@ def azel2nwu(az_el: np.ndarray, axis=-1, degrees: bool = False) -> np.ndarray:
     return nwu
 
 
-def nwu2azel(nwu: np.ndarray, axis=-1, degrees: bool = False):
+def nwu2azel(nwu: np.ndarray, axis=-1, *, degrees: bool = False):
     """Convert north west up coordiantes to azimuth, elevation."""
     nwu = np.moveaxis(nwu, axis, 0)
     x, y, z = nwu

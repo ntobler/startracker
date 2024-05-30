@@ -7,7 +7,7 @@ import numpy as np
 import scipy.spatial.transform
 
 
-def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
+def fermat_point(points: np.ndarray, *, plot: bool = False) -> np.ndarray:
     """Solves the fermat point problem.
 
     Finds the point, which has equal angles to all vertices (120 degrees).
@@ -39,14 +39,14 @@ def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
     )
     r = b + (bc / 2) + vec2
 
-    A = np.zeros(a.shape[:-1] + (6, 5))
-    A[..., :3, 0] = r - a
-    A[..., 3:, 1] = q - c
-    A[..., :3, -3:] = np.eye(3)
-    A[..., 3:, -3:] = np.eye(3)
-    B = np.concatenate((a, c), axis=-1)[..., None]
+    mat_a = np.zeros(a.shape[:-1] + (6, 5))
+    mat_a[..., :3, 0] = r - a
+    mat_a[..., 3:, 1] = q - c
+    mat_a[..., :3, -3:] = np.eye(3)
+    mat_a[..., 3:, -3:] = np.eye(3)
+    mat_b = np.concatenate((a, c), axis=-1)[..., None]
 
-    res = np.linalg.solve(A[..., :5, :], B[..., :5, :])
+    res = np.linalg.solve(mat_a[..., :5, :], mat_b[..., :5, :])
     m = res[..., -3:, 0]
 
     if plot and a.ndim == 1:
@@ -80,9 +80,7 @@ class MotorSolver:
             theta: Azimuth angle of the motor shaft relative to the vector to the center.
             phi: Elevation angle of the motor shaft upward relative to the motor plane.
         """
-        MOTOR_COUNT = self.MOTOR_COUNT
-
-        angles = np.arange(MOTOR_COUNT) / MOTOR_COUNT * (np.pi * 2)
+        angles = np.arange(self.MOTOR_COUNT) / self.MOTOR_COUNT * (np.pi * 2)
         self.motor_vectors = np.stack(
             (np.cos(angles), np.sin(angles), np.zeros_like(angles)), axis=-1
         )
@@ -98,7 +96,7 @@ class MotorSolver:
         shaft_directions /= np.linalg.norm(shaft_directions, axis=-1)
         self.shaft_directions = shaft_directions
 
-    def solve_motor_dists(self, rot_matrix, plot: bool = False) -> np.ndarray:
+    def solve_motor_dists(self, rot_matrix, *, plot: bool = False) -> np.ndarray:
         """Solve the distances of the linear motors.
 
         Supports batching.
@@ -120,16 +118,16 @@ class MotorSolver:
 
         batch_shape = rot_matrix.shape[:-2]
 
-        A = np.zeros(batch_shape + (9, 9))
+        mat = np.zeros(batch_shape + (9, 9))
         for i in range(self.MOTOR_COUNT):
-            A[..., i * 3 : (i + 1) * 3, :3] = np.eye(3)
-            A[..., i * 3 : (i + 1) * 3, 3 + i] = transformed_vectors[..., i, :]
-            A[..., i * 3 : (i + 1) * 3, 6 + i] = -shaft_directions[i]
+            mat[..., i * 3 : (i + 1) * 3, :3] = np.eye(3)
+            mat[..., i * 3 : (i + 1) * 3, 3 + i] = transformed_vectors[..., i, :]
+            mat[..., i * 3 : (i + 1) * 3, 6 + i] = -shaft_directions[i]
         b = np.broadcast_to(motor_positions.ravel(), (1,) * (rot_matrix.ndim - 2) + (9,))
 
-        assert np.all(np.linalg.det(A) != 0)
+        assert np.all(np.linalg.det(mat) != 0)
 
-        solution = np.linalg.solve(A, b)
+        solution = np.linalg.solve(mat, b)
 
         motor_dists = solution[..., -3:]
         sled_dists = solution[..., 3:6]
@@ -215,6 +213,7 @@ def astro_rotation_matrix(
     azimuth: float,
     elevation: float,
     roll: Union[float, np.ndarray],
+    *,
     degrees: bool = False,
 ):
     """Get rotation matrix from azimuth and elevation parameters.

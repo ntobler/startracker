@@ -79,7 +79,9 @@ class CalibrationPattern(abc.ABC):
         """
 
     @abc.abstractmethod
-    def find_in_image(self, image: np.ndarray, plot: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    def find_in_image(
+        self, image: np.ndarray, *, plot: bool = False
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """Find the pattern in the given image.
 
         Args:
@@ -284,7 +286,9 @@ class ChArUcoPattern(CalibrationPattern):
             self._aruco.draw(ctx, marker_id, self.markersize)
             ctx.restore()
 
-    def find_in_image(self, image: np.ndarray, plot: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    def find_in_image(
+        self, image: np.ndarray, *, plot: bool = False
+    ) -> Tuple[np.ndarray, np.ndarray]:
         if image.ndim == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -382,9 +386,9 @@ class ArUco:
     def detect(self, image: np.ndarray):
         try:
             # OpenCV < 4.7.x
-            arucoParams = cv2.aruco.DetectorParameters_create()
+            aruco_params = cv2.aruco.DetectorParameters_create()
             all_corners, all_ids, _ = cv2.aruco.detectMarkers(
-                image, self.aruco_dict, parameters=arucoParams
+                image, self.aruco_dict, parameters=aruco_params
             )
         except AttributeError:
             # OpenCV >= 4.7.x
@@ -470,7 +474,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
     squared_error_distances: List[np.ndarray]
     """Squared reprojection error distance for all image points."""
 
-    def plot(self, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
+    def plot(*, self, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
         import matplotlib.pyplot as plt
         from scipy.interpolate import griddata
 
@@ -512,6 +516,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
         self,
         red_level: Optional[float] = None,
         green_level: Optional[float] = None,
+        *,
         show_points: bool = True,
         show_legend: bool = True,
     ):
@@ -588,9 +593,9 @@ def calibration_from_image_files(
     image_files: Sequence[Union[pathlib.Path, str]],
     marker_pattern: CalibrationPattern,
     fraction: float = 1.0,
+    *,
     verbose: bool = False,
-    plot: bool = False,
-) -> "IntrinsicCalibrationWithData":
+) -> IntrinsicCalibrationWithData:
     """Generate new calibration from image files."""
     if not image_files:
         raise ValueError("image_file must not be empty")
@@ -611,8 +616,9 @@ def calibration_from_images(
     images: Iterable[np.ndarray],
     marker_pattern: CalibrationPattern,
     fraction: float = 1.0,
+    *,
     verbose: bool = False,
-) -> "IntrinsicCalibrationWithData":
+) -> IntrinsicCalibrationWithData:
     """Generate new calibration from images and chessboard object.
 
     Args:
@@ -667,8 +673,9 @@ def calibration_from_points(
     image_points_batch: Sequence,
     image_size: Tuple[int, int],
     fraction: float = 1.0,
+    *,
     verbose: bool = False,
-) -> "IntrinsicCalibrationWithData":
+) -> IntrinsicCalibrationWithData:
     """Generate new calibration from object points and image points.
 
     Args:
@@ -881,14 +888,14 @@ class PointProjector:
             self._undistorter = PointUndistorter(cal)
 
     def pix2obj(
-        self, xy: ArrayLike, Z: Union[ArrayLike, float] = 0.0, axis: int = -1
+        self, xy: ArrayLike, obj_z: Union[ArrayLike, float] = 0.0, axis: int = -1
     ) -> np.ndarray:
         """Convert pixel coordiantes to object coordinates.
 
         Args:
-            xy (np.ndarray): pixel coordinates, shape=[2, n]
-            Z (np.ndarray or int, optional): Z object coordinate. Defaults to 0.
-            axis (int): axis of the XYZ array that represents the 2-dimensional part
+            xy: pixel coordinates, shape=[2, n]
+            obj_z: Z object coordinate. Defaults to 0.
+            axis: axis of the XYZ array that represents the 2-dimensional part
 
         Returns:
             np.ndarray: object coordinates, shape=[3, n]
@@ -896,26 +903,26 @@ class PointProjector:
         xy = np.swapaxes(xy, axis, -1)[..., None]
         if self._undistorter is not None:
             xy = self._undistorter.undisort(xy, axis=-1)
-        Z = np.asarray(Z)
-        if Z.ndim != 0:
-            Z = np.swapaxes(Z, axis, -1)
+        obj_z = np.asarray(obj_z)
+        if obj_z.ndim != 0:
+            obj_z = np.swapaxes(obj_z, axis, -1)
         xy1 = np.concatenate((xy, np.ones_like(xy[..., :1, :])), axis=-2)
-        s = (Z + self._b) / (self.camera_mat_inverse[2] @ xy1)
-        XYZ = self.camera_mat_inverse @ (s[..., None] * xy1 - self.camera_mat[:, 3:])
-        return np.swapaxes(XYZ[..., 0], axis, -1)
+        s = (obj_z + self._b) / (self.camera_mat_inverse[2] @ xy1)
+        obj_xyz = self.camera_mat_inverse @ (s[..., None] * xy1 - self.camera_mat[:, 3:])
+        return np.swapaxes(obj_xyz[..., 0], axis, -1)
 
-    def obj2pix(self, XYZ: ArrayLike, axis: int = -1) -> np.ndarray:
+    def obj2pix(self, obj_xyz: ArrayLike, axis: int = -1) -> np.ndarray:
         """Convert object coordinates to undistorted pixel coordinates.
 
         Args:
-            XYZ (np.ndarray): object coordinates, shape=[3, n]
+            obj_xyz (np.ndarray): object coordinates, shape=[3, n]
             axis (int): axis of the XYZ array that represents the 3-dimensional part
 
         Returns:
             np.ndarray: undistorted pixel coordinates, shape=[2, 2]
         """
-        XYZ = np.swapaxes(XYZ, axis, -1)[..., None]
-        pix_xys = self.camera_mat[:, :3] @ XYZ + self.camera_mat[:, 3:]
+        obj_xyz = np.swapaxes(obj_xyz, axis, -1)[..., None]
+        pix_xys = self.camera_mat[:, :3] @ obj_xyz + self.camera_mat[:, 3:]
         pix_xy = pix_xys[..., :2, 0] / pix_xys[..., 2:, 0]
         if self._undistorter is not None:
             pix_xy = self._undistorter.distort(pix_xy, axis=-1)

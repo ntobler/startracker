@@ -19,6 +19,7 @@ def create_catalog(
     cal: kalkam.IntrinsicCalibration,
     data_dir: Union[pathlib.Path, str],
     magnitude_threshold: float = 5.5,
+    *,
     verbose: bool = False,
 ):
     """Create a new star catalog.

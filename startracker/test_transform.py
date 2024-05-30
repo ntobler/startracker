@@ -27,7 +27,7 @@ def test_azel_nwu():
     [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
 )
 def test_find_common_rotation_axis(func):
-    N = 128
+    n = 128
 
     rng = np.random.default_rng(42)
 
@@ -38,7 +38,7 @@ def test_find_common_rotation_axis(func):
     rot_axis = rng.normal(size=3)
     rot_axis /= np.linalg.norm(rot_axis)
 
-    rotvecs = rot_axis[None] * rng.uniform(0, np.pi * 2, size=(N, 1))
+    rotvecs = rot_axis[None] * rng.uniform(0, np.pi * 2, size=(n, 1))
     around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvecs, degrees=False)
 
     rots = (origin_rot * around_axis_rot).as_quat()
@@ -60,8 +60,8 @@ def test_find_common_rotation_axis(func):
     [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
 )
 def test_find_common_rotation_axis_convergence(func):
-    N = 10
-    STD = 0.1
+    n = 10
+    std = 0.1
 
     rng = np.random.default_rng(43)
 
@@ -72,7 +72,7 @@ def test_find_common_rotation_axis_convergence(func):
     rot_axis = rng.normal(size=3)
     rot_axis /= np.linalg.norm(rot_axis)
 
-    numbers = np.logspace(np.log10(3), np.log10(300), N).astype(int)
+    numbers = np.logspace(np.log10(3), np.log10(300), n).astype(int)
     errors = []
     estimates = []
 
@@ -81,7 +81,7 @@ def test_find_common_rotation_axis_convergence(func):
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvecs, degrees=False)
         rots = (origin_rot * around_axis_rot).as_quat()
 
-        rots += rng.normal(size=rots.shape) * STD
+        rots += rng.normal(size=rots.shape) * std
         rots /= np.linalg.norm(rots, axis=-1, keepdims=True)
 
         est, error = func(rots)
@@ -110,7 +110,7 @@ def test_find_common_rotation_axis_convergence(func):
         ax.set_xlabel("Number of samples")
 
         n = np.array([1, 10, 100, 1000])
-        v = np.pi * STD / np.sqrt(n)
+        v = np.pi * std / np.sqrt(n)
         ax.loglog(n, v, "--", label="natural std propagation")
         ax.loglog(n, 10 ** np.polyval(errors_poly, np.log10(n)), "--", color=p1.get_color())
         ax.loglog(

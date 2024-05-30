@@ -20,13 +20,15 @@ from startracker import (
     transform,
 )
 
+UINT8_MAX = 255
+
 
 class TestingMaterial:
     testing_dir: pathlib.Path
     cam_file: pathlib.Path
     stardata_dir: pathlib.Path
 
-    def __init__(self, use_existing: bool = True):
+    def __init__(self, *, use_existing: bool = True):
         user_data_dir = persistent.Persistent.get_instance().user_data_dir
 
         self.testing_dir = user_data_dir / "testing"
@@ -76,8 +78,7 @@ class StarImageGenerator:
         self.noise_sigma = noise_sigma
         self.black_level = black_level
 
-        ANGLE_MARGIN_FACTOR = 1.2
-        self._cos_phi = self._cal.cos_phi(ANGLE_MARGIN_FACTOR)
+        self._cos_phi = self._cal.cos_phi(angle_margin_factor=1.2)
 
         if self._cal.dist_coeffs is not None:
             self.distorter = kalkam.PointUndistorter(self._cal)
@@ -101,6 +102,7 @@ class StarImageGenerator:
         self,
         target_vector: np.ndarray,
         up_vector: np.ndarray,
+        *,
         grid: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Create image of stars.
@@ -128,7 +130,7 @@ class StarImageGenerator:
         return self.image_from_extrinsic(extrinsic, grid=grid)
 
     def image_from_quaternion(
-        self, quat: np.ndarray, grid: bool = False
+        self, quat: np.ndarray, *, grid: bool = False
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         rot = scipy.spatial.transform.Rotation.from_quat(quat)
         extrinsic = np.concatenate((rot.as_matrix().T, np.zeros((3, 1))), axis=-1)
@@ -149,9 +151,7 @@ class StarImageGenerator:
 
         return stars_mags, stars_xy
 
-    def image_from_extrinsic(self, extrinsic: np.ndarray, grid: bool = False):
-        UINT8_MAX = 255
-
+    def image_from_extrinsic(self, extrinsic: np.ndarray, *, grid: bool = False):
         width, height = self.width, self.height
 
         stars_mags, stars_xy = self.stars_from_extrinsic(extrinsic)

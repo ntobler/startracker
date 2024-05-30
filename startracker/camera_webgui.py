@@ -141,7 +141,8 @@ class App(webutil.QueueAbstractionClass):
         pattern_width: int,
         pattern_height: int,
         pattern_size: float,
-        attitude_overlay: bool,
+        *,
+        attitude_overlay: bool = False,
     ):
         if self._cam is None:
             raise ValueError("Camera is not initialized")
@@ -321,7 +322,7 @@ class WebApp:
             int(params["pattern_width"]),
             int(params["pattern_height"]),
             float(params["pattern_size"]),
-            bool(params["overlay"]),
+            attitude_overlay=bool(params["overlay"]),
         )
         return jsonify(d)
 

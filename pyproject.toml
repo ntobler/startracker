@@ -82,6 +82,16 @@ select = [
     "SIM",
     # isort
     "I",
+    # boolean trap
+    "FBT001",
+    # Built in shadowing
+    "A001",
+    "C416",
+    "NPY",
+    "PERF",
+    "W",
+    # Pep8 naming
+    "N"
 ]
 ignore = [
     "D105",

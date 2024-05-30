@@ -18,9 +18,7 @@ def plot_polynom_trajectory():
     polytr = trajectory.TrajectoryCalculator(15 * 60, 3, trajectory.MotorSolver())(35, 47)
 
     times = np.linspace(polytr.start, polytr.stop, 1000)
-    path_approx = []
-    for coeffs in polytr.position_coeffs:
-        path_approx.append(np.polyval(coeffs, times))
+    path_approx = [np.polyval(coeffs, times) for coeffs in polytr.position_coeffs]
     path_approx = np.array(path_approx).T
 
     plt.figure()

@@ -10,6 +10,7 @@ def draw_grid(
     image: np.ndarray,
     rot_mat: np.ndarray,
     cal: kalkam.IntrinsicCalibration,
+    *,
     inplace: bool = False,
 ) -> np.ndarray:
     """Draw equatorial grid given image.

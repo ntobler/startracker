@@ -168,8 +168,8 @@ class CalcTrajectory(communication.Command):
         return response
 
 
-class ShutdownInterrupt(Exception):
-    pass
+class ShutdownInterruptError(Exception):
+    """Used to signal a shutdown."""
 
 
 class Shutdown(communication.Command):
@@ -177,7 +177,7 @@ class Shutdown(communication.Command):
     request_type: Type[communication.Message] = EmptyMessage
     response_type: Type[communication.Message] = Acknowledge
 
-    def __init__(self, enable_shutdown: bool, shutdown_delay: float):
+    def __init__(self, *, enable_shutdown: bool, shutdown_delay: float):
         """Quit the application.
 
         Args:
@@ -190,7 +190,7 @@ class Shutdown(communication.Command):
     def execute(self, request: EmptyMessage) -> Acknowledge:
         if self._enable_shutdown:
             time.sleep(self._shutdown_delay)
-            raise ShutdownInterrupt()
+            raise ShutdownInterruptError()
         else:
             raise KeyboardInterrupt()
         return ACK
@@ -241,7 +241,7 @@ class GetStars(communication.Command):
 
 
 class App:
-    def __init__(self, enable_shutdown: bool = True):
+    def __init__(self, *, enable_shutdown: bool = True):
         """Production application class.
 
         Args:
@@ -267,7 +267,7 @@ class App:
             GetStatus(af, tc, ia),
             SetSettings(),
             CalcTrajectory(af, tc),
-            Shutdown(enable_shutdown, s.shutdown_delay),
+            Shutdown(enable_shutdown=enable_shutdown, shutdown_delay=s.shutdown_delay),
             SetAttitudeEstimationMode(ia),
             GetStars(ia),
         ]
@@ -287,7 +287,7 @@ class App:
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt")
             pass
-        except ShutdownInterrupt:
+        except ShutdownInterruptError:
             logging.info("ShutdownInterrupt")
             return 5
         return 0

@@ -1,6 +1,7 @@
 """Module to handle serial communication."""
 
 import abc
+import contextlib
 import dataclasses
 import enum
 import logging
@@ -13,7 +14,7 @@ import serial
 import serial.serialutil
 
 
-class CommunicationTimeoutException(Exception):
+class CommunicationTimeoutError(Exception):
     """Serial command reached timeout."""
 
 
@@ -67,13 +68,13 @@ class PacketHandler(serial.Serial):
         # read cmd and length bytes
         c = self._ser.read(2)
         if timeout.expired():
-            raise CommunicationTimeoutException()
+            raise CommunicationTimeoutError()
         cmd, length = c
 
         # read payload and crc using length
         payload_and_crc = self._ser.read(length + 2)
         if timeout.expired():
-            raise CommunicationTimeoutException()
+            raise CommunicationTimeoutError()
         payload = payload_and_crc[:-2]
         crc = payload_and_crc[-2:]
 
@@ -222,18 +223,18 @@ class ArrayField(Field):
 
 class Message:
     byte_size: int
-    _format: str
+    _data_format: str
     _fields: Dict[str, Field]
 
     @classmethod
     def from_bytes(cls, payload: bytes):
-        values = struct.unpack(cls._format, payload)
+        values = struct.unpack(cls._data_format, payload)
         values = [f.parse(v) for f, v in zip(cls._fields.values(), values)]
         return cls(*values)
 
     def to_bytes(self) -> bytes:
         values = [f.format(v) for f, v in zip(self._fields.values(), self.__dict__.values())]
-        return struct.pack(self._format, *values)
+        return struct.pack(self._data_format, *values)
 
     @classmethod
     def print_help(cls):
@@ -283,7 +284,7 @@ def make_message(cls):
             if not callable(attr):
                 fields[attr_name] = attr
 
-    format = "<" + "".join([cls.__dict__[k].struct_char for k, v in fields.items()])
+    data_format = "<" + "".join([cls.__dict__[k].struct_char for k, v in fields.items()])
 
     byte_size = sum([v.byte_size for v in fields.values()])
 
@@ -296,7 +297,7 @@ def make_message(cls):
         dataclass_fields,
         namespace={
             "byte_size": byte_size,
-            "_format": format,
+            "_data_format": data_format,
             "_fields": fields,
             "__eq__": dc_eq,
             "__name__": cls.__name__,
@@ -310,6 +311,7 @@ def gen_code_with_dependencies(
     messages: Sequence[Type[Message]],
     h_file: Union[pathlib.Path, str],
     indent: int = 4,
+    *,
     skip_file_write: bool = False,
     include_dependencies: bool = True,
 ) -> str:
@@ -334,9 +336,7 @@ def gen_code_with_dependencies(
 
     struct_args = "__attribute__((__packed__))"
 
-    code = []
-    for d in deps:
-        code.append(d.generate_c_code(struct_args, indent))
+    code = [d.generate_c_code(struct_args, indent) for d in deps]
     code = "\n\n".join(code)
 
     name = h_file.stem.upper()
@@ -403,7 +403,7 @@ class CommandHandler:
     def run_indefinitely(self):
         """Handle incomming commands indefinitely."""
         while True:
-            try:
+            with contextlib.suppress(CommunicationTimeoutError):
                 cmd_id, payload = self.serial.read_cmd()
                 command = self._commands.get(cmd_id)
                 if command is None:
@@ -413,5 +413,3 @@ class CommandHandler:
                     self._logger.info(f"RX: {request.__name__}")
                     response = command.execute(request)
                     self.serial.write_cmd(cmd_id, response.to_bytes())
-            except CommunicationTimeoutException:
-                pass

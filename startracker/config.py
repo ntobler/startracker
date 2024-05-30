@@ -23,7 +23,7 @@ settings = Dynaconf(
 )
 
 
-class ConfigurationException(Exception):
+class ConfigurationError(Exception):
     """Errors concerning the configuration."""
 
     pass
@@ -34,6 +34,6 @@ def check_validation_errors():
     try:
         settings.validators.validate_all()
     except ValidationError as e:
-        raise ConfigurationException(f"Configuration validation error: {e}") from e
+        raise ConfigurationError(f"Configuration validation error: {e}") from e
     except Exception as e:
-        raise ConfigurationException(f"Configuration error: {e}") from e
+        raise ConfigurationError(f"Configuration error: {e}") from e

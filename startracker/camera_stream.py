@@ -51,7 +51,7 @@ class StreamingOutput(io.BufferedIOBase):
 
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
-    def do_GET(self):
+    def do_get(self):
         if self.path == "/":
             self.send_response(301)
             self.send_header("Location", "/index.html")
