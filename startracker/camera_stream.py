@@ -4,14 +4,15 @@ Source code adapted from http://picamera.readthedocs.io/en/latest/recipes2.html#
 """
 
 import io
+import logging
+import socketserver
+from http import server
+from threading import Condition
+
 from picamera2 import Picamera2
 from picamera2.encoders import MJPEGEncoder
 from picamera2.outputs import FileOutput
 from picamera2.sensor_format import SensorFormat
-import logging
-import socketserver
-from threading import Condition
-from http import server
 
 CROP_FACTOR = 1
 exposure_ms = 50
@@ -67,9 +68,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header("Age", 0)
             self.send_header("Cache-Control", "no-cache, private")
             self.send_header("Pragma", "no-cache")
-            self.send_header(
-                "Content-Type", "multipart/x-mixed-replace; boundary=FRAME"
-            )
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=FRAME")
             self.end_headers()
             try:
                 while True:
@@ -83,9 +82,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     self.wfile.write(frame)
                     self.wfile.write(b"\r\n")
             except Exception as e:
-                logging.warning(
-                    "Removed streaming client %s: %s", self.client_address, str(e)
-                )
+                logging.warning("Removed streaming client %s: %s", self.client_address, str(e))
         else:
             self.send_error(404)
             self.end_headers()

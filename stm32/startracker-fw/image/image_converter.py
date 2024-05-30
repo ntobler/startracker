@@ -1,9 +1,9 @@
 """Script to convert png images to the display binary format."""
 
+import math
 import pathlib
 
 import cv2
-import math
 import numpy as np
 
 

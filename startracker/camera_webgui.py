@@ -2,34 +2,28 @@
 Flask web application to capture images using a smartphone browser or any other browser.
 """
 
-import threading
-import time
 import logging
 import os
-import tempfile
 import pathlib
+import tempfile
+import threading
+import time
+from typing import BinaryIO, List, Literal, Optional
 
+import cv2
+import numpy as np
+import scipy.spatial
 from flask import (
     Flask,
+    Response,
+    jsonify,
     render_template,
     request,
-    jsonify,
     send_from_directory,
-    Response,
 )
-from flask_sock import Sock, Server, ConnectionClosed
-import numpy as np
-import cv2
-import scipy.spatial
+from flask_sock import ConnectionClosed, Server, Sock
 
-from startracker import camera
-from startracker import persistent
-from startracker import webutil
-from startracker import kalkam
-from startracker import image_utils
-from startracker import attitude_estimation
-
-from typing import Literal, Optional, List, BinaryIO
+from startracker import attitude_estimation, camera, image_utils, kalkam, persistent, webutil
 
 
 class IntrinsicCalibrator:
@@ -97,7 +91,7 @@ class IntrinsicCalibrator:
         self.cal.to_json(self._cal_file)
 
 
-class App(webutil.QueueAbstractClass):
+class App(webutil.QueueAbstractionClass):
     terminate: bool
     """Set True to terminate the application loop."""
 
@@ -139,7 +133,7 @@ class App(webutil.QueueAbstractClass):
         }
         return state
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def set_settings(
         self,
         exposure_ms: float,
@@ -161,9 +155,7 @@ class App(webutil.QueueAbstractClass):
         settings.binning = binning
         self._cam.settings = settings
 
-        self._intrinsic_calibrator.set_pattern(
-            pattern_width, pattern_height, pattern_size
-        )
+        self._intrinsic_calibrator.set_pattern(pattern_width, pattern_height, pattern_size)
 
         self._logger.info(f"Setting settings {settings}")
 
@@ -171,7 +163,7 @@ class App(webutil.QueueAbstractClass):
 
         return self._get_state()
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def capture(self, mode: Literal["single", "continuous", "stop", "darkframe"]):
         if mode not in ["single", "continuous", "stop", "darkframe"]:
             raise ValueError(f"Unknown mode: {mode}")
@@ -182,33 +174,33 @@ class App(webutil.QueueAbstractClass):
 
         return self._get_state()
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def put_calibration_image(self):
         image = self._image_cache
         if image is not None:
             self._intrinsic_calibrator.put_image(image)
         return self._get_state()
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def reset_calibration(self):
         self._intrinsic_calibrator.reset()
         return self._get_state()
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def calibrate(self):
         self._intrinsic_calibrator.calibrate()
         return self._get_state()
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def calibration_pattern(self):
         with tempfile.TemporaryDirectory() as td:
             file = pathlib.Path(td) / "pattern.svg"
             self._intrinsic_calibrator.pattern.export_svg(file)
-            with open(file, "r") as f:
+            with open(file) as f:
                 svg = f.read()
         return svg
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def calibration_result(self):
         with tempfile.TemporaryFile() as f:
             self._intrinsic_calibrator.plot_cal_png(f)
@@ -216,7 +208,7 @@ class App(webutil.QueueAbstractClass):
             png = f.read()
         return png
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def create_star_data(self):
         if self._intrinsic_calibrator.cal is None:
             raise ValueError("No calibration available")

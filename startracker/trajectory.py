@@ -1,9 +1,8 @@
 import dataclasses
+from typing import Union
 
 import numpy as np
 import scipy.spatial.transform
-
-from typing import Union
 
 
 def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
@@ -28,15 +27,13 @@ def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
 
     vec1 = np.cross(normal, ba)
     vec1 *= (np.sqrt(3) / 2) * (
-        np.linalg.norm(ba, axis=-1, keepdims=True)
-        / np.linalg.norm(vec1, axis=-1, keepdims=True)
+        np.linalg.norm(ba, axis=-1, keepdims=True) / np.linalg.norm(vec1, axis=-1, keepdims=True)
     )
     q = b + (ba / 2) + vec1
 
     vec2 = np.cross(bc, normal)
     vec2 *= (np.sqrt(3) / 2) * (
-        np.linalg.norm(bc, axis=-1, keepdims=True)
-        / np.linalg.norm(vec2, axis=-1, keepdims=True)
+        np.linalg.norm(bc, axis=-1, keepdims=True) / np.linalg.norm(vec2, axis=-1, keepdims=True)
     )
     r = b + (bc / 2) + vec2
 
@@ -128,9 +125,7 @@ class MotorSolver:
             A[..., i * 3 : (i + 1) * 3, :3] = np.eye(3)
             A[..., i * 3 : (i + 1) * 3, 3 + i] = transformed_vectors[..., i, :]
             A[..., i * 3 : (i + 1) * 3, 6 + i] = -shaft_directions[i]
-        b = np.broadcast_to(
-            motor_positions.ravel(), (1,) * (rot_matrix.ndim - 2) + (9,)
-        )
+        b = np.broadcast_to(motor_positions.ravel(), (1,) * (rot_matrix.ndim - 2) + (9,))
 
         assert np.all(np.linalg.det(A) != 0)
 
@@ -164,14 +159,10 @@ class MotorSolver:
                 )
                 ax.plot(x, y, z, color="blue", label="shaft")
 
-                x, y, z = np.stack(
-                    (translation, motor_positions[i] + shaft_vectors[i]), axis=1
-                )
+                x, y, z = np.stack((translation, motor_positions[i] + shaft_vectors[i]), axis=1)
                 ax.plot(x, y, z, color="green", label="shaft")
 
-                x, y, z = np.stack(
-                    (translation, translation + transformed_vectors[i] * 10), axis=1
-                )
+                x, y, z = np.stack((translation, translation + transformed_vectors[i] * 10), axis=1)
                 ax.plot(x, y, z, color="orange", label="shaft")
 
             x, y, z = np.stack((np.zeros(3), translation), axis=1)

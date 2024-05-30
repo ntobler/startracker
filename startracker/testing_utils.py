@@ -1,23 +1,24 @@
 """Various helper function and classes for testing, especially for star and camera simulation"""
 
+import dataclasses
 import pathlib
 import time
-import dataclasses
+from typing import List, Optional, Tuple
 
 import cots_star_tracker
 import cv2
 import numpy as np
 import scipy.spatial.transform
 
-from startracker import calibration
-from startracker import kalkam
-from startracker import persistent
-from startracker import transform
-from startracker import camera
-from startracker import image_utils
-from startracker import attitude_estimation
-
-from typing import Tuple, List, Optional
+from startracker import (
+    attitude_estimation,
+    calibration,
+    camera,
+    image_utils,
+    kalkam,
+    persistent,
+    transform,
+)
 
 
 class TestingMaterial:
@@ -51,9 +52,7 @@ class TestingMaterial:
 
 def get_catalog_stars() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Get star location and magnitude."""
-    u, mag, _ = cots_star_tracker.read_star_catalog(
-        cots_star_tracker.get_star_cat_file(), 8
-    )
+    u, mag, _ = cots_star_tracker.read_star_catalog(cots_star_tracker.get_star_cat_file(), 8)
     u /= np.linalg.norm(u, axis=-0, keepdims=True)
     az, el = transform.nwu2azel(u, axis=0)
     return az, el, mag
@@ -178,9 +177,7 @@ class StarImageGenerator:
         star_brightness = star_brightness * (self.exposure * UINT8_MAX)
 
         # Distribute the brightness to each pixel of the quad according to the distance
-        pixel_mags = np.broadcast_to(
-            star_brightness[..., None, None], (len(stars_xy), 2, 2)
-        ).copy()
+        pixel_mags = np.broadcast_to(star_brightness[..., None, None], (len(stars_xy), 2, 2)).copy()
         pixel_mags[..., ::2, :] *= 1 - pixel_remainder[..., None, None, 0]
         pixel_mags[..., 1::2, :] *= pixel_remainder[..., None, None, 0]
         pixel_mags[..., :, ::2] *= 1 - pixel_remainder[..., None, None, 1]
@@ -188,9 +185,7 @@ class StarImageGenerator:
         pixel_mags = pixel_mags.ravel()
 
         # Mask pixels that are in frame, now accurately
-        mask = np.logical_and(pixel_coords >= 0, pixel_coords < (width, height)).all(
-            axis=-1
-        )
+        mask = np.logical_and(pixel_coords >= 0, pixel_coords < (width, height)).all(axis=-1)
         pixel_mags = pixel_mags[mask]
         pixel_coords = pixel_coords[mask]
 
@@ -357,9 +352,7 @@ class AxisAlignCalibrationTestCam(MockStarCam):
         self.axis_vector = vectors[0]
         up_vector = vectors[1]
 
-        rot_matrix = kalkam.look_at_extrinsic(self.axis_vector, [0, 0, 0], up_vector)[
-            :3, :3
-        ]
+        rot_matrix = kalkam.look_at_extrinsic(self.axis_vector, [0, 0, 0], up_vector)[:3, :3]
         self.axis_attitude = scipy.spatial.transform.Rotation.from_matrix(rot_matrix)
 
         self.camera_rot = scipy.spatial.transform.Rotation.from_euler(
@@ -369,17 +362,12 @@ class AxisAlignCalibrationTestCam(MockStarCam):
         self.axis_angle = 0.0
 
     def capture(self) -> np.ndarray:
-        if self.t is None:
-            t = time.monotonic()
-        else:
-            t = self.t
+        t = time.monotonic() if self.t is None else self.t
 
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
         self.axis_angle = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
         rotvec = np.array([0, 0, 1.0]) * self.axis_angle
-        around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(
-            rotvec, degrees=False
-        )
+        around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvec, degrees=False)
 
         quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat()
 
@@ -405,10 +393,7 @@ class StarCameraCalibrationTestCam(MockStarCam):
         self.phi = 0
 
     def get_extrinsic(self) -> np.ndarray:
-        if self.t is None:
-            t = time.monotonic()
-        else:
-            t = self.t
+        t = time.monotonic() if self.t is None else self.t
 
         self.phi = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
 

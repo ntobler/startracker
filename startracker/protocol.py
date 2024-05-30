@@ -1,8 +1,8 @@
 """Protocol definitions for the UART connection to the STM32 main board."""
 
 import pathlib
-from . import communication
-from . import main
+
+from . import communication, main
 
 
 def generate_code():

@@ -3,12 +3,11 @@
 import abc
 import dataclasses
 import logging
-import pickle
 import pathlib
+import pickle
+from typing import Union
 
 import numpy as np
-
-from typing import Union
 
 
 @dataclasses.dataclass
@@ -38,9 +37,7 @@ class CameraSettings:
         if self.binning not in [1, 2, 4, 8]:
             raise ValueError("binning must be 1, 2 or 4")
         if self.stack * self.digital_gain > 16:
-            raise ValueError(
-                "stack and binning gain must be below 16 due to overflow reasons"
-            )
+            raise ValueError("stack and binning gain must be below 16 due to overflow reasons")
 
     def to_dict(self):
         """Return dictionary of the object."""
@@ -82,7 +79,7 @@ class Camera(abc.ABC):
         self._apply_settings()
 
     def _apply_settings(self):
-        pass
+        return None
 
     def __enter__(self):
         self._context_manager_entered = True

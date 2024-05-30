@@ -1,11 +1,10 @@
 """Raspberry Pi camera implemenations."""
 
-import time
 import threading
+import time
 
 import cv2
 import numpy as np
-
 from picamera2 import Picamera2
 from picamera2.sensor_format import SensorFormat
 
@@ -48,9 +47,7 @@ class RpiCamera(camera.Camera):
             self._logger.info(f"Raw format: {raw_format}")
             self._logger.info(f"Raw format: {raw_format.__dict__}")
 
-            config = self._picam2.create_still_configuration(
-                buffer_count=1, queue=False
-            )
+            config = self._picam2.create_still_configuration(buffer_count=1, queue=False)
             self._picam2.configure(config)
 
             self._logger.info("Set inital exposure and gain")

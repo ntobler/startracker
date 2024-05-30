@@ -1,22 +1,18 @@
 """Star image based attitude estimation."""
 
-import enum
-import pathlib
-import logging
-import time
-import threading
 import dataclasses
+import enum
+import logging
+import pathlib
+import threading
+import time
+from typing import Optional, Tuple, Union
 
+import cots_star_tracker
 import numpy as np
 import scipy.spatial.transform
 
-import cots_star_tracker
-
-from . import camera
-from . import persistent
-from . import kalkam
-
-from typing import Optional, Union, Tuple
+from . import camera, kalkam, persistent
 
 
 def create_catalog(
@@ -173,9 +169,7 @@ class AttitudeEstimator:
         star_mags = self.cat_mag[id_match]
         cat_xyz = scipy.spatial.transform.Rotation.from_quat(q_est).inv().apply(cat_xyz)
 
-        return AttitudeEstimationResult(
-            q_est, n_matches, image_xyz, cat_xyz, id_match, star_mags
-        )
+        return AttitudeEstimationResult(q_est, n_matches, image_xyz, cat_xyz, id_match, star_mags)
 
     def calculate_statistics(self, res: AttitudeEstimationResult):
         """Calculate true potitive and false negative magnitudes."""
@@ -190,13 +184,7 @@ class AttitudeEstimator:
 
         x, y = pp.obj2pix(points, axis=-1).T
 
-        condition = (
-            (z > self.cal.cos_phi(1.1))
-            * (x < width)
-            * (x >= 0)
-            * (y < height)
-            * (y >= 0)
-        )
+        condition = (z > self.cal.cos_phi(1.1)) * (x < width) * (x >= 0) * (y < height) * (y >= 0)
         in_frame_star_ids = set(np.where(condition)[0])
         detected_stars_ids = set(res.star_ids)
 
@@ -218,9 +206,7 @@ class AttitudeEstimator:
             bins = np.linspace(min_mag, max_mag, int((max_mag - min_mag) * 10) + 1)
 
             axs[1].hist(true_positive_mags, bins=bins, alpha=0.5, label="true positive")
-            axs[1].hist(
-                false_negative_mags, bins=bins, alpha=0.5, label="false negative"
-            )
+            axs[1].hist(false_negative_mags, bins=bins, alpha=0.5, label="false negative")
             plt.show()
 
         return true_positive_mags, false_negative_mags
@@ -332,15 +318,12 @@ class ImageAcquisitioner:
 
                     att_res = self._attitude_estimator(image)
                     confidence = self._confidence_function(att_res.n_matches)
-                    self._attitude_filter.put_quat(
-                        att_res.quat, confidence, time.monotonic()
-                    )
+                    self._attitude_filter.put_quat(att_res.quat, confidence, time.monotonic())
                     self.n_matches = att_res.n_matches
                     image_xyz = att_res.image_xyz
 
                     self.positions = (
-                        self._attitude_estimator.image_xyz_to_xy(image_xyz)
-                        / image.shape[1]
+                        self._attitude_estimator.image_xyz_to_xy(image_xyz) / image.shape[1]
                     )
 
                 elif self.mode == AttitudeEstimationModeEnum.IDLE:

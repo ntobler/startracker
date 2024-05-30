@@ -1,6 +1,6 @@
 # TODO cleanup add docstrings
-import numpy as np
 import cv2
+import numpy as np
 
 
 def decode_sbggr12_1x12(raw: np.ndarray):

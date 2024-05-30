@@ -1,14 +1,13 @@
 """Utilities for web applications"""
 
-import abc
+import functools
 import queue
 import threading
-import functools
 
 import cv2
 
 
-class QueueAbstractClass(abc.ABC):
+class QueueAbstractionClass:
     """
     Simplifies abstraction of calling functions through a queue interface.
     """
@@ -20,7 +19,7 @@ class QueueAbstractClass(abc.ABC):
     def queue_abstract(fun):
         def inner(*args):
             return_queue = queue.Queue(maxsize=1)
-            self: QueueAbstractClass = args[0]
+            self: QueueAbstractionClass = args[0]
             self._calls_queue.put((fun, args, return_queue))
             return return_queue.get()
 

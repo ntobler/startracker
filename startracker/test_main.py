@@ -1,13 +1,9 @@
-import threading
 import queue
+import threading
 
 import serial
 
-from . import main
-from . import communication
-from . import attitude_estimation
-from . import testing_utils
-from . import config
+from . import attitude_estimation, communication, config, main, testing_utils
 
 
 class MockSerial(serial.Serial):
@@ -97,13 +93,11 @@ class MasterEmulator:
             ):
                 break
             else:
-                assert False
+                raise AssertionError()
 
         self.transceive(
             main.SetAttitudeEstimationMode,
-            main.AttitudeEstimationMode(
-                attitude_estimation.AttitudeEstimationModeEnum.RUNNING
-            ),
+            main.AttitudeEstimationMode(attitude_estimation.AttitudeEstimationModeEnum.RUNNING),
         )
 
         time.sleep(0.1)
@@ -118,9 +112,7 @@ class MasterEmulator:
         assert command.request_type == type(tx_message)
         self.ser.write_cmd(command.cmd, tx_message.to_bytes())
 
-    def transceive(
-        self, command: communication.Command, tx_message: communication.Message
-    ):
+    def transceive(self, command: communication.Command, tx_message: communication.Message):
         self.ser.reset_input_buffer()
         self.send(command, tx_message)
         cmd, payload = self.ser.read_cmd()

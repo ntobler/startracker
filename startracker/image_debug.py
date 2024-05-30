@@ -5,12 +5,11 @@ For debug purposes.
 # %%
 
 import pathlib
-
-import numpy as np
 import subprocess
-import matplotlib.pyplot as plt
 
 import image_processing
+import matplotlib.pyplot as plt
+import numpy as np
 
 # Copy code to Raspberry pi
 subprocess.run(["bash", "copy.sh"], cwd="../install")

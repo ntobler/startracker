@@ -1,6 +1,5 @@
-import pytest
-
 import numpy as np
+import pytest
 import scipy.spatial.transform
 
 from . import transform
@@ -38,17 +37,13 @@ def test_find_common_rotation_axis(func):
     rot_axis /= np.linalg.norm(rot_axis)
 
     rotvecs = rot_axis[None] * rng.uniform(0, np.pi * 2, size=(N, 1))
-    around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(
-        rotvecs, degrees=False
-    )
+    around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvecs, degrees=False)
 
     rots = (origin_rot * around_axis_rot).as_quat()
 
     axis, std = func(rots)
 
-    assert np.allclose(rot_axis, axis, rtol=1e-4) or np.allclose(
-        -rot_axis, axis, rtol=1e-4
-    )
+    assert np.allclose(rot_axis, axis, rtol=1e-4) or np.allclose(-rot_axis, axis, rtol=1e-4)
 
     rots += rng.normal(size=rots.shape) * 0.001
     rots /= np.linalg.norm(rots, axis=-1, keepdims=True)
@@ -81,9 +76,7 @@ def test_find_common_rotation_axis_convergence(func):
 
     for i in numbers:
         rotvecs = rot_axis[None] * rng.uniform(0, np.pi * 2, size=(i, 1))
-        around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(
-            rotvecs, degrees=False
-        )
+        around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvecs, degrees=False)
         rots = (origin_rot * around_axis_rot).as_quat()
 
         rots += rng.normal(size=rots.shape) * STD
@@ -117,9 +110,7 @@ def test_find_common_rotation_axis_convergence(func):
         n = np.array([1, 10, 100, 1000])
         v = np.pi * STD / np.sqrt(n)
         ax.loglog(n, v, "--", label="natural std propagation")
-        ax.loglog(
-            n, 10 ** np.polyval(errors_poly, np.log10(n)), "--", color=p1.get_color()
-        )
+        ax.loglog(n, 10 ** np.polyval(errors_poly, np.log10(n)), "--", color=p1.get_color())
         ax.loglog(
             n,
             10 ** np.polyval(true_errors_poly, np.log10(n)),

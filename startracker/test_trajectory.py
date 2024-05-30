@@ -26,9 +26,7 @@ def test_motor_solver():
         assert np.allclose(m.get_rotm(m.solve_motor_dists(rot_matrix)), rot_matrix)
 
     rng = np.random.default_rng(42)
-    desired_rot = scipy.spatial.transform.Rotation.from_euler(
-        "XYZ", [2, 1, 1], degrees=True
-    )
+    desired_rot = scipy.spatial.transform.Rotation.from_euler("XYZ", [2, 1, 1], degrees=True)
     _test(desired_rot.as_matrix())
     desired_rot = scipy.spatial.transform.Rotation.from_euler(
         "XYZ", rng.normal(size=(100, 3)), degrees=True

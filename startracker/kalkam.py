@@ -1,16 +1,15 @@
 """Kalibrated Kamera module."""
 
 import abc
-import pathlib
-import json
-import time
 import dataclasses
+import json
+import pathlib
+import time
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
-import numpy as np
 import cairo
 import cv2
-
-from typing import Union, Tuple, Iterable, Optional, Sequence, List
+import numpy as np
 from numpy.typing import ArrayLike
 
 
@@ -56,7 +55,7 @@ class CalibrationPattern(abc.ABC):
         Returns:
             CalibrationPattern: loaded pattern instance.
         """
-        with open(filename, "r") as f:
+        with open(filename) as f:
             d = json.load(f)
         classes = [cls]
         class_map = {c.__name__: c for c in classes}
@@ -83,15 +82,13 @@ class CalibrationPattern(abc.ABC):
         """
 
     @abc.abstractmethod
-    def find_in_image(
-        self, image: np.ndarray, plot: bool = False
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def find_in_image(self, image: np.ndarray, plot: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
         Find the pattern in the given image.
 
         Args:
             image: Grayscale or color image
-            plot: Show matplotlib plot of the detection. Defaults to False.
+            plots: Show matplotlib plot of the detection. Defaults to False.
 
         Raises:
             ValueError: if pattern is not found
@@ -109,9 +106,7 @@ class CalibrationPattern(abc.ABC):
         Args:
             filename: SVG file name.
         """
-        with cairo.SVGSurface(
-            str(filename), self.overall_size[0], self.overall_size[1]
-        ) as surface:
+        with cairo.SVGSurface(str(filename), self.overall_size[0], self.overall_size[1]) as surface:
             surface.set_document_unit(cairo.SVG_UNIT_MM)
             ctx = cairo.Context(surface)
 
@@ -138,9 +133,7 @@ class CalibrationPattern(abc.ABC):
         """
         f = 72.0 / 25.4  # cairo pdf surface uses points, where 72 points are an inch
 
-        with cairo.PDFSurface(
-            str(filename), page_width * f, page_height * f
-        ) as surface:
+        with cairo.PDFSurface(str(filename), page_width * f, page_height * f) as surface:
             ctx = cairo.Context(surface)
 
             ctx.set_source_rgb(0, 0, 0)
@@ -234,9 +227,7 @@ class ChArUcoPattern(CalibrationPattern):
         )
 
         objp = np.zeros(((width - 1) * (height - 1), 3), np.float32)
-        objp[:, :2] = (
-            (np.mgrid[0 : width - 1, 0 : height - 1] + 1) * square_size
-        ).T.reshape(-1, 2)
+        objp[:, :2] = ((np.mgrid[0 : width - 1, 0 : height - 1] + 1) * square_size).T.reshape(-1, 2)
         self.object_points = objp
 
         marker_margin = 0.5 * self.square_size - 0.5 * self.markersize
@@ -262,9 +253,7 @@ class ChArUcoPattern(CalibrationPattern):
                 row = self.marker_positions[h * stride : h * stride + len(even_row)]
                 row[..., 0] = even_row
             else:
-                row = self.marker_positions[
-                    h * stride + len(even_row) : h * stride + stride
-                ]
+                row = self.marker_positions[h * stride + len(even_row) : h * stride + stride]
                 row[..., 0] = odd_row
             row[..., 1] = r
         self.marker_positions *= self.square_size
@@ -304,9 +293,7 @@ class ChArUcoPattern(CalibrationPattern):
             self._aruco.draw(ctx, marker_id, self.markersize)
             ctx.restore()
 
-    def find_in_image(
-        self, image: np.ndarray, plot: bool = False
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def find_in_image(self, image: np.ndarray, plot: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         if image.ndim == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -342,9 +329,7 @@ class ChArUcoPattern(CalibrationPattern):
         # CV2 has different pattern alignments depending on the version
         if _parse_version(cv2.__version__) < _parse_version("4.6"):
             # Flip object points vertically to align with aruco detection
-            object_points = self.object_points.reshape(
-                (self.height - 1, self.width - 1, 3)
-            )
+            object_points = self.object_points.reshape((self.height - 1, self.width - 1, 3))
             object_points = object_points[::-1].reshape((-1, 3))[charuco_ids[:, 0]]
         else:
             object_points = self.object_points[charuco_ids[:, 0]]
@@ -418,9 +403,7 @@ class ArUco:
             all_corners, all_ids, _ = detector.detectMarkers(image)
         return np.asarray(all_corners), all_ids
 
-    def create_charuco_board(
-        self, width: int, height: int, square_size: float, marker_size: float
-    ):
+    def create_charuco_board(self, width: int, height: int, square_size: float, marker_size: float):
         try:
             # OpenCV < 4.7.x
             charuco_board = cv2.aruco.CharucoBoard_create(
@@ -461,7 +444,7 @@ class IntrinsicCalibration:
         Args:
             filename: JSON file name
         """
-        with open(file, "r") as f:
+        with open(file) as f:
             d = json.load(f)
         intrinsic = np.array(d["intrinsic"])
         dist_coeffs = np.array(d["dist_coeffs"]) if len(d["dist_coeffs"]) else None
@@ -477,9 +460,7 @@ class IntrinsicCalibration:
         """
         d = {
             "intrinsic": self.intrinsic.tolist(),
-            "dist_coeffs": (
-                self.dist_coeffs.tolist() if self.dist_coeffs is not None else []
-            ),
+            "dist_coeffs": (self.dist_coeffs.tolist() if self.dist_coeffs is not None else []),
             "image_size": self.image_size,
         }
         with open(file, "w") as f:
@@ -511,16 +492,14 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
         width, height = self.image_size
 
         grid_x, grid_y = np.mgrid[0:height, 0:width]
-        error_image = griddata(pix, error, (grid_y, grid_x), method="linear").astype(
-            np.float32
-        )
+        error_image = griddata(pix, error, (grid_y, grid_x), method="linear").astype(np.float32)
         mask = np.isnan(error_image)
 
         factor = np.nanmax(error_image) / 255.0
         src = (np.where(mask, 0.0, error_image) / factor).astype(np.uint8)
-        extrapolated = cv2.inpaint(
-            src, mask.astype(np.uint8), 10, cv2.INPAINT_NS
-        ).astype(np.float32)
+        extrapolated = cv2.inpaint(src, mask.astype(np.uint8), 10, cv2.INPAINT_NS).astype(
+            np.float32
+        )
         extrapolated *= factor
         error_image = np.where(mask, extrapolated, error_image)
 
@@ -564,9 +543,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
 
         # Average voronoi plots
         img = np.zeros((h, w), dtype=np.float32)
-        for points, squared_errors in zip(
-            self.image_points_batch, self.squared_error_distances
-        ):
+        for points, squared_errors in zip(self.image_points_batch, self.squared_error_distances):
             intensities = np.sqrt(squared_errors)
 
             rect = (0, 0, w, h)
@@ -713,12 +690,8 @@ def calibration_from_points(
     if fraction < 1:
         # test calibration accuracy
         inverted_scores = []
-        for obj, pix, rvec, tvec in zip(
-            object_points_batch, image_points_batch, rvecs, tvecs
-        ):
-            pix_calculated, _ = cv2.projectPoints(
-                obj, rvec, tvec, intrinsic, dist_coeffs
-            )
+        for obj, pix, rvec, tvec in zip(object_points_batch, image_points_batch, rvecs, tvecs):
+            pix_calculated, _ = cv2.projectPoints(obj, rvec, tvec, intrinsic, dist_coeffs)
             inverted_score = np.sum((pix - pix_calculated[:, 0]) ** 2)
             inverted_scores.append(inverted_score)
 
@@ -738,9 +711,7 @@ def calibration_from_points(
         image_points_batch = image_points_batch2
 
         if verbose:
-            print(
-                f"Calibrate again using better {int(fraction * 100)}th percentile ..."
-            )
+            print(f"Calibrate again using better {int(fraction * 100)}th percentile ...")
 
         # redo calibration with most accurate source images only
         rms_error, intrinsic, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
@@ -749,13 +720,9 @@ def calibration_from_points(
 
     # test calibration accuracy
     squared_error_distances = []
-    for obj, pix, rvec, tvec in zip(
-        object_points_batch, image_points_batch, rvecs, tvecs
-    ):
+    for obj, pix, rvec, tvec in zip(object_points_batch, image_points_batch, rvecs, tvecs):
         pix_calculated, _ = cv2.projectPoints(obj, rvec, tvec, intrinsic, dist_coeffs)
-        squared_error_distance = (
-            np.linalg.norm(pix - pix_calculated[:, 0], axis=-1) ** 2
-        )
+        squared_error_distance = np.linalg.norm(pix - pix_calculated[:, 0], axis=-1) ** 2
         squared_error_distances.append(squared_error_distance)
 
     max_error = float(np.sqrt(np.max(np.concatenate(squared_error_distances, axis=0))))
@@ -861,9 +828,7 @@ class PointUndistorter:
 
         xy3 = xy * (1 + k1 * r2 + k2 * r4 + k3 * r6)
         xy_dist = (
-            xy3
-            + p12 * 2 * np.prod(xy, axis=-1, keepdims=True)
-            + np.flip(p12) * (r2 + 2 * xy * xy)
+            xy3 + p12 * 2 * np.prod(xy, axis=-1, keepdims=True) + np.flip(p12) * (r2 + 2 * xy * xy)
         )
         xy_dist = (xy_dist * f) + t
 

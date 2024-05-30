@@ -1,18 +1,16 @@
 """Module to handle serial communication"""
 
-import enum
 import abc
 import dataclasses
-import struct
-import pathlib
+import enum
 import logging
+import pathlib
+import struct
+from typing import Dict, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
-
 import serial
 import serial.serialutil
-
-from typing import Dict, Optional, Tuple, Sequence, Type, Union
 
 
 class CommunicationTimeoutException(Exception):
@@ -37,10 +35,7 @@ def _calc_crc(data: bytes) -> int:
     for x in data:
         crc ^= x << 8
         for _ in range(8):
-            if crc & 0x8000:
-                crc = (crc * 2) ^ 0x1021
-            else:
-                crc = crc * 2
+            crc = (crc * 2) ^ 0x1021 if crc & 0x8000 else crc * 2
     return crc & 0xFFFF
 
 
@@ -161,9 +156,7 @@ class Field:
 class EnumField(Field):
     """Message field for enums."""
 
-    def __init__(
-        self, enum_type: Type[enum.Enum], dtype="uint8", desc: Optional[str] = None
-    ):
+    def __init__(self, enum_type: Type[enum.Enum], dtype="uint8", desc: Optional[str] = None):
         super().__init__(dtype, desc=desc)
         self.default = enum_type(0)
         self._enum_type = enum_type
@@ -247,9 +240,7 @@ class Message:
         return cls(*values)
 
     def to_bytes(self) -> bytes:
-        values = [
-            f.format(v) for f, v in zip(self._fields.values(), self.__dict__.values())
-        ]
+        values = [f.format(v) for f, v in zip(self._fields.values(), self.__dict__.values())]
         return struct.pack(self._format, *values)
 
     @classmethod
@@ -306,9 +297,7 @@ def make_message(cls):
 
     dataclass_fields = []
     for k, v in fields.items():
-        dataclass_fields.append(
-            (k, v.python_type, dataclasses.field(default=v.default))
-        )
+        dataclass_fields.append((k, v.python_type, dataclasses.field(default=v.default)))
 
     return dataclasses.make_dataclass(
         cls.__name__,
@@ -415,9 +404,7 @@ class CommandHandler:
     ):
         self.serial = serial
         self._logger = logging.getLogger("CommandHandler")
-        assert len({c.cmd for c in commands}) == len(
-            commands
-        ), "Commands are not unique."
+        assert len({c.cmd for c in commands}) == len(commands), "Commands are not unique."
         self._commands = {c.cmd: c for c in commands}
         self._default_message = default_message
 

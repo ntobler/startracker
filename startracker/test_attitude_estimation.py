@@ -1,9 +1,7 @@
 import numpy as np
 import scipy.spatial.transform
 
-from . import attitude_estimation
-from . import testing_utils
-from . import kalkam
+from . import attitude_estimation, kalkam, testing_utils
 
 
 def test_attutude_estimation_error():

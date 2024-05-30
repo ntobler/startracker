@@ -3,10 +3,9 @@
 # %%
 # Imports
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import scipy.spatial
-
 import trajectory
 
 # %%
@@ -15,9 +14,7 @@ import trajectory
 
 def plot_polynom_trajectory():
     """Plot a polynomial trajectory example."""
-    polytr = trajectory.TrajectoryCalculator(15 * 60, 3, trajectory.MotorSolver())(
-        35, 47
-    )
+    polytr = trajectory.TrajectoryCalculator(15 * 60, 3, trajectory.MotorSolver())(35, 47)
 
     times = np.linspace(polytr.start, polytr.stop, 1000)
     path_approx = []
@@ -39,9 +36,7 @@ def calc_motor_dists(azimuths, elevations, rolls, **kwargs):
     m = trajectory.MotorSolver(**kwargs)
     rots = []
     for a, e, r in zip(azimuths.ravel(), elevations.ravel(), rolls.ravel()):
-        rots.append(
-            trajectory.astro_rotation_matrix(float(a), float(e), float(r), degrees=True)
-        )
+        rots.append(trajectory.astro_rotation_matrix(float(a), float(e), float(r), degrees=True))
     rots = np.array(rots)
     rots = rots.reshape(azimuths.shape + rots.shape[1:])
     ret = m.solve_motor_dists(rots, plot=False)
@@ -106,9 +101,7 @@ def max_stepper_error(step_size=2.5e-3):
     m = trajectory.MotorSolver(theta=np.radians(90))
     rots = []
     for a, e, r in zip(azimuths.ravel(), elevations.ravel(), rolls.ravel()):
-        rots.append(
-            trajectory.astro_rotation_matrix(float(a), float(e), float(r), degrees=True)
-        )
+        rots.append(trajectory.astro_rotation_matrix(float(a), float(e), float(r), degrees=True))
     rots = np.array(rots)
     rots = rots.reshape(azimuths.shape + rots.shape[1:])
     motor_dists = m.solve_motor_dists(rots, plot=False)
@@ -149,15 +142,11 @@ def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
             azimuths, elevations, rolls, theta=np.radians(t), phi=np.radians(p)
         )
 
-        motor_ranges = np.max(motor_dists, axis=(-1, -2)) - np.min(
-            motor_dists, axis=(-1, -2)
-        )
+        motor_ranges = np.max(motor_dists, axis=(-1, -2)) - np.min(motor_dists, axis=(-1, -2))
 
         a, b = np.unravel_index(i, thetas.shape)
         max_motor_ranges[a, b] = np.max(motor_ranges)
-        min_motor_ranges[a, b] = np.mean(
-            np.abs(motor_dists[..., 1, :] - motor_dists[..., 0, :])
-        )
+        min_motor_ranges[a, b] = np.mean(np.abs(motor_dists[..., 1, :] - motor_dists[..., 0, :]))
     max_motor_ranges = np.clip(max_motor_ranges, None, 20)
     min_motor_ranges = np.clip(min_motor_ranges, None, 20)
 
@@ -170,9 +159,7 @@ def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
     mins = roll_angle * 2 / 360 * 24 * 60
     axs[0].set_xlabel("Motor shaft azimuth (degrees)")
     axs[0].set_ylabel("Motor shaft elevation (degrees)")
-    axs[0].set_title(
-        f"max motor range needed to travel +-{roll_angle} degrees ({mins}mins)"
-    )
+    axs[0].set_title(f"max motor range needed to travel +-{roll_angle} degrees ({mins}mins)")
 
     contourplot = axs[1].contourf(thetas, phis, min_motor_ranges)
     cbar = plt.colorbar(contourplot, shrink=0.6, pad=0.08)
@@ -180,9 +167,7 @@ def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
     axs[1].grid()
     axs[1].set_xlabel("Motor shaft azimuth (degrees)")
     axs[1].set_ylabel("Motor shaft elevation (degrees)")
-    axs[1].set_title(
-        f"Average motor range traveled for +-{roll_angle} degrees ({mins}mins)"
-    )
+    axs[1].set_title(f"Average motor range traveled for +-{roll_angle} degrees ({mins}mins)")
     fig.tight_layout()
     plt.show()
 
@@ -227,9 +212,7 @@ plt.plot(roll, path_approx, "-")
 plt.show()
 
 # %%
-azimuths, elevations = np.meshgrid(
-    np.arange(0, 121, 10), np.arange(0, 91, 10), indexing="ij"
-)
+azimuths, elevations = np.meshgrid(np.arange(0, 121, 10), np.arange(0, 91, 10), indexing="ij")
 rolls = np.ones_like(azimuths) * 5
 motor_dists = calc_motor_dists(azimuths, elevations, rolls)
 

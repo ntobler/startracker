@@ -1,10 +1,10 @@
 """Coordinate transformations."""
 
-import numpy as np
-import scipy.spatial.transform
-import scipy.optimize
-
 from typing import Tuple
+
+import numpy as np
+import scipy.optimize
+import scipy.spatial.transform
 
 
 def azel2nwu(az_el: np.ndarray, axis=-1, degrees: bool = False) -> np.ndarray:

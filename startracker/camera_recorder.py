@@ -1,7 +1,7 @@
 """Utility tool to capture images indefinitely in a loop."""
 
 import argparse
-from datetime import datetime
+import datetime
 import logging
 import pathlib
 import time
@@ -42,7 +42,7 @@ def main():
             while True:
                 time.sleep(args.interval)
                 image = cam.capture()
-                time_str = datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+                time_str = datetime.datetime.now().strftime("%Y%m%dT%H%M%S_%f")
                 file = output_dir / f"image_{time_str}.png"
                 cv2.imwrite(str(file), image)
     except KeyboardInterrupt:

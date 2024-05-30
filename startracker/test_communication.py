@@ -36,9 +36,7 @@ def test_messages():
     Foo(1, 2, 3)
     assert Foo(
         49, 50, Bar(51), 52, 5.0, 49 * np.ones((2, 3), dtype=np.uint8), MyEnum.C
-    ) == Foo.from_bytes(
-        b"1234" + np.array(5.0, dtype=np.float32).tobytes() + b"111111" + b"\x02"
-    )
+    ) == Foo.from_bytes(b"1234" + np.array(5.0, dtype=np.float32).tobytes() + b"111111" + b"\x02")
     assert Foo.from_bytes(b"12345678123456\x02").to_bytes() == b"12345678123456\x02"
 
     assert type(Foo().test_enum) == MyEnum
@@ -46,7 +44,5 @@ def test_messages():
     print(Foo().attitude_estimation_timeout_ms)
     print(Foo.print_help())
 
-    code = communication.gen_code_with_dependencies(
-        [Foo], "out.h", skip_file_write=True
-    )
+    code = communication.gen_code_with_dependencies([Foo], "out.h", skip_file_write=True)
     print(code)

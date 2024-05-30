@@ -3,26 +3,27 @@ Flask web application for the axis aligned startracker use case.
 """
 
 import json
-import time
 import logging
-import threading
 import os
 import queue
+import threading
+import time
+from typing import List, Optional
 
-from flask import Flask, render_template, jsonify, send_from_directory
-from flask_sock import Sock, Server, ConnectionClosed
 import numpy as np
 import scipy.spatial.transform
+from flask import Flask, jsonify, render_template, send_from_directory
+from flask_sock import ConnectionClosed, Server, Sock
 
-from startracker import camera
-from startracker import calibration
-from startracker import attitude_estimation
-from startracker import persistent
-from startracker import kalkam
-from startracker import webutil
-from startracker import transform
-
-from typing import Optional, List
+from startracker import (
+    attitude_estimation,
+    calibration,
+    camera,
+    kalkam,
+    persistent,
+    transform,
+    webutil,
+)
 
 
 def project_radial(xyz: np.ndarray) -> np.ndarray:
@@ -61,7 +62,7 @@ class TimeMeasurer:
         self.t = time.monotonic() - self._t0
 
 
-class App(webutil.QueueAbstractClass):
+class App(webutil.QueueAbstractionClass):
     terminate: bool
     """Set True to terminate the application loop."""
 
@@ -82,15 +83,11 @@ class App(webutil.QueueAbstractClass):
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
 
-        self._attitude_est = attitude_estimation.AttitudeEstimator(
-            self._cal, pers.star_data_dir
-        )
+        self._attitude_est = attitude_estimation.AttitudeEstimator(self._cal, pers.star_data_dir)
 
         axis_relative_to_camera = self._rng.normal(size=(3,)) * 0.5 + [0, 0, 1]
         axis_relative_to_camera /= np.linalg.norm(axis_relative_to_camera)
-        axis_rotm = kalkam.look_at_extrinsic(
-            axis_relative_to_camera, [0, 0, 0], [0, -1, 0]
-        )[:3, :3]
+        axis_rotm = kalkam.look_at_extrinsic(axis_relative_to_camera, [0, 0, 0], [0, -1, 0])[:3, :3]
         self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
 
         self._cat_xyz = self._attitude_est.cat_xyz.T
@@ -111,9 +108,7 @@ class App(webutil.QueueAbstractClass):
 
             self._last_attitude_res = att_res
 
-            inverse_rotation = scipy.spatial.transform.Rotation.from_quat(
-                att_res.quat
-            ).inv()
+            inverse_rotation = scipy.spatial.transform.Rotation.from_quat(att_res.quat).inv()
 
             # Rotate into camera coordinate frame
             cat_xyz = inverse_rotation.apply(self._cat_xyz)
@@ -130,9 +125,7 @@ class App(webutil.QueueAbstractClass):
 
             # Calculate alignment error
             alignment_error = np.arccos(north_south[0, 2]) * (180 / np.pi)
-            alignment_error = (
-                180 - alignment_error if alignment_error > 90 else alignment_error
-            )
+            alignment_error = 180 - alignment_error if alignment_error > 90 else alignment_error
 
             # Only show hemisphere
             pos_z = cat_xyz[:, 2] > 0
@@ -160,7 +153,7 @@ class App(webutil.QueueAbstractClass):
         points = project_radial(self.axis_rot.apply(points))
         return points
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def add_to_calibration(self):
         if self._last_attitude_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:
             self._calibration_rots.append(self._last_attitude_res.quat)
@@ -170,14 +163,12 @@ class App(webutil.QueueAbstractClass):
         self._calibration_rots.clear()
         return {"calibration_orientations": len(self._calibration_rots)}
 
-    @webutil.QueueAbstractClass.queue_abstract
+    @webutil.QueueAbstractionClass.queue_abstract
     def calibrate(self):
         if len(self._calibration_rots) < 2:
             raise ValueError("Not enough data to calibrate")
 
-        axis_vec, error_std = transform.find_common_rotation_axis(
-            np.array(self._calibration_rots)
-        )
+        axis_vec, error_std = transform.find_common_rotation_axis(np.array(self._calibration_rots))
 
         # Make sure vector points in general direction of camera
         axis_vec = axis_vec if axis_vec[2] > 0 else -axis_vec

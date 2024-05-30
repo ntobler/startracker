@@ -1,6 +1,6 @@
 """Applicaiton configuration."""
 
-from dynaconf import Dynaconf, Validator, ValidationError
+from dynaconf import Dynaconf, ValidationError, Validator
 
 from . import persistent
 
@@ -34,6 +34,6 @@ def check_validation_errors():
     try:
         settings.validators.validate_all()
     except ValidationError as e:
-        raise ConfigurationException(f"Configuration validation error: {e}")
+        raise ConfigurationException(f"Configuration validation error: {e}") from e
     except Exception as e:
-        raise ConfigurationException(f"Configuration error: {e}")
+        raise ConfigurationException(f"Configuration error: {e}") from e

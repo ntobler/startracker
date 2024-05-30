@@ -1,20 +1,16 @@
 """Main entrypoint for the startracker application."""
 
-import sys
-import logging
-import enum
 import argparse
+import enum
+import logging
+import sys
 import time
-
-import serial
-import numpy as np
-
-from . import trajectory
-from . import communication
-from . import attitude_estimation
-from . import config
-
 from typing import Type
+
+import numpy as np
+import serial
+
+from . import attitude_estimation, communication, config, trajectory
 
 
 class AcknowledgeEnum(enum.Enum):
@@ -24,16 +20,12 @@ class AcknowledgeEnum(enum.Enum):
 
 @communication.make_message
 class Acknowledge:
-    ack = communication.EnumField(
-        AcknowledgeEnum, "uint8", "1 if acknowledge okay else 0"
-    )
+    ack = communication.EnumField(AcknowledgeEnum, "uint8", "1 if acknowledge okay else 0")
 
 
 @communication.make_message
 class Settings:
-    min_matches = communication.Field(
-        "uint8", "Min matches required in the attitude estimation"
-    )
+    min_matches = communication.Field("uint8", "Min matches required in the attitude estimation")
     attitude_estimation_timeout_ms = communication.Field("uint8")
     exposure_ms = communication.Field("uint16")
     gain = communication.Field("uint8")
@@ -61,9 +53,7 @@ class Quaternion:
 
 @communication.make_message
 class AttitudeEstimationMode:
-    mode = communication.EnumField(
-        attitude_estimation.AttitudeEstimationModeEnum, "uint8"
-    )
+    mode = communication.EnumField(attitude_estimation.AttitudeEstimationModeEnum, "uint8")
 
 
 @communication.make_message
@@ -74,9 +64,7 @@ class Status:
     current_number_of_matches = communication.Field("uint16")
     average_number_of_matches = communication.Field("uint16")
     quaternion = communication.StructField(Quaternion, "curent quaternion")
-    estimation_id = communication.Field(
-        "uint16", "Id of the current attitude estimation sample"
-    )
+    estimation_id = communication.Field("uint16", "Id of the current attitude estimation sample")
 
 
 MAX_STAR_COUNT = 32
@@ -272,9 +260,7 @@ class App:
             np.radians(s.hardware.motor_theta).item(),
             np.radians(s.hardware.motor_phi).item(),
         )
-        tc = trajectory.TrajectoryCalculator(
-            s.trajectory.max_seconds, s.trajectory.max_dist, ms
-        )
+        tc = trajectory.TrajectoryCalculator(s.trajectory.max_seconds, s.trajectory.max_dist, ms)
         af = attitude_estimation.AttitudeFilter()
         ia = attitude_estimation.ImageAcquisitioner(af)
 
@@ -296,9 +282,7 @@ class App:
     def __call__(self) -> int:
         """Run main loop of the command handler."""
         s = communication.PacketHandler(self._ser)
-        com_handler = communication.CommandHandler(
-            s, self._commands, Acknowledge(False)
-        )
+        com_handler = communication.CommandHandler(s, self._commands, Acknowledge(False))
         logging.info("Running")
         try:
             com_handler.run_indefinitely()
