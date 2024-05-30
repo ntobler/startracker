@@ -1,4 +1,5 @@
 """Utility tool to capture images indefinitely in a loop."""
+
 import argparse
 from datetime import datetime
 import logging

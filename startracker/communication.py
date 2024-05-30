@@ -140,9 +140,7 @@ class Field:
             "int64": ("l", int, "int64_t", 2, np.int64),
             "float32": ("f", float, "float", 4, np.float32),
             "float64": ("d", float, "double", 8, np.float64),
-        }[
-            dtype
-        ]
+        }[dtype]
         self.default = 0
         self.desc = desc
 
@@ -397,8 +395,7 @@ class Command(abc.ABC):
     response_type: Type[Message] = Message
 
     @abc.abstractmethod
-    def execute(self, payload: Message) -> Message:
-        ...
+    def execute(self, payload: Message) -> Message: ...
 
     @classmethod
     def generate_c_code(cls):

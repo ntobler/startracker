@@ -62,7 +62,6 @@ class TimeMeasurer:
 
 
 class App(webutil.QueueAbstractClass):
-
     terminate: bool
     """Set True to terminate the application loop."""
 
@@ -239,12 +238,10 @@ class QueueDistributingStatus:
 
 
 class WebApp:
-
     flask_app = None
     app = None
 
     def __init__(self):
-
         self._app_thread = threading.Thread(target=self._run_app)
 
         self.flask_app = Flask(__name__, template_folder="../web")
@@ -306,7 +303,6 @@ class WebApp:
 
 
 def main():
-
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

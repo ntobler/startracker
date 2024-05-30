@@ -26,7 +26,6 @@ def test_azel_nwu():
     [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
 )
 def test_find_common_rotation_axis(func):
-
     N = 128
 
     rng = np.random.default_rng(42)
@@ -64,7 +63,6 @@ def test_find_common_rotation_axis(func):
     [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
 )
 def test_find_common_rotation_axis_convergence(func):
-
     N = 10
     STD = 0.1
 
@@ -82,7 +80,6 @@ def test_find_common_rotation_axis_convergence(func):
     estimates = []
 
     for i in numbers:
-
         rotvecs = rot_axis[None] * rng.uniform(0, np.pi * 2, size=(i, 1))
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(
             rotvecs, degrees=False

@@ -95,16 +95,13 @@ class Camera(abc.ABC):
             raise RuntimeError("Context manager not entered")
 
     @abc.abstractmethod
-    def capture_raw(self):
-        ...
+    def capture_raw(self): ...
 
     @abc.abstractmethod
-    def capture(self) -> np.ndarray:
-        ...
+    def capture(self) -> np.ndarray: ...
 
     @abc.abstractmethod
-    def record_darkframe(self):
-        ...
+    def record_darkframe(self): ...
 
 
 class MockCamera(Camera):

@@ -21,13 +21,11 @@ from typing import Tuple, List, Optional
 
 
 class TestingMaterial:
-
     testing_dir: pathlib.Path
     cam_file: pathlib.Path
     stardata_dir: pathlib.Path
 
     def __init__(self, use_existing: bool = True):
-
         user_data_dir = persistent.Persistent.get_instance().user_data_dir
 
         self.testing_dir = user_data_dir / "testing"
@@ -139,7 +137,6 @@ class StarImageGenerator:
         return self.image_from_extrinsic(extrinsic, grid=grid)
 
     def stars_from_extrinsic(self, extrinsic: np.ndarray):
-
         # Take z image vector of the inverted extrinsic
         target_vector = extrinsic[2, :3]
 
@@ -372,7 +369,6 @@ class AxisAlignCalibrationTestCam(MockStarCam):
         self.axis_angle = 0.0
 
     def capture(self) -> np.ndarray:
-
         if self.t is None:
             t = time.monotonic()
         else:

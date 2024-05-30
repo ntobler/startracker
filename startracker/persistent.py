@@ -1,4 +1,5 @@
 """Persistent data storage module."""
+
 import pathlib
 
 

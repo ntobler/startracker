@@ -29,7 +29,6 @@ class RpiCamera(camera.Camera):
         self._analog_gain = 0
 
     def _apply_settings(self):
-
         if self._exposure_ms != self.settings.exposure_ms:
             self._exposure_ms = self.settings.exposure_ms
             self._picam2.set_controls({"ExposureTime": int(self._exposure_ms * 1000)})
@@ -95,7 +94,6 @@ class RpiCamera(camera.Camera):
         """
         image = None
         for _ in range(self.settings.stack):
-
             raw = self.capture_raw()
 
             # Correct bias

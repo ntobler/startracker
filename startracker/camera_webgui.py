@@ -33,7 +33,6 @@ from typing import Literal, Optional, List, BinaryIO
 
 
 class IntrinsicCalibrator:
-
     cal: Optional[kalkam.IntrinsicCalibrationWithData]
 
     def __init__(self, dir: pathlib.Path, cal_file: pathlib.Path):
@@ -99,7 +98,6 @@ class IntrinsicCalibrator:
 
 
 class App(webutil.QueueAbstractClass):
-
     terminate: bool
     """Set True to terminate the application loop."""
 
@@ -277,12 +275,10 @@ class App(webutil.QueueAbstractClass):
 
 
 class WebApp:
-
     flask_app = None
     app = None
 
     def __init__(self):
-
         self._app_thread = threading.Thread(target=self._run_app)
 
         self.flask_app = Flask(__name__, template_folder="../web")
