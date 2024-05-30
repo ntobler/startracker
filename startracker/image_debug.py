@@ -1,6 +1,4 @@
-"""
-For debug purposes.
-"""
+"""For debug purposes."""
 
 # %%
 

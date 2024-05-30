@@ -178,8 +178,7 @@ class Shutdown(communication.Command):
     response_type: Type[communication.Message] = Acknowledge
 
     def __init__(self, enable_shutdown: bool, shutdown_delay: float):
-        """
-        Quit the application.
+        """Quit the application.
 
         Args:
             enable_shutdown: Application is allowed to shutdown the system.
@@ -243,8 +242,7 @@ class GetStars(communication.Command):
 
 class App:
     def __init__(self, enable_shutdown: bool = True):
-        """
-        Production application class.
+        """Production application class.
 
         Args:
             enable_shutdown: Application is allowed to shutdown the system

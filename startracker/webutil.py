@@ -1,4 +1,4 @@
-"""Utilities for web applications"""
+"""Utilities for web applications."""
 
 import functools
 import queue
@@ -8,9 +8,7 @@ import cv2
 
 
 class QueueAbstractionClass:
-    """
-    Simplifies abstraction of calling functions through a queue interface.
-    """
+    """Simplifies abstraction of calling functions through a queue interface."""
 
     def __init__(self):
         self._calls_queue = queue.Queue()
@@ -26,7 +24,7 @@ class QueueAbstractionClass:
         return inner
 
     def _process_pending_calls(self):
-        """Process all pending function calls to functions wrapped with queue_abstract"""
+        """Process all pending function calls to functions wrapped with queue_abstract."""
         while True:
             try:
                 method, args, return_queue = self._calls_queue.get(block=False)

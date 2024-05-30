@@ -1,5 +1,5 @@
-"""
-Web streaming example
+"""Web streaming example.
+
 Source code adapted from http://picamera.readthedocs.io/en/latest/recipes2.html#web-streaming
 """
 

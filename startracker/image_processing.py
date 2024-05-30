@@ -1,11 +1,11 @@
-# TODO cleanup add docstrings
+"""Utilities for image processing."""
+
 import cv2
 import numpy as np
 
 
 def decode_sbggr12_1x12(raw: np.ndarray):
-    """
-    Decode SBGGR12 format (12bit per pixel).
+    """Decode SBGGR12 format (12bit per pixel).
 
     3 bytes hold data for 2 pixels.
     - byte 0: pixel 0 upper 8bit
@@ -27,8 +27,7 @@ def decode_sbggr12_1x12(raw: np.ndarray):
 
 
 def decode_srggb10(raw: np.ndarray):
-    """
-    Decode SRGGB10 format (10bit per pixel).
+    """Decode SRGGB10 format (10bit per pixel).
 
     5 bytes hold data for 4 pixels.
     - byte 0: pixel 0 upper 8bit
@@ -50,11 +49,13 @@ def decode_srggb10(raw: np.ndarray):
 
 
 def extract_green(bayer: np.ndarray):
+    """Extract green channels from a bayer matrix image."""
     res = bayer[::2, 1::2] + bayer[1::2, ::2]
     res //= 2
     return res
 
 
 def binning(x: np.ndarray, factor: int = 4):
+    """Apply pixel binning to an image."""
     h, w = x.shape
     return cv2.resize(x, (w // factor, h // factor), interpolation=cv2.INTER_AREA)

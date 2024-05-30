@@ -6,7 +6,7 @@ from . import communication, main
 
 
 def generate_code():
-    """Utility function to generate code for the STM project"""
+    """Utility function to generate code for the STM project."""
     communication.gen_code_with_dependencies(
         [
             main.Acknowledge,

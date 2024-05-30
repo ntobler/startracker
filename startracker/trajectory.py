@@ -1,3 +1,5 @@
+"""Trajectory calculations to tilt startracker to correct attitude."""
+
 import dataclasses
 from typing import Union
 
@@ -6,8 +8,7 @@ import scipy.spatial.transform
 
 
 def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
-    """
-    Solves the fermat point problem.
+    """Solves the fermat point problem.
 
     Finds the point, which has equal angles to all vertices (120 degrees).
 
@@ -15,6 +16,7 @@ def fermat_point(points: np.ndarray, plot: bool = False) -> np.ndarray:
 
     Args:
         points: point array with shape=[..., 3, xyz]
+        plot: Show matplotlib plot.
 
     Returns:
         (np.ndarray): fermat mid point shape=[..., xyz]
@@ -71,8 +73,7 @@ class MotorSolver:
         theta: float = np.pi / 4,
         phi: float = 1.0,
     ):
-        """
-        Initialize.
+        """Initialize.
 
         Args:
             motor_dists_from_center: Distance between the motor shaft start points and the center.
@@ -98,13 +99,12 @@ class MotorSolver:
         self.shaft_directions = shaft_directions
 
     def solve_motor_dists(self, rot_matrix, plot: bool = False) -> np.ndarray:
-        """
-        Solve the distances of the linear motors.
+        """Solve the distances of the linear motors.
 
         Supports batching.
 
         Args:
-            rotm_matrix: Rotation matrix shape=[..., 3, 3].
+            rot_matrix: Rotation matrix shape=[..., 3, 3].
             plot: show matplotlib of the motor alignment.
 
         Returns:
@@ -174,8 +174,7 @@ class MotorSolver:
         return motor_dists
 
     def get_rotm(self, motor_dists: np.ndarray) -> np.ndarray:
-        """
-        Solve the rotation matrix from linear motor distances.
+        """Solve the rotation matrix from linear motor distances.
 
         Supports batching.
 
@@ -218,13 +217,12 @@ def astro_rotation_matrix(
     roll: Union[float, np.ndarray],
     degrees: bool = False,
 ):
-    """
-    Get rotation matrix from azimuth and elevation parameters.
+    """Get rotation matrix from azimuth and elevation parameters.
 
     Args:
         azimuth: Angle around zenith from x-axis.
         elevation: Angle from ground plane to zenith.
-        rol: Right hand angle around direction vector.
+        roll: Right hand angle around direction vector.
         degrees: Use degrees instead of rads
 
     Returns:

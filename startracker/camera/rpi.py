@@ -13,8 +13,7 @@ from startracker.camera import camera
 
 
 class RpiCamera(camera.Camera):
-    """
-    Arducam IMX462 implementation.
+    """Arducam IMX462 implementation.
 
     exposure_ms = 10000  # 10s (but 50s then 20s, 20s ...)
     exposure_ms = 5000  # 50s (but 25s then 10s, 10s ...)
@@ -67,8 +66,7 @@ class RpiCamera(camera.Camera):
             self._picam2.stop()
 
     def capture_raw(self):
-        """
-        Capture a raw image.
+        """Capture a raw image.
 
         Returns:
             np.ndarray: uint16 bayer image
@@ -83,8 +81,7 @@ class RpiCamera(camera.Camera):
         return bayer
 
     def capture(self) -> np.ndarray:
-        """
-        Capture corrected, potentially stacked and binned image.
+        """Capture corrected, potentially stacked and binned image.
 
         Returns:
             np.ndarray: uint8 image

@@ -1,3 +1,5 @@
+"""Attitude estimation module tests."""
+
 import numpy as np
 import scipy.spatial.transform
 

@@ -1,4 +1,4 @@
-"""Various helper function and classes for testing, especially for star and camera simulation"""
+"""Various helper function and classes for testing, especially for star and camera simulation."""
 
 import dataclasses
 import pathlib
@@ -103,8 +103,7 @@ class StarImageGenerator:
         up_vector: np.ndarray,
         grid: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Create image of stars.
+        """Create image of stars.
 
         Args:
             target_vector: shape=[3] Equatorical target vector, the camera points at in astronomical
@@ -222,6 +221,8 @@ class CameraTester:
 
     @dataclasses.dataclass
     class Slider:
+        """Slider configuration."""
+
         name: str
         min: float
         max: float
@@ -251,7 +252,6 @@ class CameraTester:
 
     def run(self):
         """Run matplotlib GUI."""
-
         import matplotlib.pyplot as plt
         import matplotlib.widgets
 
@@ -298,7 +298,7 @@ class CameraTester:
 
 
 class MockStarCam(camera.Camera):
-    """Camera to generate artificial images of the sky"""
+    """Camera to generate artificial images of the sky."""
 
     t: Optional[float] = None
     """Capture time in seconds."""

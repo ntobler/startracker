@@ -1,6 +1,4 @@
-"""
-Flask web application for the axis aligned startracker use case.
-"""
+"""Flask web application for the axis aligned startracker use case."""
 
 import json
 import logging
@@ -37,8 +35,7 @@ def project_radial(xyz: np.ndarray) -> np.ndarray:
 
 
 def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None):
-    """
-    Convert numpy array in a list of rounded floats.
+    """Convert numpy array in a list of rounded floats.
 
     JSON serialization is able to correcty truncate floats to the desired length.
     """
@@ -191,7 +188,6 @@ class App(webutil.QueueAbstractionClass):
 
     def run(self):
         """App logic."""
-
         self._update_camera_frame()
 
         while not self.terminate:

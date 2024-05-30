@@ -12,8 +12,7 @@ IntrinsicParams = collections.namedtuple(
 
 
 def make_dummy() -> kalkam.IntrinsicCalibration:
-    """
-    Return dummy calibration that may be used for testing.
+    """Return dummy calibration that may be used for testing.
 
     Returns:
         kalkam.IntrinsicCalibration: Calibration instance with dummy values.
@@ -40,8 +39,7 @@ def make_dummy() -> kalkam.IntrinsicCalibration:
 
 
 def intrinsic_params(cal: kalkam.IntrinsicCalibration) -> IntrinsicParams:
-    """
-    Get intrinsic camera parameters.
+    """Get intrinsic camera parameters.
 
     Returns:
         IntrinsicParams: Named tuple containing camera parameters
@@ -57,8 +55,7 @@ def intrinsic_params(cal: kalkam.IntrinsicCalibration) -> IntrinsicParams:
 def get_distorted_camera_frame(
     cal: kalkam.IntrinsicCalibration, segments_per_side: int = 10
 ) -> np.ndarray:
-    """
-    Get a numpy array representing a polygon of the distorted camera frame in cartesian space.
+    """Get a numpy array representing a polygon of the distorted camera frame in cartesian space.
 
     Args:
         cal: Calibration object.
@@ -89,8 +86,7 @@ def get_distorted_camera_frame(
 
 
 def get_frame_corners(cal: kalkam.IntrinsicCalibration) -> np.ndarray:
-    """
-    Get a numpy array representing the corners of the camera in cartesian space.
+    """Get a numpy array representing the corners of the camera in cartesian space.
 
     Args:
         cal: Calibration object.
@@ -98,7 +94,6 @@ def get_frame_corners(cal: kalkam.IntrinsicCalibration) -> np.ndarray:
     Returns:
         np.ndarray: Corners xyz shape=[5, 3]
     """
-
     p = intrinsic_params(cal)
     x0 = (-p.tx - 0.5) / p.fx
     x1 = (p.width - p.tx - 0.5) / p.fx

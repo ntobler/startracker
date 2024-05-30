@@ -36,8 +36,7 @@ def nwu2azel(nwu: np.ndarray, axis=-1, degrees: bool = False):
 
 
 def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
-    """
-    Find the common rotation axis of a set of rotations.
+    """Find the common rotation axis of a set of rotations.
 
     Find solution by averaging solutions between pairs of quaternions.
 
@@ -96,8 +95,7 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
 def find_common_rotation_axis_alt(
     quats: np.ndarray,
 ) -> Tuple[np.ndarray, float]:
-    """
-    Find the common rotation axis of a set of rotations.
+    """Find the common rotation axis of a set of rotations.
 
     Find solution by solving minimization problem.
 

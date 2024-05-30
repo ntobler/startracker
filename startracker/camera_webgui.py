@@ -1,6 +1,4 @@
-"""
-Flask web application to capture images using a smartphone browser or any other browser.
-"""
+"""Flask web application to capture images using a smartphone browser or any other browser."""
 
 import logging
 import os
@@ -72,7 +70,7 @@ class IntrinsicCalibrator:
         self._logger.info(f"Calibration finished rms error: {self.cal.rms_error}")
 
     def plot_cal_png(self, filehandler: BinaryIO) -> bytes:
-        """Plot calibration and return png in bytes"""
+        """Plot calibration and return png in bytes."""
         if self.cal is None:
             return ValueError("No calibration present")
 

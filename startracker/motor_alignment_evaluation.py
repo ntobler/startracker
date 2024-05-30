@@ -1,3 +1,4 @@
+"""Test script for motor alignment algorithms."""
 # TODO clean up
 
 # %%
@@ -92,7 +93,6 @@ max_motor_dists()
 
 def max_stepper_error(step_size=2.5e-3):
     """Plot histogram of error, if the stepper has discrete steps of a given step size."""
-
     azimuths, elevations, rolls = np.meshgrid(
         np.arange(0, 121, 2), np.arange(1, 90, 2), [-1.875, 1.875], indexing="ij"
     )

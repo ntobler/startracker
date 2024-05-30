@@ -12,16 +12,17 @@ def draw_grid(
     cal: kalkam.IntrinsicCalibration,
     inplace: bool = False,
 ) -> np.ndarray:
-    """
-    Draw equatorial grid given image.
+    """Draw equatorial grid given image.
 
     Args:
         image: image to draw on.
         rot_mat: Rotation matrix defining the rotation of the star frame
         cal: Calibration object.
-        inpace: Draw on the given image or return new one.
-    """
+        inplace: Draw on the given image or return new one.
 
+    Return:
+        Image with grid drawn.
+    """
     if not inplace:
         image = np.copy(image)
 

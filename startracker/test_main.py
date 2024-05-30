@@ -1,3 +1,5 @@
+"""Main module tests."""
+
 import queue
 import threading
 

@@ -70,6 +70,8 @@ line-length = 100
 select = [
     # pycodestyle
     "E",
+    # pydocstring
+    "D",
     # Pyflakes
     "F",
     # pyupgrade
@@ -81,3 +83,11 @@ select = [
     # isort
     "I",
 ]
+ignore = [
+    "D105",
+    "D107",
+    "D101",
+    "D102",
+    "D103",
+]
+pydocstyle.convention = "google"

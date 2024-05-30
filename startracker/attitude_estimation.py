@@ -21,8 +21,7 @@ def create_catalog(
     magnitude_threshold: float = 5.5,
     verbose: bool = False,
 ):
-    """
-    Create a new star catalog.
+    """Create a new star catalog.
 
     Args:
         cal: Calibration object.
@@ -38,7 +37,7 @@ def create_catalog(
 def _get_camera_params(
     cal: kalkam.IntrinsicCalibration,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Return arguments for cots_star_tracker function"""
+    """Return arguments for cots_star_tracker function."""
     return (cal.intrinsic, np.array(cal.image_size), cal.dist_coeffs)
 
 
@@ -87,15 +86,13 @@ class AttitudeEstimator:
         data_dir: Union[pathlib.Path, str],
         config: Optional[AttitudeEstimatorConfig] = None,
     ):
-        """
-        Star based attitude estimation.
+        """Star based attitude estimation.
 
         Args:
-            calibration_file: Camera calibration json file.
+            cal: Camera calibration instance.
             data_dir: Star catalog data directory.
             config: Attitude estimation configuration to be used
         """
-
         if config is None:
             config = AttitudeEstimatorConfig()
 
@@ -133,8 +130,7 @@ class AttitudeEstimator:
     def __call__(
         self, image: np.ndarray, darkframe: Optional[np.ndarray] = None
     ) -> AttitudeEstimationResult:
-        """
-        Perform attitude estimation on a camera image of stars.
+        """Perform attitude estimation on a camera image of stars.
 
         Args:
             image: Grayscale camera image.
@@ -173,7 +169,6 @@ class AttitudeEstimator:
 
     def calculate_statistics(self, res: AttitudeEstimationResult):
         """Calculate true potitive and false negative magnitudes."""
-
         rot = scipy.spatial.transform.Rotation.from_quat(res.quat)
         points = rot.inv().apply(self.cat_xyz.T)
 
@@ -223,8 +218,7 @@ class AttitudeFilter:
         self.estimation_id = 0
 
     def put_quat(self, quat: np.ndarray, confidence: float, time: float):
-        """
-        Add quaternion sample to be filtered.
+        """Add quaternion sample to be filtered.
 
         Args:
             quat: Quaternion.
@@ -239,8 +233,7 @@ class AttitudeFilter:
         self.attitude_quat = quat
 
     def get_azimuth_elevation(self) -> Optional[Tuple[float, float]]:
-        """
-        Return current azimuth and elevation estimate.
+        """Return current azimuth and elevation estimate.
 
         Returns:
             Optional[Tuple[float, float]]:

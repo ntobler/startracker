@@ -1,3 +1,5 @@
+"""Communication module tests."""
+
 import enum
 
 import numpy as np

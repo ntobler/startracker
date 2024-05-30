@@ -1,4 +1,4 @@
-"""Module to handle serial communication"""
+"""Module to handle serial communication."""
 
 import abc
 import dataclasses
@@ -14,14 +14,11 @@ import serial.serialutil
 
 
 class CommunicationTimeoutException(Exception):
-    """Serial command reached timeout"""
-
-    pass
+    """Serial command reached timeout."""
 
 
 def _calc_crc(data: bytes) -> int:
-    """
-    Calculate CRC-16/CCITT-FALSE of the data.
+    """Calculate CRC-16/CCITT-FALSE of the data.
 
     Poly=0x1021, Init=0xFFFF, RefIn=False, RefOut=False, XorOut=0x0000
 
@@ -40,8 +37,7 @@ def _calc_crc(data: bytes) -> int:
 
 
 class PacketHandler(serial.Serial):
-    """
-    Receive and send protocol packets.
+    """Receive and send protocol packets.
 
     Properties:
     - Big endian
@@ -57,8 +53,7 @@ class PacketHandler(serial.Serial):
         self._ser = ser
 
     def read_cmd(self) -> Tuple[int, bytes]:
-        """
-        Read serial command from the input buffer.
+        """Read serial command from the input buffer.
 
         Raises:
             CommunicationTimeoutException if timeouts happen.
@@ -68,7 +63,6 @@ class PacketHandler(serial.Serial):
                 - Command id
                 - Payload bytes
         """
-
         timeout = serial.serialutil.Timeout(self._ser._timeout)
         # read cmd and length bytes
         c = self._ser.read(2)
@@ -89,14 +83,12 @@ class PacketHandler(serial.Serial):
         return cmd, payload
 
     def write_cmd(self, cmd: int, payload: bytes):
-        """
-        Send serial command.
+        """Send serial command.
 
         Args:
             cmd: command identifier
             payload: command payload.
         """
-
         length = len(payload)
 
         assert length < 256, "length does not fit in protocol"

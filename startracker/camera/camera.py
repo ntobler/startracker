@@ -60,7 +60,7 @@ class CameraSettings:
 
 
 class Camera(abc.ABC):
-    """Camera base class"""
+    """Camera base class."""
 
     def __init__(self, camera_settings: CameraSettings):
         self._logger = logging.getLogger("Camera")
@@ -102,7 +102,7 @@ class Camera(abc.ABC):
 
 
 class MockCamera(Camera):
-    """Mock Camera implementation to replace the Raspberry Pi camera if not available"""
+    """Mock Camera implementation to replace the Raspberry Pi camera if not available."""
 
     def capture_raw(self):
         frame = np.zeros((1080, 1920), np.uint16)

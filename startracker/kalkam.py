@@ -35,8 +35,7 @@ class CalibrationPattern(abc.ABC):
     """3D object coordinates of all markers, shape=[n_markers, 3]."""
 
     def save(self, filename: Union[pathlib.Path, str]):
-        """
-        Save Pattern definition as JSON file.
+        """Save Pattern definition as JSON file.
 
         Args:
             filename: Json file path.
@@ -46,8 +45,7 @@ class CalibrationPattern(abc.ABC):
 
     @classmethod
     def load(cls, filename: Union[pathlib.Path, str]) -> "CalibrationPattern":
-        """
-        Load a pattern from a JSON file.
+        """Load a pattern from a JSON file.
 
         Args:
             filename: Json file path.
@@ -71,8 +69,7 @@ class CalibrationPattern(abc.ABC):
     @classmethod
     @abc.abstractmethod
     def from_dict(cls, d: dict) -> "CalibrationPattern":
-        """
-        Create pattern from a dictionary definition.
+        """Create pattern from a dictionary definition.
 
         Args:
             d: Definition dictionary.
@@ -83,12 +80,11 @@ class CalibrationPattern(abc.ABC):
 
     @abc.abstractmethod
     def find_in_image(self, image: np.ndarray, plot: bool = False) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Find the pattern in the given image.
+        """Find the pattern in the given image.
 
         Args:
             image: Grayscale or color image
-            plots: Show matplotlib plot of the detection. Defaults to False.
+            plot: Show matplotlib plot of the detection. Defaults to False.
 
         Raises:
             ValueError: if pattern is not found
@@ -100,8 +96,7 @@ class CalibrationPattern(abc.ABC):
         """
 
     def export_svg(self, filename: Union[pathlib.Path, str]):
-        """
-        Export the pattern as a CSV graphic.
+        """Export the pattern as a CSV graphic.
 
         Args:
             filename: SVG file name.
@@ -121,8 +116,7 @@ class CalibrationPattern(abc.ABC):
         page_width: float = 297.0,
         page_height: float = 210.0,
     ):
-        """
-        Export the pattern as a CSV graphic.
+        """Export the pattern as a CSV graphic.
 
         The pattern is centered on the page.
 
@@ -153,8 +147,7 @@ class CalibrationPattern(abc.ABC):
         image_height: int,
         dpi: float = 72.0,
     ):
-        """
-        Export the pattern as a PNG image.
+        """Export the pattern as a PNG image.
 
         The pattern is centered in the image.
 
@@ -194,8 +187,7 @@ class CalibrationPattern(abc.ABC):
 
     @abc.abstractmethod
     def draw_cairo(self, ctx: cairo.Context):
-        """
-        Draw pattern on a cairo context in millimeter scale.
+        """Draw pattern on a cairo context in millimeter scale.
 
         Args:
             ctx: cairo context
@@ -204,8 +196,7 @@ class CalibrationPattern(abc.ABC):
 
 class ChArUcoPattern(CalibrationPattern):
     def __init__(self, width: int, height: int, square_size: float):
-        """
-        OpenCV style ChArUco pattern.
+        """OpenCV style ChArUco pattern.
 
         Allows calibration with partly occluded pattern.
 
@@ -347,8 +338,7 @@ class ChArUcoPattern(CalibrationPattern):
 
 class ArUco:
     def __init__(self, marker_pixel_size: int):
-        """
-        Utility to draw and detect ArUco markers.
+        """Utility to draw and detect ArUco markers.
 
         Args:
             marker_pixel_size: Number of pixels in the marker without the black border.
@@ -438,11 +428,10 @@ class IntrinsicCalibration:
 
     @classmethod
     def from_json(cls, file: Union[pathlib.Path, str]):
-        """
-        Create calibration from JSON.
+        """Create calibration from JSON.
 
         Args:
-            filename: JSON file name
+            file: JSON file name
         """
         with open(file) as f:
             d = json.load(f)
@@ -452,11 +441,10 @@ class IntrinsicCalibration:
         return cls(intrinsic, dist_coeffs, image_size)
 
     def to_json(self, file: Union[pathlib.Path, str]):
-        """
-        Save calibration to JSON.
+        """Save calibration to JSON.
 
         Args:
-            filename: JSON file name
+            file: JSON file name
         """
         d = {
             "intrinsic": self.intrinsic.tolist(),
@@ -528,7 +516,6 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
         show_legend: bool = True,
     ):
         """Plot calibration quality using OpenCV functions only."""
-
         w, h = self.image_size
 
         # Minimum and maximum levels for ample color scheme
@@ -626,8 +613,19 @@ def calibration_from_images(
     fraction: float = 1.0,
     verbose: bool = False,
 ) -> "IntrinsicCalibrationWithData":
-    """Generate new calibration from images and chessboard object."""
+    """Generate new calibration from images and chessboard object.
 
+    Args:
+        images: Sequence of images containing a marker pattern.
+        marker_pattern: Marker pattern present in the images.
+        fraction (float): Fraction of Images used to calibrate.
+            If fraction < 1, the calibration is performed twice where
+            for the second time, only a fraction of the images is used.
+        verbose: Print to console.
+
+    Returns:
+        Calibration instance.
+    """
     # Arrays to store object points and image points from all the images.
     object_points_batch = []  # 3d point in real world space
     image_points_batch = []  # 2d points in image plane.
@@ -671,15 +669,20 @@ def calibration_from_points(
     fraction: float = 1.0,
     verbose: bool = False,
 ) -> "IntrinsicCalibrationWithData":
-    """
-    Generate new calibration from object points and image points
+    """Generate new calibration from object points and image points.
 
     Args:
+        object_points_batch: Sequence of object points with shape [n, 3].
+        image_points_batch: Sequence of image points with shape [n, 2].
+        image_size: Image width and height in pixels.
         fraction (float): Fraction of Images used to calibrate.
             If fraction < 1, the calibration is performed twice where
             for the second time, only a fraction of the images is used.
-    """
+        verbose: Print to console.
 
+    Returns:
+        Calibration instance.
+    """
     if verbose:
         print("Calibrate ...")
 
@@ -746,7 +749,7 @@ def calibration_from_points(
 def look_at_extrinsic(
     target_pos: ArrayLike, eye_pos: ArrayLike, up_vector: ArrayLike
 ) -> np.ndarray:
-    """Create a 4x4 extrinsic matrix of a camera positioned at eye_pos pointing to target_pos"""
+    """Create a 4x4 extrinsic matrix of a camera positioned at eye_pos pointing to target_pos."""
     target_pos = np.asarray(target_pos, dtype=np.float64)
     eye_pos = np.asarray(eye_pos, dtype=np.float64)
     up_vector = np.asarray(up_vector, dtype=np.float64)
@@ -767,7 +770,7 @@ def look_at_extrinsic(
 def intrinsic_from_camera_param(
     focal_length_mm: float, sensor_diagonal_mm: float, width: int, height: int
 ) -> np.ndarray:
-    """Create an intrinsic matrix from camaera parameteres"""
+    """Create an intrinsic matrix from camaera parameteres."""
     diagonal_pix = np.sqrt(width**2 + height**2)
     factor = sensor_diagonal_mm / diagonal_pix
     width_mm = width * factor
@@ -788,13 +791,13 @@ def intrinsic_from_camera_param(
 
 
 class PointUndistorter:
-    """Transform points between undistored image coordiantes and distorted image coordinates"""
+    """Transform points between undistored image coordiantes and distorted image coordinates."""
 
     def __init__(self, cal):
         self.cal = cal
 
     def undisort(self, xy, axis=-1):
-        """Transform points from distorted image coordiantes to undistorted image coordinates"""
+        """Transform points from distorted image coordiantes to undistorted image coordinates."""
         xy = np.asarray(xy, dtype=np.float32)
         xy = np.swapaxes(xy, axis, -1)
         shape = xy.shape
@@ -809,7 +812,7 @@ class PointUndistorter:
         return xy_undist
 
     def distort(self, xy, axis=-1):
-        """Transform points from undistorted image coordiantes to distorted image coordinates"""
+        """Transform points from undistorted image coordiantes to distorted image coordinates."""
         xy = np.asarray(xy, dtype=np.float32)
         xy = np.swapaxes(xy, axis, -1)
         shape = xy.shape
@@ -838,9 +841,7 @@ class PointUndistorter:
 
 
 def decompose_cammat(cammat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Decompose a 3x4 camera matrix to a 3x3 intrinsic and 3x4 extrinsic matrix
-    """
+    """Decompose a 3x4 camera matrix to a 3x3 intrinsic and 3x4 extrinsic matrix."""
     shape = cammat.shape[:-2]
     intrinsic = np.empty(shape + (3, 3), dtype=np.float64)
     extrinsic = np.empty(shape + (3, 4), dtype=np.float64)
@@ -882,8 +883,7 @@ class PointProjector:
     def pix2obj(
         self, xy: ArrayLike, Z: Union[ArrayLike, float] = 0.0, axis: int = -1
     ) -> np.ndarray:
-        """
-        Convert pixel coordiantes to object coordinates
+        """Convert pixel coordiantes to object coordinates.
 
         Args:
             xy (np.ndarray): pixel coordinates, shape=[2, n]
@@ -905,8 +905,7 @@ class PointProjector:
         return np.swapaxes(XYZ[..., 0], axis, -1)
 
     def obj2pix(self, XYZ: ArrayLike, axis: int = -1) -> np.ndarray:
-        """
-        Convert object coordinates to undistorted pixel coordinates
+        """Convert object coordinates to undistorted pixel coordinates.
 
         Args:
             XYZ (np.ndarray): object coordinates, shape=[3, n]
