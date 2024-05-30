@@ -34,7 +34,7 @@ Image_description_t {name} = {{
 }};
 """
 
-    with open(h_file, "w") as f:
+    with h_file.open("w") as f:
         f.write(filecontent)
 
 

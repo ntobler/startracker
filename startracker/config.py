@@ -26,8 +26,6 @@ settings = Dynaconf(
 class ConfigurationError(Exception):
     """Errors concerning the configuration."""
 
-    pass
-
 
 def check_validation_errors():
     """Check and validate all configuration."""

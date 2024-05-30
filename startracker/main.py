@@ -5,7 +5,7 @@ import enum
 import logging
 import sys
 import time
-from typing import Type
+from typing import Never, Optional, Type
 
 import numpy as np
 import serial
@@ -109,6 +109,7 @@ class GetStatus(communication.Command):
         self._image_acquisitioner = image_acquisitioner
 
     def execute(self, request: EmptyMessage) -> Status:
+        _ = request
         quat = self._attitude_filter.attitude_quat
         if quat is None:
             quat = np.full((4,), np.nan, np.float32)
@@ -152,6 +153,7 @@ class CalcTrajectory(communication.Command):
         self._trajectory_calculator = trajectory_calculator
 
     def execute(self, request: EmptyMessage) -> Trajectory:
+        _ = request
         az_el = self._attitude_filter.get_azimuth_elevation()
 
         if az_el is None:
@@ -187,13 +189,12 @@ class Shutdown(communication.Command):
         self._enable_shutdown = enable_shutdown
         self._shutdown_delay = shutdown_delay
 
-    def execute(self, request: EmptyMessage) -> Acknowledge:
+    def execute(self, request: EmptyMessage) -> Never:
+        _ = request
         if self._enable_shutdown:
             time.sleep(self._shutdown_delay)
             raise ShutdownInterruptError()
-        else:
-            raise KeyboardInterrupt()
-        return ACK
+        raise KeyboardInterrupt()
 
 
 class SetAttitudeEstimationMode(communication.Command):
@@ -228,6 +229,7 @@ class GetStars(communication.Command):
         self._image_acquisitioner = image_acquisitioner
 
     def execute(self, request: EmptyMessage) -> Status:
+        _ = request
         positions = self._image_acquisitioner.positions
         fixed_size_positions = np.full((MAX_STAR_COUNT, 2), 255, np.uint8)
         if positions is None:
@@ -241,10 +243,11 @@ class GetStars(communication.Command):
 
 
 class App:
-    def __init__(self, *, enable_shutdown: bool = True):
+    def __init__(self, *, ser: Optional[serial.Serial] = None, enable_shutdown: bool = True):
         """Production application class.
 
         Args:
+            ser: Serial instance to use.
             enable_shutdown: Application is allowed to shutdown the system
         """
         logging.info("Starting application")
@@ -273,7 +276,7 @@ class App:
         ]
 
         # Run communication handler to process incoming commands.
-        self._ser = serial.Serial(config.settings.serial_port)
+        self._ser = serial.Serial(config.settings.serial_port) if ser is None else ser
 
         ia.start_thread()
 
@@ -286,7 +289,6 @@ class App:
             com_handler.run_indefinitely()
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt")
-            pass
         except ShutdownInterruptError:
             logging.info("ShutdownInterrupt")
             return 5

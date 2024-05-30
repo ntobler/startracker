@@ -49,12 +49,12 @@ class CameraSettings:
         return cls(**dictionary)
 
     def save(self, filename: pathlib.Path):
-        with open(filename, "wb") as f:
+        with filename.open("wb") as f:
             pickle.dump(self.to_dict(), f)
 
     @classmethod
     def load(cls, filename: pathlib.Path):
-        with open(filename, "wb") as f:
+        with filename.open("wb") as f:
             obj = cls.from_dict(pickle.load(f))
         return obj
 

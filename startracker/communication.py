@@ -18,7 +18,7 @@ class CommunicationTimeoutError(Exception):
     """Serial command reached timeout."""
 
 
-def _calc_crc(data: bytes) -> int:
+def calc_crc(data: bytes) -> int:
     """Calculate CRC-16/CCITT-FALSE of the data.
 
     Poly=0x1021, Init=0xFFFF, RefIn=False, RefOut=False, XorOut=0x0000
@@ -64,7 +64,8 @@ class PacketHandler(serial.Serial):
                 - Command id
                 - Payload bytes
         """
-        timeout = serial.serialutil.Timeout(self._ser._timeout)
+        timeout_time = self._ser.timeout if self._ser.timeout is not None else 999
+        timeout = serial.serialutil.Timeout(timeout_time)
         # read cmd and length bytes
         c = self._ser.read(2)
         if timeout.expired():
@@ -79,7 +80,7 @@ class PacketHandler(serial.Serial):
         crc = payload_and_crc[-2:]
 
         # check crc
-        assert crc == _calc_crc(payload).to_bytes(2, "big")
+        assert crc == calc_crc(payload).to_bytes(2, "big")
 
         return cmd, payload
 
@@ -95,7 +96,7 @@ class PacketHandler(serial.Serial):
         assert length < 256, "length does not fit in protocol"
         assert cmd < 255, "cmd is too high in value"
 
-        crc = _calc_crc(payload).to_bytes(2, "big")
+        crc = calc_crc(payload).to_bytes(2, "big")
 
         # combine length and cmd as they share a common byte
         length_cmd = bytes((cmd, length))
@@ -169,6 +170,7 @@ class EnumField(Field):
         return c_code
 
     def generate_c_code(self, enum_args: str, indent: int):
+        _ = enum_args
         c_code = f"typedef enum {self._enum_type.__name__} : {self.c_type} {{\n"
         for k in self._enum_type:
             c_code += " " * indent + f"{k.name} = {k.value},\n"
@@ -362,7 +364,7 @@ def gen_code_with_dependencies(
     )
 
     if not skip_file_write:
-        with open(h_file, "w") as f:
+        with h_file.open("w") as f:
             f.write(all_code)
 
     return all_code

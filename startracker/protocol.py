@@ -29,7 +29,9 @@ def generate_code():
         main.GetStars,
     ]
 
-    with open("commands.c", "w") as f:
+    commands_c_file = pathlib.Path("commands.c")
+
+    with commands_c_file.open("w") as f:
         for cmd in commands:
             f.write(cmd.generate_c_code())
 

@@ -42,7 +42,9 @@ def main():
             while True:
                 time.sleep(args.interval)
                 image = cam.capture()
-                time_str = datetime.datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+                time_str = datetime.datetime.now(tz=datetime.timezone.utc).strftime(
+                    "%Y%m%dT%H%M%S_%f"
+                )
                 file = output_dir / f"image_{time_str}.png"
                 cv2.imwrite(str(file), image)
     except KeyboardInterrupt:

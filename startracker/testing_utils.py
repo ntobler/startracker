@@ -270,6 +270,7 @@ class CameraTester:
 
         # Callback function to update the image
         def update(val):
+            _ = val
             for slider, plt_slider in zip(self.sliders, plt_sliders):
                 value = slider.dtype(plt_slider.val)
                 cam.__setattr__(slider.name, value)

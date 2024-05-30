@@ -55,14 +55,14 @@ class IntrinsicCalibrator:
 
     def get_images(self) -> List[np.ndarray]:
         """Get all calibration images."""
-        return sorted(list(self._dir.glob("*.png")))
+        return sorted(self._dir.glob("*.png"))
 
     def calibrate(self):
         """Perform calibration."""
         image_files = self.get_images()
 
         if len(image_files) < 2:
-            return ValueError("Calibrate requires at least 2 pictures")
+            raise ValueError("Calibrate requires at least 2 pictures")
 
         self._logger.info(f"Calibrating using {len(image_files)} images")
 
@@ -72,7 +72,7 @@ class IntrinsicCalibrator:
     def plot_cal_png(self, filehandler: BinaryIO) -> bytes:
         """Plot calibration and return png in bytes."""
         if self.cal is None:
-            return ValueError("No calibration present")
+            raise ValueError("No calibration present")
 
         self._logger.info("Plotting calibration")
         plot = self.cal.plot_opencv()
@@ -80,7 +80,7 @@ class IntrinsicCalibrator:
 
         success, png = cv2.imencode(".png", plot)
         if not success:
-            return ValueError("Error while encoding plot PNG")
+            raise ValueError("Error while encoding plot PNG")
 
         filehandler.write(png)
 
@@ -195,7 +195,7 @@ class App(webutil.QueueAbstractionClass):
         with tempfile.TemporaryDirectory() as td:
             file = pathlib.Path(td) / "pattern.svg"
             self._intrinsic_calibrator.pattern.export_svg(file)
-            with open(file) as f:
+            with file.open() as f:
                 svg = f.read()
         return svg
 

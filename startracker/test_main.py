@@ -8,11 +8,11 @@ import serial
 from . import attitude_estimation, communication, config, main, testing_utils
 
 
-class MockSerial(serial.Serial):
-    def __init__(self, replaces: serial.Serial):
+class MockSerial(serial.SerialBase):
+    def __init__(self):
+        super().__init__()
         self.mosi_channel = queue.Queue()
         self.miso_channel = queue.Queue()
-        self._timeout = replaces._timeout
 
     def read(self, count: int):
         ret = bytes(self.mosi_channel.get() for _ in range(count))
@@ -29,10 +29,10 @@ class MockSerial(serial.Serial):
             self.mosi_channel.get_nowait()
 
 
-class MockSerialMaster(serial.Serial):
+class MockSerialMaster(serial.SerialBase):
     def __init__(self, test_serial: MockSerial):
+        super().__init__()
         self.test_serial = test_serial
-        self._timeout = test_serial._timeout
 
     def read(self, count: int):
         return bytes(self.test_serial.miso_channel.get() for _ in range(count))
@@ -137,14 +137,12 @@ def test_main():
 
     config.settings.shutdown_delay = 0.1
 
-    m = main.App()
-
-    device_serial = MockSerial(m._ser)
+    device_serial = MockSerial()
     master_serial = MockSerialMaster(device_serial)
     packet_handler = communication.PacketHandler(master_serial)
     MasterEmulator(packet_handler)
 
-    m._ser = device_serial
+    m = main.App(ser=device_serial)
     returncode = m()
 
     assert returncode == 5

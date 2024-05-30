@@ -40,7 +40,7 @@ class CalibrationPattern(abc.ABC):
         Args:
             filename: Json file path.
         """
-        with open(filename, "w") as f:
+        with pathlib.Path(filename).open("w") as f:
             json.dump(self.to_dict(), f)
 
     @classmethod
@@ -53,7 +53,7 @@ class CalibrationPattern(abc.ABC):
         Returns:
             CalibrationPattern: loaded pattern instance.
         """
-        with open(filename) as f:
+        with pathlib.Path(filename).open() as f:
             d = json.load(f)
         classes = [cls]
         class_map = {c.__name__: c for c in classes}
@@ -437,7 +437,7 @@ class IntrinsicCalibration:
         Args:
             file: JSON file name
         """
-        with open(file) as f:
+        with pathlib.Path(file).open() as f:
             d = json.load(f)
         intrinsic = np.array(d["intrinsic"])
         dist_coeffs = np.array(d["dist_coeffs"]) if len(d["dist_coeffs"]) else None
@@ -455,7 +455,7 @@ class IntrinsicCalibration:
             "dist_coeffs": (self.dist_coeffs.tolist() if self.dist_coeffs is not None else []),
             "image_size": self.image_size,
         }
-        with open(file, "w") as f:
+        with pathlib.Path(file).open("w") as f:
             json.dump(d, f)
 
 

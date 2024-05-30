@@ -91,7 +91,24 @@ select = [
     "PERF",
     "W",
     # Pep8 naming
-    "N"
+    "N",
+    "UP",
+    "S",
+    "C4",
+    "DTZ",
+    "T10",
+    "EXE",
+    "ISC",
+    "ICN",
+    "LOG",
+    "PIE",
+    "Q",
+    "RET",
+    "SLF001",
+    "TID",
+    "TCH",
+    "ARG",
+    "PTH",
 ]
 ignore = [
     "D105",
@@ -99,5 +116,10 @@ ignore = [
     "D101",
     "D102",
     "D103",
+    "S101", # Use of `assert` detected
+    "S104", # Possible binding to all interfaces
+    "S301", # Pickle
+    "ISC001", # conflict with formatter
+    "RET504", # Reduces readability in my opinion
 ]
 pydocstyle.convention = "google"

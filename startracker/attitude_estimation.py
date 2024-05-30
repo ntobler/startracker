@@ -231,6 +231,8 @@ class AttitudeFilter:
         # - Filter attitudes with ME-Kalman filter
         # - Or Filter vectors with Kalman filter
         # - Detect outliers/new positions and reset filter
+        _ = confidence
+        _ = time
         self.attitude_quat = quat
 
     def get_azimuth_elevation(self) -> Optional[Tuple[float, float]]:

@@ -43,7 +43,7 @@ def calc_motor_dists(azimuths, elevations, rolls, **kwargs):
 
 
 def polar_plot(elevations, azimuths, values):
-    fig, axes = plt.subplots(figsize=(9, 7), subplot_kw=dict(projection="polar"))
+    fig, axes = plt.subplots(figsize=(9, 7), subplot_kw={"projection": "polar"})
     contourplot = axes.contourf(np.radians(azimuths), 90 - elevations, values)
     plt.colorbar(contourplot, shrink=0.6, pad=0.08)
     plt.show()
