@@ -22,7 +22,7 @@ jobs:
 
     - name: Pre-commit checks
       run: |
-        pre-commit run --all-files
+        PYTHONFAULTHANDLER=1 pre-commit run --all-files
 
     # - name: Run pytest
     #   run: |
