@@ -7,7 +7,6 @@ from . import communication, main
 
 
 def generate_code(c_file: Union[str, pathlib.Path] = "out.c"):
-
     c_file = pathlib.Path(c_file)
     h_file = c_file.parent / (c_file.stem + ".h")
 

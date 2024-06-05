@@ -1,3 +1,5 @@
+"""Protocel module tests."""
+
 import pathlib
 import tempfile
 
