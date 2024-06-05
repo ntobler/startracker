@@ -7,13 +7,17 @@ import scipy.spatial.transform
 from . import transform
 
 
-def test_azel_nwu():
+@pytest.mark.parametrize(
+    "degrees",
+    [False, True],
+)
+def test_azel_nwu(*, degrees: bool):
     rng = np.random.default_rng(42)
 
     nwu = rng.normal(size=(10, 10, 3))
     nwu /= np.linalg.norm(nwu, axis=-1, keepdims=True)
 
-    res = transform.azel2nwu(transform.nwu2azel(nwu))
+    res = transform.azel2nwu(transform.nwu2azel(nwu, degrees=degrees), degrees=degrees)
     res /= np.linalg.norm(res, axis=-1, keepdims=True)
 
     print(np.allclose(nwu[..., 0], res[..., 0]))

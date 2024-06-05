@@ -292,8 +292,6 @@ class TrajectoryCalculator:
 
         rot_matrices = astro_rotation_matrix(azimuth, elevation, roll, degrees=True)
 
-        print(rot_matrices.shape)
-
         motor_dists = self._motor_solver.solve_motor_dists(rot_matrices)
 
         dists_exceeds_neg_bound = motor_dists.min(axis=-1) < -self._max_dist

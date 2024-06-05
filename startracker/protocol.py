@@ -1,11 +1,16 @@
 """Protocol definitions for the UART connection to the STM32 main board."""
 
 import pathlib
+from typing import Union
 
 from . import communication, main
 
 
-def generate_code():
+def generate_code(c_file: Union[str, pathlib.Path] = "out.c"):
+
+    c_file = pathlib.Path(c_file)
+    h_file = c_file.parent / (c_file.stem + ".h")
+
     """Utility function to generate code for the STM project."""
     communication.gen_code_with_dependencies(
         [
@@ -17,10 +22,10 @@ def generate_code():
             main.AttitudeEstimationMode,
             main.Stars,
         ],
-        pathlib.Path("out.h"),
+        h_file,
     )
 
-    commands = [
+    commands: list[communication.Command] = [
         main.GetStatus,
         main.SetSettings,
         main.CalcTrajectory,
@@ -29,9 +34,7 @@ def generate_code():
         main.GetStars,
     ]
 
-    commands_c_file = pathlib.Path("commands.c")
-
-    with commands_c_file.open("w") as f:
+    with c_file.open("w") as f:
         for cmd in commands:
             f.write(cmd.generate_c_code())
 
