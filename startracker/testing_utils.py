@@ -3,7 +3,7 @@
 import dataclasses
 import pathlib
 import time
-from typing import List, Optional, Tuple
+from typing import Final, List, Optional, Tuple
 
 import cots_star_tracker
 import cv2
@@ -298,9 +298,11 @@ class CameraTester:
         plt.show()
 
 
-class MockStarCam(camera.Camera):
+class ArtificialStarCam(camera.Camera):
     """Camera to generate artificial images of the sky."""
 
+    cal: Final[kalkam.IntrinsicCalibration]
+    """Calibration used to create mock images"""
     t: Optional[float] = None
     """Capture time in seconds."""
     grid: bool = False
@@ -310,8 +312,8 @@ class MockStarCam(camera.Camera):
         super().__init__(camera_settings)
         cam_file = TestingMaterial(use_existing=True).cam_file
         self._rng = np.random.default_rng(42)
-        cal = kalkam.IntrinsicCalibration.from_json(cam_file)
-        self._sig = StarImageGenerator(cal)
+        self.cal = kalkam.IntrinsicCalibration.from_json(cam_file)
+        self._sig = StarImageGenerator(self.cal)
 
     def capture_raw(self):
         return self.capture()
@@ -326,7 +328,7 @@ class MockStarCam(camera.Camera):
         ct.run()
 
 
-class RandomStarCam(MockStarCam):
+class RandomStarCam(ArtificialStarCam):
     """Star camera pointing in a random direction and wiggeling."""
 
     def __init__(self, camera_settings: camera.CameraSettings):
@@ -342,7 +344,7 @@ class RandomStarCam(MockStarCam):
         return image
 
 
-class AxisAlignCalibrationTestCam(MockStarCam):
+class AxisAlignCalibrationTestCam(ArtificialStarCam):
     """Star camera rotating around a random axis."""
 
     def __init__(self, camera_settings: camera.CameraSettings):
@@ -376,7 +378,7 @@ class AxisAlignCalibrationTestCam(MockStarCam):
         return image
 
 
-class StarCameraCalibrationTestCam(MockStarCam):
+class StarCameraCalibrationTestCam(ArtificialStarCam):
     """Star camera steadily facing a random direction."""
 
     theta: float
