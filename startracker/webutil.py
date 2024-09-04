@@ -16,10 +16,10 @@ class QueueAbstractionClass:
     @staticmethod
     def queue_abstract(fun):
         @functools.wraps(fun)
-        def inner(*args):
+        def inner(*args, **kwargs):
             return_queue = queue.Queue(maxsize=1)
             self: QueueAbstractionClass = args[0]
-            self._calls_queue.put((fun, args, return_queue))
+            self._calls_queue.put((fun, args, kwargs, return_queue))
             return return_queue.get()
 
         return inner
@@ -28,8 +28,8 @@ class QueueAbstractionClass:
         """Process all pending function calls to functions wrapped with queue_abstract."""
         try:
             while True:
-                method, args, return_queue = self._calls_queue.get(block=False)
-                return_queue.put(method(*args))
+                method, args, kwargs, return_queue = self._calls_queue.get(block=False)
+                return_queue.put(method(*args, **kwargs))
         except queue.Empty:
             pass
 
