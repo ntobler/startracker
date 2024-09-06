@@ -654,7 +654,7 @@ def calibration_from_images(
     if image is None:
         raise ValueError("images may not be empty")
 
-    if not len(image_points):
+    if not len(image_points_batch):
         raise ValueError("No points to calibrate found")
 
     height, width = image.shape[:2]
