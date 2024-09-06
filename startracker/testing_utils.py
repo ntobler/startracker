@@ -1,5 +1,6 @@
 """Various helper function and classes for testing, especially for star and camera simulation."""
 
+import abc
 import dataclasses
 import pathlib
 import time
@@ -9,6 +10,7 @@ import cots_star_tracker
 import cv2
 import numpy as np
 import scipy.spatial.transform
+from typing_extensions import override
 
 from startracker import (
     attitude_estimation,
@@ -18,6 +20,7 @@ from startracker import (
     kalkam,
     persistent,
     transform,
+    util,
 )
 
 UINT8_MAX = 255
@@ -307,6 +310,8 @@ class ArtificialStarCam(camera.Camera):
     """Capture time in seconds."""
     grid: bool = False
     """Display longitude and latitude grid overlay."""
+    simulate_exposure_time: bool = False
+    """Wait until exposure time has elapsed."""
 
     def __init__(self, camera_settings: camera.CameraSettings):
         super().__init__(camera_settings)
@@ -315,11 +320,25 @@ class ArtificialStarCam(camera.Camera):
         self.cal = kalkam.IntrinsicCalibration.from_json(cam_file)
         self._sig = StarImageGenerator(self.cal)
 
+    @override
     def capture_raw(self):
         return self.capture()
 
+    @override
     def record_darkframe(self):
         pass
+
+    @override
+    def capture(self) -> np.ndarray:
+        with util.max_rate(1000 / self._sig.exposure):
+            return self._capture()
+
+    @abc.abstractmethod
+    def _capture(self) -> np.ndarray: ...
+
+    @override
+    def _apply_settings(self) -> None:
+        self._sig.exposure = self._settings.exposure_ms * 15 / 100
 
     def gui(self):
         """Play with this camera in a GUI."""
@@ -335,7 +354,8 @@ class RandomStarCam(ArtificialStarCam):
         super().__init__(camera_settings)
         self._vector = self._rng.normal(size=(2, 3)) * 0.3
 
-    def capture(self) -> np.ndarray:
+    @override
+    def _capture(self) -> np.ndarray:
         self._vector *= 0.9
         self._vector += 0.1 * self._rng.normal(size=(2, 3)) * 0.3
         vector = self._vector + [[0, 0, 5], [0, 10, 0]]
@@ -364,7 +384,8 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
 
         self.axis_angle = 0.0
 
-    def capture(self) -> np.ndarray:
+    @override
+    def _capture(self) -> np.ndarray:
         t = time.monotonic() if self.t is None else self.t
 
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
@@ -408,7 +429,8 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         extrinsic = np.concatenate((rot_matrix.T, np.zeros((3, 1))), axis=1)
         return extrinsic
 
-    def capture(self) -> np.ndarray:
+    @override
+    def _capture(self) -> np.ndarray:
         extrinsic = self.get_extrinsic()
         image, _, _ = self._sig.image_from_extrinsic(extrinsic, grid=self.grid)
         return image

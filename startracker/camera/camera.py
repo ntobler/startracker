@@ -8,6 +8,7 @@ import pickle
 from typing import Union
 
 import numpy as np
+from typing_extensions import override
 
 
 @dataclasses.dataclass
@@ -78,8 +79,8 @@ class Camera(abc.ABC):
         self._settings = value
         self._apply_settings()
 
-    def _apply_settings(self):
-        return None
+    @abc.abstractmethod
+    def _apply_settings(self) -> None: ...
 
     def __enter__(self):
         self._context_manager_entered = True
@@ -104,15 +105,22 @@ class Camera(abc.ABC):
 class MockCamera(Camera):
     """Mock Camera implementation to replace the Raspberry Pi camera if not available."""
 
+    @override
     def capture_raw(self):
         frame = np.zeros((1080, 1920), np.uint16)
         frame[32:-32, 32:-32] = 100
         return frame
 
+    @override
     def capture(self) -> np.ndarray:
         frame = np.zeros((540, 960), np.uint8)
         frame[32:-32, 32:-32] = 100 + np.random.default_rng().integers(-20, 20)
         return frame
 
+    @override
     def record_darkframe(self):
+        pass
+
+    @override
+    def _apply_settings(self) -> None:
         pass

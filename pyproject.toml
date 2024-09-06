@@ -20,6 +20,7 @@ pyserial = "^3.5"
 dynaconf = "^3.2.4"
 pycairo = "^1.26.0"
 cots-star-tracker = { git = "https://github.com/ntobler/COTS-Star-Tracker.git", branch = "simplification" }
+typing-extensions = "^4.12.2"
 
 [tool.poetry.group.dev.dependencies]
 viztracer = "^0.16.2"

@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from picamera2 import Picamera2
 from picamera2.sensor_format import SensorFormat
+from typing_extensions import override
 
 from startracker import image_processing
 from startracker.camera import camera
@@ -26,6 +27,7 @@ class RpiCamera(camera.Camera):
         self._exposure_ms = 0
         self._analog_gain = 0
 
+    @override
     def _apply_settings(self):
         if self._exposure_ms != self.settings.exposure_ms:
             self._exposure_ms = self.settings.exposure_ms
@@ -65,6 +67,7 @@ class RpiCamera(camera.Camera):
         with self._lock:
             self._picam2.stop()
 
+    @override
     def capture_raw(self):
         """Capture a raw image.
 
@@ -80,6 +83,7 @@ class RpiCamera(camera.Camera):
             bayer = image_processing.decode_srggb10(raw)
         return bayer
 
+    @override
     def capture(self) -> np.ndarray:
         """Capture corrected, potentially stacked and binned image.
 
@@ -109,6 +113,7 @@ class RpiCamera(camera.Camera):
 
         return image
 
+    @override
     def record_darkframe(self):
         """Record a darkframe for bias correciton and store it to the settings."""
         darkframe = None
