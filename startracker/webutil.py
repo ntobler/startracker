@@ -20,7 +20,10 @@ class QueueAbstractionClass:
             return_queue = queue.Queue(maxsize=1)
             self: QueueAbstractionClass = args[0]
             self._calls_queue.put((fun, args, kwargs, return_queue))
-            return return_queue.get()
+            return_value = return_queue.get()
+            if isinstance(return_value, Exception):
+                raise return_value
+            return return_value
 
         return inner
 
@@ -29,7 +32,10 @@ class QueueAbstractionClass:
         try:
             while True:
                 method, args, kwargs, return_queue = self._calls_queue.get(block=False)
-                return_queue.put(method(*args, **kwargs))
+                try:
+                    return_queue.put(method(*args, **kwargs))
+                except Exception as e:
+                    return_queue.put(e)
         except queue.Empty:
             pass
 
