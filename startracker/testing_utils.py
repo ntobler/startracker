@@ -198,14 +198,19 @@ class StarImageGenerator:
 
         # Blur canvas to make very bright stars wider
         if self.blur is not None:
-            canvas = cv2.GaussianBlur(canvas, (25, 25), self.blur)
+            # set kernel size to 4 sigmas
+            kernel_size = np.minimum(self.blur * 4, 25)
+            # Round up to next odd integer
+            kernel_size = int(np.ceil(kernel_size) // 2 * 2 + 1)
+            canvas = cv2.GaussianBlur(canvas, (kernel_size, kernel_size), self.blur)
         if self.noise_sigma is not None:
-            canvas += self._rng.normal(
-                size=canvas.shape, scale=self.noise_sigma, loc=self.black_level
-            )
+            noise = self._rng.standard_normal(size=canvas.shape, dtype=np.float32)
+            noise *= self.noise_sigma
+            noise += self.black_level
+            canvas += noise
 
         # Clip image and convert image to uint8
-        canvas = np.clip(canvas, 0, UINT8_MAX)
+        np.clip(canvas, 0, UINT8_MAX, out=canvas)
         canvas = canvas.astype(np.uint8)
 
         # Mask vectors to contain only visible stars
