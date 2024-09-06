@@ -17,7 +17,7 @@ class CameraSettings:
     """Exposure value in miliseconds."""
     digital_gain: int = 1
     """Digital gain factor 1, 2 or 4."""
-    analog_gain: int = 0
+    analog_gain: int = 1
     """Analog gain value."""
     stack: int = 1
     """Number of image to accumulate"""
@@ -28,7 +28,7 @@ class CameraSettings:
     darkframe_averaging: int = 4
     """Number of exposure to average when recording darkframe."""
 
-    def validate(self):
+    def __post_init__(self) -> None:
         if self.digital_gain not in [1, 2, 4]:
             raise ValueError("digital_gain must be 1, 2, or 4")
         if self.analog_gain not in [1, 2, 3, 4, 5]:
@@ -75,7 +75,6 @@ class Camera(abc.ABC):
     @settings.setter
     def settings(self, value: CameraSettings):
         self._check_context_manager()
-        value.validate()
         self._settings = value
         self._apply_settings()
 
