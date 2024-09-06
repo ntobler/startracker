@@ -20,7 +20,7 @@ from flask import (
 )
 from flask_sock import ConnectionClosed, Server, Sock
 
-from startracker import attitude_estimation, camera, image_utils, kalkam, persistent, webutil
+from startracker import attitude_estimation, camera, image_utils, kalkam, persistent, util, webutil
 
 
 class IntrinsicCalibrator:
@@ -30,7 +30,7 @@ class IntrinsicCalibrator:
         self._dir = dir
         self._cal_file = cal_file
         self.index = 0
-        self._logger = logging.getLogger("Camera")
+        self._logger = logging.getLogger("IntrinsicCalibrator")
         self.set_pattern(19, 11, 283 / 6)
         try:
             self.cal = kalkam.IntrinsicCalibration.from_json(cal_file)
@@ -101,7 +101,7 @@ class App(webutil.QueueAbstractionClass):
 
         self.image_container = webutil.ImageData()
 
-        self._logger = logging.getLogger("Camera")
+        self._logger = logging.getLogger("App")
         self._image_cache = None
         self._intrinsic_calibrator = IntrinsicCalibrator(
             self.pers.calibration_dir, self.pers.cam_file
@@ -111,24 +111,49 @@ class App(webutil.QueueAbstractionClass):
         self._cam = None
 
         self._attitude_overlay = False
-        self.attitude = None
-        if self._intrinsic_calibrator.cal is not None:
-            try:
-                self._ae = attitude_estimation.AttitudeEstimator(
-                    self._intrinsic_calibrator.cal, self.pers.star_data_dir
-                )
-            except FileNotFoundError:
-                self._ae = None
-        else:
+        self._attitude_result = None
+        self._ae = None
+
+        self._initialize_attitude_estimator()
+
+    def _initialize_attitude_estimator(self) -> None:
+        if self._intrinsic_calibrator.cal is None:
+            self._ae = None
+            return
+        try:
+            self._ae = attitude_estimation.AttitudeEstimator(
+                self._intrinsic_calibrator.cal, self.pers.star_data_dir
+            )
+        except FileNotFoundError:
             self._ae = None
 
     def _get_state(self) -> dict:
+        quat = self._attitude_result.quat.tolist() if self._attitude_result is not None else []
+        n_matches = self._attitude_result.n_matches if self._attitude_result is not None else 0
         state = {
-            "intrinsic_image_count": self._intrinsic_calibrator.index,
-            "quat": self.attitude.quat.tolist() if self.attitude is not None else [],
-            "n_matches": self.attitude.n_matches if self.attitude is not None else 0,
+            "intrinsic_calibrator": {
+                "index": self._intrinsic_calibrator.index,
+                "pattern_width": self._intrinsic_calibrator.pattern.width,
+                "pattern_height": self._intrinsic_calibrator.pattern.height,
+                "pattern_size": self._intrinsic_calibrator.pattern.square_size,
+            },
+            "attitude": {
+                "quat": quat,
+                "n_matches": n_matches,
+                "overlay": self._attitude_overlay,
+            },
+            "camera_settings": {
+                "exposure_ms": self._cam.settings.exposure_ms,
+                "analog_gain": self._cam.settings.analog_gain,
+                "digital_gain": self._cam.settings.digital_gain,
+                "binning": self._cam.settings.binning,
+            },
         }
         return state
+
+    @webutil.QueueAbstractionClass.queue_abstract
+    def get_state(self) -> dict:
+        return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
     def set_settings(
@@ -142,7 +167,7 @@ class App(webutil.QueueAbstractionClass):
         pattern_size: float,
         *,
         attitude_overlay: bool = False,
-    ):
+    ) -> dict:
         if self._cam is None:
             raise ValueError("Camera is not initialized")
 
@@ -151,11 +176,10 @@ class App(webutil.QueueAbstractionClass):
         settings.analog_gain = analog_gain
         settings.digital_gain = digital_gain
         settings.binning = binning
+        self._logger.info(f"Setting camera settings {settings}")
         self._cam.settings = settings
 
         self._intrinsic_calibrator.set_pattern(pattern_width, pattern_height, pattern_size)
-
-        self._logger.info(f"Setting settings {settings}")
 
         self._attitude_overlay = attitude_overlay
 
@@ -165,11 +189,8 @@ class App(webutil.QueueAbstractionClass):
     def capture(self, mode: Literal["single", "continuous", "stop", "darkframe"]):
         if mode not in ["single", "continuous", "stop", "darkframe"]:
             raise ValueError(f"Unknown mode: {mode}")
-
         self._logger.info(f"Capture {mode}")
-
         self._camera_job = mode
-
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
@@ -187,6 +208,7 @@ class App(webutil.QueueAbstractionClass):
     @webutil.QueueAbstractionClass.queue_abstract
     def calibrate(self):
         self._intrinsic_calibrator.calibrate()
+        self._initialize_attitude_estimator()
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
@@ -245,15 +267,15 @@ class App(webutil.QueueAbstractionClass):
             self._logger.info("Capture image ...")
             image = self._cam.capture()
             self._image_cache = image
-            self.attitude = self.get_attitude(image)
+            self._attitude_result = self.get_attitude(image)
 
             # Draw overlay if possible and enabled
             if (
                 self._attitude_overlay
-                and self.attitude is not None
+                and self._attitude_result is not None
                 and self._intrinsic_calibrator.cal is not None
             ):
-                r = scipy.spatial.transform.Rotation.from_quat(self.attitude.quat)
+                r = scipy.spatial.transform.Rotation.from_quat(self._attitude_result.quat)
                 extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
                 image = image_utils.draw_grid(
                     image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
@@ -281,6 +303,7 @@ class WebApp:
         self.flask_app.route("/<path:filename>")(self._serve_file)
         self.flask_app.route("/calibration_pattern")(self._calibration_pattern)
         self.flask_app.route("/calibration_result")(self._calibration_result)
+        self.flask_app.post("/get_state")(self._get_state)
         self.flask_app.post("/set_settings")(self._set_settings)
         self.flask_app.post("/capture")(self._capture)
         self.flask_app.post("/put_calibration_image")(self._put_calibration_image)
@@ -315,11 +338,15 @@ class WebApp:
     def _calibration_result(self):
         return Response(self.app.calibration_result(), mimetype="image/png")
 
+    def _get_state(self):
+        d = self.app.get_state()
+        return jsonify(d)
+
     def _set_settings(self):
         params = request.get_json()
         d = self.app.set_settings(
             float(params["exposure_ms"]),
-            int(params["gain"]),
+            int(params["analog_gain"]),
             int(params["digital_gain"]),
             int(params["binning"]),
             int(params["pattern_width"]),

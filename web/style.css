@@ -60,3 +60,13 @@ button[type=button].active {
     background-color: red;
     color: black;
 }
+
+input.error {
+    background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 0.1em,
+        #f004 0.1em,
+        #f004 0.2em
+    );
+}
