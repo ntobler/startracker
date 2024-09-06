@@ -5,7 +5,6 @@ import os
 import pathlib
 import tempfile
 import threading
-import time
 from typing import BinaryIO, List, Literal, Optional
 
 import cv2
@@ -227,21 +226,24 @@ class App(webutil.QueueAbstractionClass):
         return self._ae(image)
 
     def run(self):
-        print("starting Main")
+        self._logger.info("Starting camera")
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
         with self._cam:
+            self._logger.info("Starting event processor")
             while not self.terminate:
-                self._tick()
+                with util.max_rate(10):
+                    self._tick()
+        self._logger.info("Terminating event processor")
 
     def _tick(self):
         if self._camera_job == "darkframe":
+            self._logger.info("Record darkframe ...")
             self._cam.record_darkframe()
             self._camera_job = "stop"
         elif self._camera_job in ["single", "continuous"]:
             self._logger.info("Capture image ...")
             image = self._cam.capture()
-            time.sleep(0.2)
             self._image_cache = image
             self.attitude = self.get_attitude(image)
 
@@ -305,6 +307,7 @@ class WebApp:
             logging.info("Terminated. Clean up app..")
             self.app.terminate = True
             self._app_thread.join()
+            logging.info("App clean up done.")
 
     def _calibration_pattern(self):
         return self.app.calibration_pattern()
@@ -370,6 +373,7 @@ def main():
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
         camera.RpiCamera = testing_utils.RandomStarCam
+        camera.RpiCamera.simulate_exposure_time = True
 
     webapp = WebApp()
     webapp.run()
