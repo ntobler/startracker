@@ -10,6 +10,8 @@ sudo apt install rpi-imager
 
 Choose `Raspberry Pi OS (other)` -> `Raspberry Pi OS Lite (64-bit)` and flash it on your SD Card.
 
+> Tested with `Raspberry Pi OS Lite (64-bit)`, Release date: March 15th 2024, System: 64-bit, Kernel version: 6.6, Debian version: 12 (bookworm)
+
 Under Advanced options enter following settings:
 - Set hostname `starpi`
 - Enable SSH
@@ -35,25 +37,42 @@ SSH to the Pi with `ssh pi@starpi` and setup with following commands:
 
 Update system and enable the `Pivariety` kernel driver. Requires a reboot.
 ```bash
+export DPKG_DEB_THREADS_MAX=1
 sudo apt update && sudo apt upgrade -y
 sudo bash -c "echo 'dtoverlay=arducam-pivariety' >> /boot/firmware/config.txt"
+sudo bash -c "echo 'dtparam=i2c_arm=on' >> /boot/firmware/config.txt"
+sudo bash -c "echo 'i2c-dev' >> /etc/modules"
+```
+
+Before we reboot, lets increase the swap
+``` bash
+sudo dphys-swapfile swapoff
+sudo sed -i 's/CONF_SWAPFILE/#CONF_SWAPFILE/g' /etc/dphys-swapfile
+sudo bash -c "echo 'CONF_SWAPSIZE=1024' >> /etc/dphys-swapfile"
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
 sudo reboot now
 ```
 
 The camera requires a specially built `libcamera` version. Install it with
 ``` bash
+export DPKG_DEB_THREADS_MAX=1
 mkdir temp && cd temp
 wget -O install_pivariety_pkgs.sh https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh
 chmod +x install_pivariety_pkgs.sh
 ./install_pivariety_pkgs.sh -p libcamera_dev
-./install_pivariety_pkgs.sh -p kernel_driver
 sudo reboot now
-./install_pivariety_pkgs.sh -p libcamera_apps
+```
+
+You might want to test if the camera works using
+```bash
+libcamera-still -o test.jpg
 ```
 
 Install startracker git repo
 ``` bash
 cd ~
+export DPKG_DEB_THREADS_MAX=1
 sudo apt install -y git libcairo2-dev python3-pip vim python3-virtualenv
 git clone https://github.com/ntobler/startracker.git
 virtualenv venv --system-site-packages
