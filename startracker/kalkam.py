@@ -292,14 +292,11 @@ class ChArUcoPattern(CalibrationPattern):
         if image.ndim == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        all_corners, all_ids = self._aruco.detect(image)
-
+        num_corners, charuco_corners, charuco_ids, all_corners, all_ids = self._aruco.detect_board(
+            image, self.charuco_board
+        )
         if all_ids is None or len(all_ids) < len(self.marker_positions) / 2:
             raise ValueError("Pattern not found")
-
-        num_corners, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
-            all_corners, all_ids, image, board=self.charuco_board
-        )
 
         if num_corners == 0:
             raise ValueError(
@@ -409,6 +406,21 @@ class ArUco:
                 (width, height), square_size, marker_size, self.aruco_dict
             )
         return charuco_board
+
+    def detect_board(self, image: np.ndarray, charuco_board):
+        try:
+            # OpenCV < 4.7.x
+            all_corners, all_ids = self.detect(image)
+            num_corners, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
+                all_corners, all_ids, image, board=charuco_board
+            )
+        except AttributeError:
+            # OpenCV >= 4.7.x
+            charucodetector = cv2.aruco.CharucoDetector(charuco_board)
+            charuco_corners, charuco_ids, all_corners, all_ids = charucodetector.detectBoard(image)
+            num_corners = len(charuco_corners)
+
+        return num_corners, charuco_corners, charuco_ids, all_corners, all_ids
 
 
 @dataclasses.dataclass
