@@ -249,12 +249,14 @@ class App(webutil.QueueAbstractionClass):
     def create_star_data(self) -> dict:
         if self._intrinsic_calibrator.cal is None:
             raise ValueError("No calibration available")
+        self._logger.info("Creating star catalog")
         attitude_estimation.create_catalog(
             self._intrinsic_calibrator.cal,
             self.pers.star_data_dir,
             magnitude_threshold=5.5,
             verbose=True,
         )
+        self._logger.info("Creating star catalog done")
         return self._get_state()
 
     def get_attitude(
@@ -329,7 +331,7 @@ class WebApp:
         self.flask_app.post("/put_calibration_image")(self._put_calibration_image)
         self.flask_app.post("/reset_calibration")(self._reset_calibration)
         self.flask_app.post("/calibrate")(self._calibrate)
-        self.flask_app.post("/create_star_data")(self._calibrate)
+        self.flask_app.post("/create_star_data")(self._create_star_data)
         self.sock.route("/image")(self._image)
 
     def _run_app(self) -> None:
