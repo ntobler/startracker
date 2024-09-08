@@ -1,11 +1,12 @@
 """Flask web application to capture images using a smartphone browser or any other browser."""
 
+import enum
 import logging
 import os
 import pathlib
 import tempfile
 import threading
-from typing import BinaryIO, List, Literal, Optional
+from typing import Any, BinaryIO, List, Optional, Union
 
 import cv2
 import numpy as np
@@ -22,11 +23,13 @@ from flask_sock import ConnectionClosed, Server, Sock
 
 from startracker import attitude_estimation, camera, image_utils, kalkam, persistent, util, webutil
 
+FlaskResponse = Union[str, tuple[str, int], Response]
+
 
 class IntrinsicCalibrator:
-    cal: Optional[kalkam.IntrinsicCalibrationWithData]
+    cal: Optional[kalkam.IntrinsicCalibration]
 
-    def __init__(self, dir: pathlib.Path, cal_file: pathlib.Path):
+    def __init__(self, dir: pathlib.Path, cal_file: pathlib.Path) -> None:
         self._dir = dir
         self._cal_file = cal_file
         self.index = 0
@@ -37,26 +40,26 @@ class IntrinsicCalibrator:
         except FileNotFoundError:
             self.cal = None
 
-    def set_pattern(self, width: int, height: int, size: float):
+    def set_pattern(self, width: int, height: int, size: float) -> None:
         """Set calibration pattern size."""
         self.pattern = kalkam.ChArUcoPattern(width, height, size)
 
-    def put_image(self, image: np.ndarray):
+    def put_image(self, image: np.ndarray) -> None:
         """Add an image to the calibration."""
         file = self._dir / f"image_{self.index:03d}.png"
         cv2.imwrite(str(file), image)
         self._logger.info(f"Put image {file.name}")
         self.index += 1
 
-    def reset(self):
+    def reset(self) -> None:
         """Clear all images used for the calibration."""
         self.index = 0
 
-    def get_images(self) -> List[np.ndarray]:
+    def get_images(self) -> List[pathlib.Path]:
         """Get all calibration images."""
         return sorted(self._dir.glob("*.png"))
 
-    def calibrate(self):
+    def calibrate(self) -> None:
         """Perform calibration."""
         image_files = self.get_images()
 
@@ -68,9 +71,9 @@ class IntrinsicCalibrator:
         self.cal = kalkam.calibration_from_image_files(image_files, self.pattern)
         self._logger.info(f"Calibration finished rms error: {self.cal.rms_error}")
 
-    def plot_cal_png(self, filehandler: BinaryIO) -> bytes:
+    def plot_cal_png(self, filehandler: BinaryIO) -> None:
         """Plot calibration and return png in bytes."""
-        if self.cal is None:
+        if self.cal is None or not isinstance(self.cal, kalkam.IntrinsicCalibrationWithData):
             raise ValueError("No calibration present")
 
         self._logger.info("Plotting calibration")
@@ -83,16 +86,25 @@ class IntrinsicCalibrator:
 
         filehandler.write(png)
 
-    def save(self):
+    def save(self) -> None:
         """Save calibration to the filesystem."""
-        self.cal.to_json(self._cal_file)
+        cal = self.cal
+        if cal is not None:
+            cal.to_json(self._cal_file)
+
+
+class CaptureMode(enum.Enum):
+    SINGLE = "single"
+    CONTINUOUS = "continuous"
+    STOP = "stop"
+    DARKFRAME = "darkframe"
 
 
 class App(webutil.QueueAbstractionClass):
     terminate: bool
     """Set True to terminate the application loop."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         self.pers = persistent.Persistent.get_instance()
@@ -127,9 +139,20 @@ class App(webutil.QueueAbstractionClass):
         except FileNotFoundError:
             self._ae = None
 
-    def _get_state(self) -> dict:
+    def _get_state(self) -> dict[str, Any]:
         quat = self._attitude_result.quat.tolist() if self._attitude_result is not None else []
         n_matches = self._attitude_result.n_matches if self._attitude_result is not None else 0
+
+        if self._cam is not None:
+            camera_settings = {
+                "exposure_ms": self._cam.settings.exposure_ms,
+                "analog_gain": self._cam.settings.analog_gain,
+                "digital_gain": self._cam.settings.digital_gain,
+                "binning": self._cam.settings.binning,
+            }
+        else:
+            camera_settings = {}
+
         state = {
             "intrinsic_calibrator": {
                 "index": self._intrinsic_calibrator.index,
@@ -142,12 +165,7 @@ class App(webutil.QueueAbstractionClass):
                 "n_matches": n_matches,
                 "overlay": self._attitude_overlay,
             },
-            "camera_settings": {
-                "exposure_ms": self._cam.settings.exposure_ms,
-                "analog_gain": self._cam.settings.analog_gain,
-                "digital_gain": self._cam.settings.digital_gain,
-                "binning": self._cam.settings.binning,
-            },
+            "camera_settings": camera_settings,
         }
         return state
 
@@ -186,15 +204,14 @@ class App(webutil.QueueAbstractionClass):
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def capture(self, mode: Literal["single", "continuous", "stop", "darkframe"]):
-        if mode not in ["single", "continuous", "stop", "darkframe"]:
-            raise ValueError(f"Unknown mode: {mode}")
-        self._logger.info(f"Capture {mode}")
-        self._camera_job = mode
+    def capture(self, mode: CaptureMode) -> dict:
+        mode = CaptureMode(mode)
+        self._logger.info(f"Capture {mode.value}")
+        self._camera_job = mode.value
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def put_calibration_image(self):
+    def put_calibration_image(self) -> dict:
         image = self._image_cache
         if image is not None:
             self._intrinsic_calibrator.put_image(image)
@@ -206,13 +223,13 @@ class App(webutil.QueueAbstractionClass):
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def calibrate(self):
+    def calibrate(self) -> dict:
         self._intrinsic_calibrator.calibrate()
         self._initialize_attitude_estimator()
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def calibration_pattern(self):
+    def calibration_pattern(self) -> str:
         with tempfile.TemporaryDirectory() as td:
             file = pathlib.Path(td) / "pattern.svg"
             self._intrinsic_calibrator.pattern.export_svg(file)
@@ -221,7 +238,7 @@ class App(webutil.QueueAbstractionClass):
         return svg
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def calibration_result(self):
+    def calibration_result(self) -> bytes:
         with tempfile.TemporaryFile() as f:
             self._intrinsic_calibrator.plot_cal_png(f)
             f.seek(0)
@@ -229,7 +246,7 @@ class App(webutil.QueueAbstractionClass):
         return png
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def create_star_data(self):
+    def create_star_data(self) -> dict:
         if self._intrinsic_calibrator.cal is None:
             raise ValueError("No calibration available")
         attitude_estimation.create_catalog(
@@ -247,7 +264,7 @@ class App(webutil.QueueAbstractionClass):
             return None
         return self._ae(image)
 
-    def run(self):
+    def run(self) -> None:
         self._logger.info("Starting camera")
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
@@ -258,7 +275,10 @@ class App(webutil.QueueAbstractionClass):
                     self._tick()
         self._logger.info("Terminating event processor")
 
-    def _tick(self):
+    def _tick(self) -> None:
+        if self._cam is None:
+            raise RuntimeError("Camera hasn't been initialized")
+
         if self._camera_job == "darkframe":
             self._logger.info("Record darkframe ...")
             self._cam.record_darkframe()
@@ -290,14 +310,14 @@ class App(webutil.QueueAbstractionClass):
 
 
 class WebApp:
-    flask_app = None
-    app = None
+    flask_app: Flask
+    app: Optional[App]
 
-    def __init__(self):
-        self._app_thread = threading.Thread(target=self._run_app)
-
+    def __init__(self) -> None:
         self.flask_app = Flask(__name__, template_folder="../web")
         self.sock = Sock(self.flask_app)
+
+        self._app_loaded_event = threading.Event()
 
         self.flask_app.route("/")(self._index)
         self.flask_app.route("/<path:filename>")(self._serve_file)
@@ -312,37 +332,49 @@ class WebApp:
         self.flask_app.post("/create_star_data")(self._calibrate)
         self.sock.route("/image")(self._image)
 
-    def _run_app(self):
+    def _run_app(self) -> None:
         self.app = App()
+        self._app_loaded_event.set()
         self.app.run()
 
-    def _index(self):
+    def _index(self) -> FlaskResponse:
         return render_template("cameraWebgui.html")
 
-    def _serve_file(self, filename: str):
+    def _serve_file(self, filename: str) -> FlaskResponse:
         return send_from_directory("../web", filename)
 
-    def run(self):
+    def run(self) -> None:
+        app_thread = threading.Thread(target=self._run_app)
         try:
-            self._app_thread.start()
+            app_thread.start()
+            self._app_loaded_event.wait()
             self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False)
         finally:
             logging.info("Terminated. Clean up app..")
-            self.app.terminate = True
-            self._app_thread.join()
+            if self.app is not None:
+                self.app.terminate = True
+            app_thread.join()
             logging.info("App clean up done.")
 
-    def _calibration_pattern(self):
+    def _calibration_pattern(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         return self.app.calibration_pattern()
 
-    def _calibration_result(self):
+    def _calibration_result(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         return Response(self.app.calibration_result(), mimetype="image/png")
 
-    def _get_state(self):
+    def _get_state(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.get_state()
         return jsonify(d)
 
-    def _set_settings(self):
+    def _set_settings(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         params = request.get_json()
         d = self.app.set_settings(
             float(params["exposure_ms"]),
@@ -356,28 +388,40 @@ class WebApp:
         )
         return jsonify(d)
 
-    def _capture(self):
+    def _capture(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         params = request.get_json()
-        d = self.app.capture(str(params["mode"]))
+        d = self.app.capture(CaptureMode(params["mode"]))
         return jsonify(d)
 
-    def _put_calibration_image(self):
+    def _put_calibration_image(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.put_calibration_image()
         return jsonify(d)
 
-    def _reset_calibration(self):
+    def _reset_calibration(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.reset_calibration()
         return jsonify(d)
 
-    def _calibrate(self):
+    def _calibrate(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.calibrate()
         return jsonify(d)
 
-    def _create_star_data(self):
+    def _create_star_data(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.create_star_data()
         return jsonify(d)
 
-    def _image(self, ws: Server):
+    def _image(self, ws: Server) -> None:
+        if self.app is None:
+            raise RuntimeError("App should be initialized at this point")
         try:
             while True:
                 image_data = self.app.image_container.get_blocking()
@@ -386,7 +430,7 @@ class WebApp:
             pass
 
 
-def main():
+def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
