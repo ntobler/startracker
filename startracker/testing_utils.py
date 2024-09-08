@@ -9,6 +9,7 @@ from typing import Final, List, Optional, Tuple
 import cots_star_tracker
 import cv2
 import numpy as np
+import numpy.typing as npt
 import scipy.spatial.transform
 from typing_extensions import override
 
@@ -103,8 +104,8 @@ class StarImageGenerator:
 
     def __call__(
         self,
-        target_vector: np.ndarray,
-        up_vector: np.ndarray,
+        target_vector: npt.ArrayLike,
+        up_vector: npt.ArrayLike,
         *,
         grid: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -203,6 +204,7 @@ class StarImageGenerator:
             # Round up to next odd integer
             kernel_size = int(np.ceil(kernel_size) // 2 * 2 + 1)
             canvas = cv2.GaussianBlur(canvas, (kernel_size, kernel_size), self.blur)
+            canvas = np.asarray(canvas, dtype=np.float32)  # for typing
         if self.noise_sigma is not None:
             noise = self._rng.standard_normal(size=canvas.shape, dtype=np.float32)
             noise *= self.noise_sigma
@@ -236,7 +238,7 @@ class CameraTester:
         max: float
         init: float
         step: float
-        dtype: float
+        dtype: type[float | int]
 
     sliders: List[Slider]
 
@@ -251,7 +253,7 @@ class CameraTester:
         max: float = 100,
         init: Optional[float] = None,
         step: Optional[float] = None,
-        dtype=int,
+        dtype: type[float | int] = int,
     ):
         """Add slider for a numerial attribute of the camera."""
         init = (min + max) / 2 if init is None else init
@@ -291,7 +293,7 @@ class CameraTester:
         # Add two horizontal sliders
         for i, slider in enumerate(self.sliders):
             pos = 0.1 * (i + 1) / len(self.sliders)
-            ax = plt.axes([0.1, pos, 0.65, 0.03], facecolor="lightgoldenrodyellow")
+            ax = plt.axes((0.1, pos, 0.65, 0.03), facecolor="lightgoldenrodyellow")
             plt_slider = matplotlib.widgets.Slider(
                 ax,
                 slider.name,
@@ -398,7 +400,7 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
         rotvec = np.array([0, 0, 1.0]) * self.axis_angle
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvec, degrees=False)
 
-        quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat()
+        quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat(canonical=False)
 
         image, _, _ = self._sig.image_from_quaternion(quat, grid=self.grid)
         return image

@@ -7,7 +7,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
-import trajectory
+
+from startracker import trajectory
 
 # %%
 # Polynom trajectory

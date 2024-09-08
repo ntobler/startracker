@@ -9,6 +9,7 @@ import time
 from typing import List, Optional
 
 import numpy as np
+import numpy.typing as npt
 import scipy.spatial.transform
 from flask import Flask, jsonify, render_template, send_from_directory
 from flask_sock import ConnectionClosed, Server, Sock
@@ -22,6 +23,7 @@ from startracker import (
     transform,
     webutil,
 )
+from startracker.webutil import FlaskResponse
 
 
 def project_radial(xyz: np.ndarray) -> np.ndarray:
@@ -95,7 +97,7 @@ class App(webutil.QueueAbstractionClass):
         self._cat_mags = self._cat_mags[bright]
 
         self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
-        self._calibration_rots: List[attitude_estimation.AttitudeEstimationResult] = []
+        self._calibration_rots: List[npt.NDArray[np.floating]] = []
 
     def _get_stars(self):
         image = self._cam.capture()
@@ -225,14 +227,16 @@ class QueueDistributingStatus:
 
 
 class WebApp:
-    flask_app = None
-    app = None
+    flask_app: Flask
+    app: Optional[App]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._app_thread = threading.Thread(target=self._run_app)
 
         self.flask_app = Flask(__name__, template_folder="../web")
         self.sock = Sock(self.flask_app)
+
+        self._app_loaded_event = threading.Event()
 
         self.flask_app.route("/")(self._index)
         self.flask_app.route("/<path:filename>")(self._serve_file)
@@ -241,35 +245,41 @@ class WebApp:
 
         self.sock.route("/state")(self._state)
 
-    def _run_app(self):
+    def _run_app(self) -> None:
         self.app = App()
+        self._app_loaded_event.set()
         self.app.run()
 
-    def _index(self):
+    def _index(self) -> FlaskResponse:
         return render_template("axisAlign.html")
 
     def _serve_file(self, filename: str):
         return send_from_directory("../web", filename)
 
-    def add_to_calibration(self):
+    def add_to_calibration(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.add_to_calibration()
         return jsonify(d)
 
-    def reset_calibration(self):
+    def reset_calibration(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.reset_calibration()
         return jsonify(d)
 
-    def calibrate(self):
+    def calibrate(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
         d = self.app.calibrate()
         return jsonify(d)
 
-    def _state(self, ws: Server):
+    def _state(self, ws: Server) -> None:
         """Websocket handler for app status updates."""
+        if self.app is None:
+            raise RuntimeError("App should be initialized at this point")
         q = queue.Queue()
         try:
-            # Wait for app to boot
-            while self.app is None:
-                time.sleep(1)
             self.app.status.register(q)
             while True:
                 d = q.get()
@@ -279,13 +289,15 @@ class WebApp:
         finally:
             self.app.status.unregister(q)
 
-    def run(self):
+    def run(self) -> None:
         try:
             self._app_thread.start()
+            self._app_loaded_event.wait()
             self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False)
         finally:
             logging.info("Terminated. Clean up app..")
-            self.app.terminate = True
+            if self.app is not None:
+                self.app.terminate = True
             self._app_thread.join()
 
 

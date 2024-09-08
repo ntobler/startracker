@@ -10,8 +10,8 @@ try:
 except ImportError:
     from startracker.camera.camera import MockCamera as RpiCamera
 
-__all__ = (
-    Camera,
-    CameraSettings,
-    RpiCamera,
-)
+__all__ = [
+    "Camera",
+    "CameraSettings",
+    "RpiCamera",
+]

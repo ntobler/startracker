@@ -56,7 +56,7 @@ def fermat_point(points: np.ndarray, *, plot: bool = False) -> np.ndarray:
 
         for n, (x, y, z) in zip("abcqrm", [a, b, c, q, r, m]):
             ax.plot(x, y, z, ".", color="black", label="motor positions")
-            ax.text(x, y, z, n)
+            ax.text(x, y, z=z, s=n)
 
         plt.axis("equal")
         plt.show()

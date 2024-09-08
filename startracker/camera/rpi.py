@@ -1,10 +1,11 @@
-"""Raspberry Pi camera implemenations."""
+"""Raspberry Pi camera implementations."""
 
 import threading
 import time
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 from picamera2 import Picamera2
 from picamera2.sensor_format import SensorFormat
 from typing_extensions import override
@@ -68,7 +69,7 @@ class RpiCamera(camera.Camera):
             self._picam2.stop()
 
     @override
-    def capture_raw(self):
+    def capture_raw(self) -> npt.NDArray[np.uint16]:
         """Capture a raw image.
 
         Returns:
@@ -84,7 +85,7 @@ class RpiCamera(camera.Camera):
         return bayer
 
     @override
-    def capture(self) -> np.ndarray:
+    def capture(self) -> npt.NDArray[np.uint8]:
         """Capture corrected, potentially stacked and binned image.
 
         Returns:
@@ -96,12 +97,15 @@ class RpiCamera(camera.Camera):
 
             # Correct bias
             if self.settings.bias is not None:
-                cv2.subtract(raw, self.settings.bias, dst=raw)
+                cv2.subtract(raw, self.settings.bias, dst=raw)  # type: ignore
 
             if image is None:
                 image = raw
             else:
                 image += raw
+
+        if image is None:
+            raise ValueError("settings.stack must be at least 1.")
 
         binning = self.settings.binning
         if binning in [2, 4, 8]:
@@ -114,13 +118,15 @@ class RpiCamera(camera.Camera):
         return image
 
     @override
-    def record_darkframe(self):
-        """Record a darkframe for bias correciton and store it to the settings."""
+    def record_darkframe(self) -> None:
+        """Record a dark frame for bias correction and store it to the settings."""
         darkframe = None
         for _ in range(self.settings.darkframe_averaging):
             if darkframe is None:
                 darkframe = self.capture_raw()
             else:
                 darkframe += self.capture_raw()
+        if darkframe is None:
+            raise ValueError("settings.darkframe_averaging must be at least 1.")
         darkframe //= self.settings.darkframe_averaging
         self.settings.bias = darkframe

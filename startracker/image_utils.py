@@ -29,8 +29,8 @@ def draw_grid(
 
     pp = kalkam.PointProjector(cal, rot_mat)
 
-    latitudes = np.radians(np.linspace(-90, 90, 18 * 2))
-    longitudes = np.radians(np.arange(0, 361, 15))
+    latitudes = np.radians(np.linspace(-90.0, 90.0, 36))
+    longitudes = np.radians(np.arange(0.0, 361.0, 15.0))
 
     lat, lon = np.meshgrid(latitudes, longitudes)
 
@@ -61,7 +61,7 @@ def draw_grid(
             for xy, m in zip(line, mask_line):
                 if m:
                     if last_xy is not None:
-                        image = cv2.line(image, last_xy, xy, c, t)
+                        image = cv2.line(image, last_xy, xy, c, t)  # type: ignore
                     last_xy = xy
                 else:
                     last_xy = None

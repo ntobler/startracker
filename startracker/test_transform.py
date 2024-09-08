@@ -45,7 +45,7 @@ def test_find_common_rotation_axis(func):
     rotvecs = rot_axis[None] * rng.uniform(0, np.pi * 2, size=(n, 1))
     around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvecs, degrees=False)
 
-    rots = (origin_rot * around_axis_rot).as_quat()
+    rots = (origin_rot * around_axis_rot).as_quat(canonical=False)
 
     axis, std = func(rots)
 
@@ -83,7 +83,7 @@ def test_find_common_rotation_axis_convergence(func):
     for i in numbers:
         rotvecs = rot_axis[None] * rng.uniform(0, np.pi * 2, size=(i, 1))
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvecs, degrees=False)
-        rots = (origin_rot * around_axis_rot).as_quat()
+        rots = (origin_rot * around_axis_rot).as_quat(canonical=False)
 
         rots += rng.normal(size=rots.shape) * std
         rots /= np.linalg.norm(rots, axis=-1, keepdims=True)

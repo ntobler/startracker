@@ -110,11 +110,13 @@ class MasterEmulator:
 
         print("success")
 
-    def send(self, command: communication.Command, tx_message: communication.Message):
+    def send(self, command: type[communication.Command], tx_message: communication.Message):
         assert command.request_type == type(tx_message)
         self.ser.write_cmd(command.cmd, tx_message.to_bytes())
 
-    def transceive(self, command: communication.Command, tx_message: communication.Message):
+    def transceive(
+        self, command: type[communication.Command], tx_message: communication.Message
+    ) -> communication.Message:
         self.ser.reset_input_buffer()
         self.send(command, tx_message)
         cmd, payload = self.ser.read_cmd()

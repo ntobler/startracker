@@ -63,7 +63,7 @@ class Status:
     )
     current_number_of_matches = communication.Field("uint16")
     average_number_of_matches = communication.Field("uint16")
-    quaternion = communication.StructField(Quaternion, "curent quaternion")
+    quaternion = communication.StructField(Quaternion, "Current quaternion")
     estimation_id = communication.Field("uint16", "Id of the current attitude estimation sample")
 
 

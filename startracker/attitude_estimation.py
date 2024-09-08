@@ -6,7 +6,7 @@ import logging
 import pathlib
 import threading
 import time
-from typing import Optional, Tuple, Union
+from typing import Optional, Self, Tuple, Union
 
 import cots_star_tracker
 import numpy as np
@@ -78,6 +78,9 @@ class AttitudeEstimatorConfig:
     """Number of required star matches for a sucessful attitude estimation."""
     star_match_pixel_tol: float = 2.0
     """Tolerance in pixels for a star to be recognized as match."""
+
+    def copy(self) -> Self:
+        return dataclasses.replace(self)
 
 
 class AttitudeEstimator:

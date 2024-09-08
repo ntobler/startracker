@@ -24,7 +24,7 @@ def generate_code(c_file: Union[str, pathlib.Path] = "out.c"):
         h_file,
     )
 
-    commands: list[communication.Command] = [
+    commands: list[type[communication.Command]] = [
         main.GetStatus,
         main.SetSettings,
         main.CalcTrajectory,

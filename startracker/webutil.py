@@ -3,8 +3,12 @@
 import functools
 import queue
 import threading
+from typing import Union
 
 import cv2
+from flask import Response
+
+FlaskResponse = Union[str, tuple[str, int], Response]
 
 
 class QueueAbstractionClass:

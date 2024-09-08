@@ -2,9 +2,10 @@
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 
 
-def decode_sbggr12_1x12(raw: np.ndarray):
+def decode_sbggr12_1x12(raw: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint16]:
     """Decode SBGGR12 format (12bit per pixel).
 
     3 bytes hold data for 2 pixels.
@@ -14,19 +15,19 @@ def decode_sbggr12_1x12(raw: np.ndarray):
     """
     h, w = raw.shape
     w = w // 3
-    raw = raw[:, : w * 3].reshape((h, w, 3)).astype(np.uint16)
-    a = raw[..., 0]
-    c = raw[..., 2]
+    raw16 = raw[:, : w * 3].reshape((h, w, 3)).astype(np.uint16)
+    a = raw16[..., 0]
+    c = raw16[..., 2]
     a *= 0x10
-    a += c & 0x0F
+    a += np.bitwise_and(c, 0x0F)
     c //= 16
-    b = raw[..., 1]
+    b = raw16[..., 1]
     b *= 16
     b += c
     return np.stack((a, b), axis=-1).reshape((h, w * 2))
 
 
-def decode_srggb10(raw: np.ndarray):
+def decode_srggb10(raw: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint16]:
     """Decode SRGGB10 format (10bit per pixel).
 
     5 bytes hold data for 4 pixels.
@@ -48,14 +49,14 @@ def decode_srggb10(raw: np.ndarray):
     return bayer.reshape((h, (w * 4) // 5))
 
 
-def extract_green(bayer: np.ndarray):
+def extract_green(bayer: npt.NDArray[np.unsignedinteger]) -> npt.NDArray[np.unsignedinteger]:
     """Extract green channels from a bayer matrix image."""
     res = bayer[::2, 1::2] + bayer[1::2, ::2]
     res //= 2
     return res
 
 
-def binning(x: np.ndarray, factor: int = 4):
+def binning(x: npt.NDArray, factor: int = 4) -> npt.NDArray:
     """Apply pixel binning to an image."""
     h, w = x.shape
     return cv2.resize(x, (w // factor, h // factor), interpolation=cv2.INTER_AREA)

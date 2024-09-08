@@ -5,9 +5,10 @@ import dataclasses
 import logging
 import pathlib
 import pickle
-from typing import Union
+from typing import Self, Union
 
 import numpy as np
+import numpy.typing as npt
 from typing_extensions import override
 
 
@@ -40,21 +41,21 @@ class CameraSettings:
         if self.stack * self.digital_gain > 16:
             raise ValueError("stack and binning gain must be below 16 due to overflow reasons")
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """Return dictionary of the object."""
         return dataclasses.asdict(self)
 
     @classmethod
-    def from_dict(cls, dictionary: dict):
+    def from_dict(cls, dictionary: dict) -> Self:
         """Create object from a dictionary."""
         return cls(**dictionary)
 
-    def save(self, filename: pathlib.Path):
+    def save(self, filename: pathlib.Path) -> None:
         with filename.open("wb") as f:
             pickle.dump(self.to_dict(), f)
 
     @classmethod
-    def load(cls, filename: pathlib.Path):
+    def load(cls, filename: pathlib.Path) -> Self:
         with filename.open("wb") as f:
             obj = cls.from_dict(pickle.load(f))
         return obj
@@ -63,7 +64,7 @@ class CameraSettings:
 class Camera(abc.ABC):
     """Camera base class."""
 
-    def __init__(self, camera_settings: CameraSettings):
+    def __init__(self, camera_settings: CameraSettings) -> None:
         self._logger = logging.getLogger("Camera")
         self._settings = camera_settings
         self._context_manager_entered = False
@@ -73,7 +74,7 @@ class Camera(abc.ABC):
         return self._settings
 
     @settings.setter
-    def settings(self, value: CameraSettings):
+    def settings(self, value: CameraSettings) -> None:
         self._check_context_manager()
         self._settings = value
         self._apply_settings()
@@ -105,19 +106,19 @@ class MockCamera(Camera):
     """Mock Camera implementation to replace the Raspberry Pi camera if not available."""
 
     @override
-    def capture_raw(self):
+    def capture_raw(self) -> npt.NDArray[np.uint16]:
         frame = np.zeros((1080, 1920), np.uint16)
         frame[32:-32, 32:-32] = 100
         return frame
 
     @override
-    def capture(self) -> np.ndarray:
+    def capture(self) -> npt.NDArray[np.uint8]:
         frame = np.zeros((540, 960), np.uint8)
         frame[32:-32, 32:-32] = 100 + np.random.default_rng().integers(-20, 20)
         return frame
 
     @override
-    def record_darkframe(self):
+    def record_darkframe(self) -> None:
         pass
 
     @override

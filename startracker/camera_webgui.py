@@ -6,7 +6,7 @@ import os
 import pathlib
 import tempfile
 import threading
-from typing import Any, BinaryIO, List, Optional, Union
+from typing import Any, BinaryIO, List, Optional
 
 import cv2
 import numpy as np
@@ -22,8 +22,7 @@ from flask import (
 from flask_sock import ConnectionClosed, Server, Sock
 
 from startracker import attitude_estimation, camera, image_utils, kalkam, persistent, util, webutil
-
-FlaskResponse = Union[str, tuple[str, int], Response]
+from startracker.webutil import FlaskResponse
 
 
 class IntrinsicCalibrator:

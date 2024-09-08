@@ -7,7 +7,7 @@ import enum
 import logging
 import pathlib
 import struct
-from typing import Dict, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, Optional, Self, Sequence, Tuple, Type, TypeVar, Union
 
 import numpy as np
 import serial
@@ -50,7 +50,7 @@ class PacketHandler(serial.Serial):
     - 2 crc bytes of payload only (crc16)
     """
 
-    def __init__(self, ser: serial.Serial):
+    def __init__(self, ser: serial.Serial) -> None:
         self._ser = ser
 
     def read_cmd(self) -> Tuple[int, bytes]:
@@ -84,7 +84,7 @@ class PacketHandler(serial.Serial):
 
         return cmd, payload
 
-    def write_cmd(self, cmd: int, payload: bytes):
+    def write_cmd(self, cmd: int, payload: bytes) -> None:
         """Send serial command.
 
         Args:
@@ -103,14 +103,14 @@ class PacketHandler(serial.Serial):
 
         self._ser.write(length_cmd + payload + crc)
 
-    def reset_input_buffer(self):
+    def reset_input_buffer(self) -> None:
         self._ser.reset_input_buffer()
 
 
 class Field:
     """Message field for base datatypes."""
 
-    def __init__(self, dtype: str, desc: Optional[str] = None):
+    def __init__(self, dtype: str, desc: Optional[str] = None) -> None:
         self.dtype = dtype
         (
             self.struct_char,
@@ -133,7 +133,7 @@ class Field:
         self.default = 0
         self.desc = desc
 
-    def c_definition(self, name: str):
+    def c_definition(self, name: str) -> str:
         c_code = f"{self.c_type} {name};"
         if self.desc is not None:
             c_code += f" // {self.desc}"
@@ -150,26 +150,28 @@ class Field:
 class EnumField(Field):
     """Message field for enums."""
 
-    def __init__(self, enum_type: Type[enum.Enum], dtype="uint8", desc: Optional[str] = None):
+    def __init__(
+        self, enum_type: Type[enum.Enum], dtype="uint8", desc: Optional[str] = None
+    ) -> None:
         super().__init__(dtype, desc=desc)
         self.default = enum_type(0)
         self._enum_type = enum_type
 
-    def parse(self, value):
+    def parse(self, value) -> enum.Enum:
         return self._enum_type(value)
 
-    def format(self, value):
+    def format(self, value) -> int:
         assert isinstance(value, self._enum_type), f"{value} is not {self._enum_type}"
         return int(value.value)
 
-    def c_definition(self, name: str):
+    def c_definition(self, name: str) -> str:
         c_code = f"{self._enum_type.__name__} {name};"
         if self.desc is not None:
             c_code += f" // {self.desc}"
         c_code += "\n"
         return c_code
 
-    def generate_c_code(self, enum_args: str, indent: int):
+    def generate_c_code(self, enum_args: str, indent: int) -> str:
         _ = enum_args
         c_code = f"typedef enum {self._enum_type.__name__} : {self.c_type} {{\n"
         for k in self._enum_type:
@@ -181,7 +183,7 @@ class EnumField(Field):
 class StructField(Field):
     """Message field for custom datatypes."""
 
-    def __init__(self, dtype: Type["Message"], desc: Optional[str] = None):
+    def __init__(self, dtype: Type["Message"], desc: Optional[str] = None) -> None:
         self.dtype = dtype
         self.struct_char = f"{dtype.byte_size}s"
         self.python_type = dtype
@@ -190,10 +192,10 @@ class StructField(Field):
         self.default = 0
         self.desc = desc
 
-    def parse(self, value):
+    def parse(self, value: bytes) -> "Message":
         return self.dtype.from_bytes(value)
 
-    def format(self, value):
+    def format(self, value: "Message") -> bytes:
         assert isinstance(value, self.dtype), f"{value} is not of type {self.dtype}"
         return value.to_bytes()
 
@@ -201,14 +203,14 @@ class StructField(Field):
 class ArrayField(Field):
     """Message field for multidimensional arrays of base datatypes."""
 
-    def __init__(self, dtype: str, shape: Sequence[int], desc: Optional[str] = None):
+    def __init__(self, dtype: str, shape: Sequence[int], desc: Optional[str] = None) -> None:
         super().__init__(dtype, desc)
         self.dtype = dtype
         self.byte_size = self.byte_size * np.prod(shape).item()
         self.struct_char = f"{self.byte_size}s"
         self.shape = shape
 
-    def c_definition(self, name: str):
+    def c_definition(self, name: str) -> str:
         shape = "".join(f"[{x}]" for x in self.shape)
         c_code = f"{self.c_type} {name}{shape};"
         if self.desc is not None:
@@ -216,10 +218,10 @@ class ArrayField(Field):
         c_code += "\n"
         return c_code
 
-    def parse(self, value):
+    def parse(self, value: bytes) -> np.ndarray:
         return np.frombuffer(value, dtype=self._numpy_dtype).reshape(self.shape)
 
-    def format(self, value: np.ndarray):
+    def format(self, value: np.ndarray) -> bytes:
         return np.asarray(value, dtype=self._numpy_dtype).tobytes()
 
 
@@ -229,7 +231,7 @@ class Message:
     _fields: Dict[str, Field]
 
     @classmethod
-    def from_bytes(cls, payload: bytes):
+    def from_bytes(cls, payload: bytes) -> Self:
         values = struct.unpack(cls._data_format, payload)
         values = [f.parse(v) for f, v in zip(cls._fields.values(), values)]
         return cls(*values)
@@ -239,13 +241,13 @@ class Message:
         return struct.pack(self._data_format, *values)
 
     @classmethod
-    def print_help(cls):
+    def print_help(cls) -> None:
         print(cls.__name__)
         for k, v in cls._fields.items():
             print(f"- {k}: {v.dtype}")
 
     @classmethod
-    def generate_c_code(cls, struct_args: str, indent: int):
+    def generate_c_code(cls, struct_args: str, indent: int) -> str:
         c_code = f"typedef struct {struct_args} {{\n"
         for k, v in cls._fields.items():
             c_code += " " * indent + v.c_definition(k)
@@ -253,7 +255,10 @@ class Message:
         return c_code
 
 
-def array_safe_eq(a, b) -> bool:
+T = TypeVar("T", np.ndarray, int, str, list, tuple, float)
+
+
+def array_safe_eq(a: T, b: T) -> bool:
     """Check if a and b are equal, even if they are numpy arrays."""
     if a is b:
         return True
@@ -265,7 +270,7 @@ def array_safe_eq(a, b) -> bool:
         return NotImplemented
 
 
-def dc_eq(dc1, dc2) -> bool:
+def dataclass_eq(dc1: Any, dc2: Any) -> bool:
     """Check if two dataclasses which hold numpy arrays are equal."""
     if dc1 is dc2:
         return True
@@ -276,7 +281,7 @@ def dc_eq(dc1, dc2) -> bool:
     return all(array_safe_eq(a1, a2) for a1, a2 in zip(t1, t2))
 
 
-def make_message(cls):
+def make_message(cls: type) -> type:
     """Compose a message dataclass."""
     fields: Dict[str, Field] = {}
     for attr_name in cls.__dict__:
@@ -301,7 +306,7 @@ def make_message(cls):
             "byte_size": byte_size,
             "_data_format": data_format,
             "_fields": fields,
-            "__eq__": dc_eq,
+            "__eq__": dataclass_eq,
             "__name__": cls.__name__,
         },
         bases=(Message,),
@@ -320,9 +325,9 @@ def gen_code_with_dependencies(
     """Export a .h file of the message definitions."""
     h_file = pathlib.Path(h_file)
 
-    dependencies = list(messages)
+    dependencies: list[type[Message] | EnumField] = list(messages)
 
-    def check_msg(msg):
+    def check_msg(msg: type[Message]):
         for v in msg._fields.values():
             if not isinstance(v.dtype, str):
                 dependencies.append(v.dtype)
@@ -412,6 +417,6 @@ class CommandHandler:
                     self.serial.write_cmd(cmd_id, self._default_message.to_bytes())
                 else:
                     request = command.request_type().from_bytes(payload)
-                    self._logger.info(f"RX: {request.__name__}")
+                    self._logger.info(f"RX: {request.__class__.__name__}")
                     response = command.execute(request)
                     self.serial.write_cmd(cmd_id, response.to_bytes())
