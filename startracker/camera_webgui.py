@@ -1,6 +1,7 @@
 """Flask web application to capture images using a smartphone browser or any other browser."""
 
 import enum
+import io
 import logging
 import os
 import pathlib
@@ -238,10 +239,10 @@ class App(webutil.QueueAbstractionClass):
 
     @webutil.QueueAbstractionClass.queue_abstract
     def calibration_result(self) -> bytes:
-        with tempfile.TemporaryFile() as f:
-            self._intrinsic_calibrator.plot_cal_png(f)
-            f.seek(0)
-            png = f.read()
+        with io.BytesIO() as buffer:
+            self._intrinsic_calibrator.plot_cal_png(buffer)
+            buffer.seek(0)
+            png = buffer.read()
         return png
 
     @webutil.QueueAbstractionClass.queue_abstract
