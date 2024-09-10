@@ -328,17 +328,18 @@ class ArtificialStarCam(camera.Camera):
         self._sig = StarImageGenerator(self.cal)
 
     @override
-    def capture_raw(self):
+    def capture_raw(self) -> npt.NDArray[np.uint16]:
         return self.capture()
 
-    @override
-    def record_darkframe(self):
-        pass
 
     @override
-    def capture(self) -> np.ndarray:
+    def capture(self) -> npt.NDArray[np.uint8]:
         with util.max_rate(1000 / self._sig.exposure):
             return self._capture()
+
+    @override
+    def record_darkframe(self) -> None:
+        pass
 
     @abc.abstractmethod
     def _capture(self) -> np.ndarray: ...
@@ -347,7 +348,7 @@ class ArtificialStarCam(camera.Camera):
     def _apply_settings(self) -> None:
         self._sig.exposure = self._settings.exposure_ms * 15 / 100
 
-    def gui(self):
+    def gui(self) -> None:
         """Play with this camera in a GUI."""
         ct = CameraTester(self)
         ct.add_arg("t", 0, 60 * 60 * 24, init=0, dtype=float)

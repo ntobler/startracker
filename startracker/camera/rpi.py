@@ -6,8 +6,8 @@ import time
 import cv2
 import numpy as np
 import numpy.typing as npt
-from picamera2 import Picamera2
-from picamera2.sensor_format import SensorFormat
+from picamera2 import Picamera2  # type: ignore
+from picamera2.sensor_format import SensorFormat  # type: ignore
 from typing_extensions import override
 
 from startracker import image_processing

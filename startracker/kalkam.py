@@ -5,7 +5,7 @@ import dataclasses
 import json
 import pathlib
 import time
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import BinaryIO, Iterable, List, Optional, Sequence, Tuple, Union
 
 import cairo
 import cv2
@@ -97,13 +97,16 @@ class CalibrationPattern(abc.ABC):
                 - 3D object coordinates, shape=[n_detected_points, 3]
         """
 
-    def export_svg(self, filename: Union[pathlib.Path, str]):
+
+    def export_svg(self, filename: Union[pathlib.Path, str, BinaryIO]):
         """Export the pattern as a CSV graphic.
 
         Args:
             filename: SVG file name.
         """
-        with cairo.SVGSurface(str(filename), self.overall_size[0], self.overall_size[1]) as surface:
+        if isinstance(filename, pathlib.Path):
+            filename = str(filename)
+        with cairo.SVGSurface(filename, self.overall_size[0], self.overall_size[1]) as surface:
             surface.set_document_unit(cairo.SVG_UNIT_MM)
             ctx = cairo.Context(surface)
 
@@ -114,7 +117,7 @@ class CalibrationPattern(abc.ABC):
 
     def export_pdf(
         self,
-        filename: Union[pathlib.Path, str],
+        filename: Union[pathlib.Path, str, BinaryIO],
         page_width: float = 297.0,
         page_height: float = 210.0,
     ):
@@ -128,8 +131,9 @@ class CalibrationPattern(abc.ABC):
             page_height: Page height in millimeters
         """
         f = 72.0 / 25.4  # cairo pdf surface uses points, where 72 points are an inch
-
-        with cairo.PDFSurface(str(filename), page_width * f, page_height * f) as surface:
+        if isinstance(filename, pathlib.Path):
+            filename = str(filename)
+        with cairo.PDFSurface(filename, page_width * f, page_height * f) as surface:
             ctx = cairo.Context(surface)
 
             ctx.set_source_rgb(0, 0, 0)
@@ -418,7 +422,7 @@ class ArUco:
             # OpenCV >= 4.7.x
             charucodetector = cv2.aruco.CharucoDetector(charuco_board)
             charuco_corners, charuco_ids, all_corners, all_ids = charucodetector.detectBoard(image)
-            num_corners = len(charuco_corners)
+            num_corners = 0 if charuco_corners is None else len(charuco_corners)
 
         return num_corners, charuco_corners, charuco_ids, all_corners, all_ids
 
@@ -537,7 +541,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
 
         # Minimum and maximum levels for ample color scheme
         if red_level is None:
-            red_level = np.minimum(h, w) / 10
+            red_level = min(h, w) / 10
         if green_level is None:
             green_level = 0.1
 
@@ -681,8 +685,8 @@ def calibration_from_images(
 
 
 def calibration_from_points(
-    object_points_batch: Sequence,
-    image_points_batch: Sequence,
+    object_points_batch: Sequence[np.ndarray],
+    image_points_batch: Sequence[np.ndarray],
     image_size: Tuple[int, int],
     fraction: float = 1.0,
     *,
