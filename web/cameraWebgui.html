@@ -8,6 +8,7 @@
     <style>
         #image {
             position: fixed;
+            display: none;
             width: 100%;
             height: 100%;
             top: 0;
@@ -15,11 +16,33 @@
             object-fit: contain;
             image-rendering: pixelated;
         }
+        #camera-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: black;
+            color: red;
+            font-family: 'Courier', monospace;
+            font-size: 2em;
+            padding: 10px;
+            text-align: center;
+            border-radius: 5px;
+            background: repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 0.1em,
+                #f004 0.1em,
+                #f004 0.2em
+            );
+            user-select: none;
+        }
     </style>
     <script src="cameraWebgui.js" type="module"></script>
 </head>
 
 <body>
+    <div id="camera-overlay">No image captured</div>
     <img id="image" src="" alt="Image">
     <div id="footerBar">
         <div>Exposure <input type="number" step="10" value="1.00" id="exposure" name="exposure" style="width: 4em" /> ms</div>
@@ -53,7 +76,11 @@
         <div>
             Star catalog
             <button type="button" id="create_star_data">Create</button>
-            <button type="button" id="overlay">overlay</button>
+        </div>
+        <div>
+            Display
+            <button type="button" id="brightness">Brightness 1x</button>
+            <button type="button" id="overlay">Attitude</button>
         </div>
     </div>
 </body>

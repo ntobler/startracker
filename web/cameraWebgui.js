@@ -6,6 +6,7 @@ var img = document.getElementById('image');
 ws.onmessage = function (event) {
     var blob = new Blob([event.data], { type: 'image/png' });
     img.src = URL.createObjectURL(blob);
+    img.style.display = "block"
 };
 
 function updateState(state) {
@@ -61,6 +62,16 @@ document.getElementById("overlay").onclick = () => {
     el.buttonValue = active
     el.classList = active ? ["active"] : []
     setSettings()
+}
+document.getElementById("brightness").onclick = () => {
+    let el = document.getElementById("brightness")
+    let value = {
+        "Brightness 1x": ["Brightness 2x", "brightness(2)"],
+        "Brightness 2x": ["Brightness 4x", "brightness(4)"],
+        "Brightness 4x": ["Brightness 1x", "brightness(1)"],
+    }[el.innerHTML]
+    el.innerHTML = value[0]
+    img.style.filter = value[1]
 }
 
 function capture(mode) {
