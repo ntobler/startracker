@@ -1,6 +1,7 @@
 """Utilities for web applications."""
 
 import functools
+import logging
 import queue
 import threading
 from typing import Union
@@ -16,6 +17,7 @@ class QueueAbstractionClass:
 
     def __init__(self):
         self._calls_queue = queue.Queue()
+        self._logger = logging.getLogger("QueueAbstractionClass")
 
     @staticmethod
     def queue_abstract(fun):
@@ -23,8 +25,10 @@ class QueueAbstractionClass:
         def inner(*args, **kwargs):
             return_queue = queue.Queue(maxsize=1)
             self: QueueAbstractionClass = args[0]
+            self._logger.info(f"> Send call to {fun.__name__}")
             self._calls_queue.put((fun, args, kwargs, return_queue))
             return_value = return_queue.get()
+            self._logger.info(f"< Received return from {fun.__name__}")
             if isinstance(return_value, Exception):
                 raise return_value
             return return_value
@@ -37,9 +41,12 @@ class QueueAbstractionClass:
             while True:
                 method, args, kwargs, return_queue = self._calls_queue.get(block=False)
                 try:
+                    self._logger.info(f"> Received call to {method.__name__}")
                     return_queue.put(method(*args, **kwargs))
                 except Exception as e:
                     return_queue.put(e)
+                finally:
+                    self._logger.info(f"< Sending return from {method.__name__}")
         except queue.Empty:
             pass
 
