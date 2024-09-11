@@ -292,6 +292,7 @@ class App(webutil.QueueAbstractionClass):
             self._logger.info("Capture image ...")
             image = self._cam.capture()
             self._image_cache = image
+            self._logger.info("Get attitude ...")
             self._attitude_result = self.get_attitude(image)
 
             # Draw overlay if possible and enabled
@@ -300,6 +301,7 @@ class App(webutil.QueueAbstractionClass):
                 and self._attitude_result is not None
                 and self._intrinsic_calibrator.cal is not None
             ):
+                self._logger.info("Draw overlay")
                 r = scipy.spatial.transform.Rotation.from_quat(self._attitude_result.quat)
                 extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
                 image = image_utils.draw_grid(
@@ -307,6 +309,7 @@ class App(webutil.QueueAbstractionClass):
                 )
 
             self.image_container.put(image)
+            self._logger.info("Capture image done")
 
             if self._camera_job == "single":
                 self._camera_job = "stop"
