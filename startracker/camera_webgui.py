@@ -71,6 +71,8 @@ class IntrinsicCalibrator:
         self.cal = kalkam.calibration_from_image_files(image_files, self.pattern)
         self._logger.info(f"Calibration finished rms error: {self.cal.rms_error}")
 
+        self.save()
+
     def plot_cal_png(self, filehandler: BinaryIO) -> None:
         """Plot calibration and return png in bytes."""
         if self.cal is None or not isinstance(self.cal, kalkam.IntrinsicCalibrationWithData):
@@ -90,6 +92,7 @@ class IntrinsicCalibrator:
         """Save calibration to the filesystem."""
         cal = self.cal
         if cal is not None:
+            self._logger.info(f"Saving calibration to: {self._cal_file}")
             cal.to_json(self._cal_file)
 
 
