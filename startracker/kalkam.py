@@ -97,7 +97,6 @@ class CalibrationPattern(abc.ABC):
                 - 3D object coordinates, shape=[n_detected_points, 3]
         """
 
-
     def export_svg(self, filename: Union[pathlib.Path, str, BinaryIO]):
         """Export the pattern as a CSV graphic.
 

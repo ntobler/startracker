@@ -311,7 +311,7 @@ class App(webutil.QueueAbstractionClass):
             self.image_container.put(image)
             self._logger.info("Capture image done")
 
-            if self._camera_job == "single":
+            if self._camera_job != "continuous":
                 self._camera_job = "stop"
 
         self._process_pending_calls()

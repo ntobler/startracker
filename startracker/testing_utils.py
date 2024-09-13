@@ -329,8 +329,7 @@ class ArtificialStarCam(camera.Camera):
 
     @override
     def capture_raw(self) -> npt.NDArray[np.uint16]:
-        return self.capture()
-
+        return self.capture().astype(np.uint16)
 
     @override
     def capture(self) -> npt.NDArray[np.uint8]:
