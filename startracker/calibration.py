@@ -4,7 +4,7 @@ import collections
 
 import numpy as np
 
-from . import kalkam
+from startracker import kalkam
 
 IntrinsicParams = collections.namedtuple(
     "IntrinsicParams", ["fx", "fy", "tx", "ty", "width", "height"]

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import scipy.spatial.transform
 
-from . import transform
+from startracker import transform
 
 
 @pytest.mark.parametrize(

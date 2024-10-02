@@ -4,7 +4,7 @@ import enum
 
 import numpy as np
 
-from . import communication
+from startracker import communication
 
 
 def test_calc_crc():

@@ -5,7 +5,7 @@ import threading
 
 import serial
 
-from . import attitude_estimation, communication, config, main, testing_utils
+from startracker import attitude_estimation, communication, config, main, testing_utils
 
 
 class MockSerial(serial.SerialBase):

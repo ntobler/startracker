@@ -3,7 +3,7 @@
 import numpy as np
 import scipy.spatial.transform
 
-from . import attitude_estimation, kalkam, testing_utils
+from startracker import attitude_estimation, kalkam, testing_utils
 
 
 def test_attutude_estimation_error():

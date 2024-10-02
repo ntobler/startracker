@@ -2,7 +2,7 @@
 
 import time
 
-from . import util
+from startracker import util
 
 
 def test_max_rate():

@@ -2,7 +2,7 @@
 
 from dynaconf import Dynaconf, ValidationError, Validator
 
-from . import persistent
+from startracker import persistent
 
 settings = Dynaconf(
     envvar_prefix="STARTRACKER",

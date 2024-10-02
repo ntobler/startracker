@@ -11,7 +11,7 @@ import numpy as np
 import serial
 from typing_extensions import Never
 
-from . import attitude_estimation, communication, config, trajectory
+from startracker import attitude_estimation, communication, config, trajectory
 
 
 class AcknowledgeEnum(enum.Enum):

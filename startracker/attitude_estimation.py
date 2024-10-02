@@ -13,7 +13,7 @@ import numpy as np
 import scipy.spatial.transform
 from typing_extensions import Self
 
-from . import camera, kalkam, persistent
+from startracker import camera, kalkam, persistent
 
 
 def create_catalog(

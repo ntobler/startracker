@@ -3,7 +3,7 @@
 import pathlib
 from typing import Union
 
-from . import communication, main
+from startracker import communication, main
 
 
 def generate_code(c_file: Union[str, pathlib.Path] = "out.c"):
