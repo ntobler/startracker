@@ -7,11 +7,12 @@ import enum
 import logging
 import pathlib
 import struct
-from typing import Any, Dict, Optional, Self, Sequence, Tuple, Type, TypeVar, Union
+from typing import Any, Dict, Optional, Sequence, Tuple, Type, TypeVar, Union
 
 import numpy as np
 import serial
 import serial.serialutil
+from typing_extensions import Self
 
 
 class CommunicationTimeoutError(Exception):

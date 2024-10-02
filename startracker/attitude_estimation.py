@@ -6,11 +6,12 @@ import logging
 import pathlib
 import threading
 import time
-from typing import Optional, Self, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import cots_star_tracker
 import numpy as np
 import scipy.spatial.transform
+from typing_extensions import Self
 
 from . import camera, kalkam, persistent
 

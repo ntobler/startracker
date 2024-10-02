@@ -5,11 +5,11 @@ import dataclasses
 import logging
 import pathlib
 import pickle
-from typing import Self, Union
+from typing import Union
 
 import numpy as np
 import numpy.typing as npt
-from typing_extensions import override
+from typing_extensions import Self, override
 
 
 @dataclasses.dataclass

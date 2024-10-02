@@ -5,10 +5,11 @@ import enum
 import logging
 import sys
 import time
-from typing import Never, Optional, Type
+from typing import Optional, Type
 
 import numpy as np
 import serial
+from typing_extensions import Never
 
 from . import attitude_estimation, communication, config, trajectory
 
