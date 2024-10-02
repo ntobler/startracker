@@ -1,6 +1,7 @@
 """Trajectory module tests."""
 
 import numpy as np
+import pytest
 import scipy.spatial.transform
 
 from startracker import trajectory
@@ -65,3 +66,7 @@ def test_find_continuous_zero_slice():
     assert trajectory.find_continuous_zero_slice(
         np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=bool), 5
     ) == slice(6, 5)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

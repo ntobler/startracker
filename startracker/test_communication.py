@@ -3,6 +3,7 @@
 import enum
 
 import numpy as np
+import pytest
 
 from startracker import communication
 
@@ -48,3 +49,7 @@ def test_messages():
 
     code = communication.gen_code_with_dependencies([Foo], "out.h", skip_file_write=True)
     print(code)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

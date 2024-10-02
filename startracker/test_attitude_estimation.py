@@ -1,6 +1,7 @@
 """Attitude estimation module tests."""
 
 import numpy as np
+import pytest
 import scipy.spatial.transform
 
 from startracker import attitude_estimation, kalkam, testing_utils
@@ -105,3 +106,7 @@ def test_attutude_estimation():
         axs[1].legend()
         fig.suptitle("Histogram of detected magnitudes")
         plt.show()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

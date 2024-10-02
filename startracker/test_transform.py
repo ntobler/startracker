@@ -131,3 +131,7 @@ def test_find_common_rotation_axis_convergence(func):
     # check if error approximately improves with sqrt n
     np.testing.assert_allclose(errors_poly[0], -0.5, rtol=0.2)
     np.testing.assert_allclose(true_errors_poly[0], -0.5, rtol=0.2)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
