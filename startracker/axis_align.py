@@ -21,6 +21,7 @@ from startracker import (
     kalkam,
     persistent,
     transform,
+    util,
     webutil,
 )
 from startracker.webutil import FlaskResponse
@@ -189,12 +190,22 @@ class App(webutil.QueueAbstractionClass):
     def run(self):
         """App logic."""
         self._update_camera_frame()
+        self._logger.info("Starting camera")
+        settings = camera.CameraSettings()
+        self._cam = camera.RpiCamera(settings)
+        with self._cam:
+            self._logger.info("Starting event processor")
+            while not self.terminate:
+                with util.max_rate(10):
+                    self._tick()
+        self._logger.info("Terminating event processor")
 
-        while not self.terminate:
-            if self.status.number_of_users():
-                self.status.update(self._get_stars())
-            self._process_pending_calls()
-            time.sleep(0.25)
+    def _tick(self) -> None:
+        if self._cam is None:
+            raise RuntimeError("Camera hasn't been initialized")
+        if self.status.number_of_users():
+            self.status.update(self._get_stars())
+        self._process_pending_calls()
 
 
 class QueueDistributingStatus:
@@ -291,7 +302,7 @@ class WebApp:
         try:
             self._app_thread.start()
             self._app_loaded_event.wait()
-            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False)
+            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False, processes=1)
         finally:
             logging.info("Terminated. Clean up app..")
             if self.app is not None:
