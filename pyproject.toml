@@ -19,7 +19,7 @@ flask-sock = "^0.7.0"
 pyserial = "^3.5"
 dynaconf = "^3.2.4"
 pycairo = "^1.26.0"
-cots-star-tracker = { git = "https://github.com/ntobler/COTS-Star-Tracker.git", branch = "simplification" }
+ruststartracker = { git = "https://github.com/ntobler/ruststartracker.git" }
 typing-extensions = "^4.12.2"
 
 [tool.poetry.group.dev.dependencies]

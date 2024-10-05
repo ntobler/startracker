@@ -136,9 +136,7 @@ class App(webutil.QueueAbstractionClass):
             self._ae = None
             return
         try:
-            self._ae = attitude_estimation.AttitudeEstimator(
-                self._intrinsic_calibrator.cal, self.pers.star_data_dir
-            )
+            self._ae = attitude_estimation.AttitudeEstimator(self._intrinsic_calibrator.cal)
         except FileNotFoundError:
             self._ae = None
 
@@ -248,20 +246,6 @@ class App(webutil.QueueAbstractionClass):
             png = buffer.read()
         return png
 
-    @webutil.QueueAbstractionClass.queue_abstract
-    def create_star_data(self) -> dict:
-        if self._intrinsic_calibrator.cal is None:
-            raise ValueError("No calibration available")
-        self._logger.info("Creating star catalog")
-        attitude_estimation.create_catalog(
-            self._intrinsic_calibrator.cal,
-            self.pers.star_data_dir,
-            magnitude_threshold=5.5,
-            verbose=True,
-        )
-        self._logger.info("Creating star catalog done")
-        return self._get_state()
-
     def get_attitude(
         self, image: np.ndarray
     ) -> Optional[attitude_estimation.AttitudeEstimationResult]:
@@ -337,7 +321,6 @@ class WebApp:
         self.flask_app.post("/put_calibration_image")(self._put_calibration_image)
         self.flask_app.post("/reset_calibration")(self._reset_calibration)
         self.flask_app.post("/calibrate")(self._calibrate)
-        self.flask_app.post("/create_star_data")(self._create_star_data)
         self.sock.route("/image")(self._image)
 
     def _run_app(self) -> None:
@@ -419,12 +402,6 @@ class WebApp:
         if self.app is None:
             return "Server error", 500
         d = self.app.calibrate()
-        return jsonify(d)
-
-    def _create_star_data(self) -> FlaskResponse:
-        if self.app is None:
-            return "Server error", 500
-        d = self.app.create_star_data()
         return jsonify(d)
 
     def _image(self, ws: Server) -> None:

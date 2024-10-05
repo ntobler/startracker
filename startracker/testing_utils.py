@@ -6,21 +6,19 @@ import pathlib
 import time
 from typing import Final, List, Optional, Tuple
 
-import cots_star_tracker
 import cv2
 import numpy as np
 import numpy.typing as npt
+import ruststartracker
 import scipy.spatial.transform
 from typing_extensions import override
 
 from startracker import (
-    attitude_estimation,
     calibration,
     camera,
     image_utils,
     kalkam,
     persistent,
-    transform,
     util,
 )
 
@@ -30,7 +28,6 @@ UINT8_MAX = 255
 class TestingMaterial:
     testing_dir: pathlib.Path
     cam_file: pathlib.Path
-    stardata_dir: pathlib.Path
 
     def __init__(self, *, use_existing: bool = True):
         user_data_dir = persistent.Persistent.get_instance().user_data_dir
@@ -44,24 +41,8 @@ class TestingMaterial:
         if (not self.cam_file.exists()) or (not use_existing):
             cal.to_json(self.cam_file)
 
-        self.stardata_dir = self.testing_dir / "stardata"
-        if (not self.stardata_dir.exists()) or (not use_existing):
-            self.stardata_dir.mkdir(exist_ok=True)
-            attitude_estimation.create_catalog(
-                cal, self.stardata_dir, magnitude_threshold=5.5, verbose=True
-            )
-
     def patch_persistent(self):
         persistent.Persistent.get_instance().cam_file = self.cam_file
-        persistent.Persistent.get_instance().star_data_dir = self.stardata_dir
-
-
-def get_catalog_stars() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Get star location and magnitude."""
-    u, mag, _ = cots_star_tracker.read_star_catalog(cots_star_tracker.get_star_cat_file(), 8)
-    u /= np.linalg.norm(u, axis=-0, keepdims=True)
-    az, el = transform.nwu2azel(u, axis=0)
-    return az, el, mag
 
 
 class StarImageGenerator:
@@ -89,8 +70,9 @@ class StarImageGenerator:
         else:
             self.distorter = None
 
-        az, el, self.stars_mags = get_catalog_stars()
-        self.stars_nwu = transform.azel2nwu(np.stack((az, el), axis=-1))
+        catalog = ruststartracker.StarCatalog(max_magnitude=8)
+        self.stars_nwu = catalog.normalized_positions()
+        self.stars_mags = catalog.magnitude
 
         self._rng = np.random.default_rng(42)
 
@@ -315,6 +297,8 @@ class ArtificialStarCam(camera.Camera):
     """Calibration used to create mock images"""
     t: Optional[float] = None
     """Capture time in seconds."""
+    time_warp_factor: float = 1.0
+    """If t is not given, accelerate time by this factor."""
     grid: bool = False
     """Display longitude and latitude grid overlay."""
     simulate_exposure_time: bool = False
@@ -325,7 +309,7 @@ class ArtificialStarCam(camera.Camera):
         cam_file = TestingMaterial(use_existing=True).cam_file
         self._rng = np.random.default_rng(42)
         self.cal = kalkam.IntrinsicCalibration.from_json(cam_file)
-        self._sig = StarImageGenerator(self.cal)
+        self._sig = StarImageGenerator(self.cal, exposure=200)
 
     @override
     def capture_raw(self) -> npt.NDArray[np.uint16]:
@@ -393,7 +377,7 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
 
     @override
     def _capture(self) -> np.ndarray:
-        t = time.monotonic() if self.t is None else self.t
+        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
 
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
         self.axis_angle = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
@@ -424,7 +408,7 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         self.phi = 0
 
     def get_extrinsic(self) -> np.ndarray:
-        t = time.monotonic() if self.t is None else self.t
+        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
 
         self.phi = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
 

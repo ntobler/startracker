@@ -7,15 +7,35 @@ import scipy.spatial.transform
 from startracker import attitude_estimation, kalkam, testing_utils
 
 
+def test_attutude_estimation_simple():
+    tm = testing_utils.TestingMaterial(use_existing=True)
+
+    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    ae_conf = attitude_estimation.AttitudeEstimatorConfig(n_match=12)
+    ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
+
+    sig = testing_utils.StarImageGenerator(cal, noise_sigma=0)
+
+    rng = np.random.default_rng(42)
+    quat_gt = scipy.spatial.transform.Rotation.random(random_state=rng).as_quat()
+
+    image, _, _ = sig.image_from_quaternion(quat_gt)
+
+    att_res = ae(image)
+
+    np.testing.assert_allclose(att_res.quat, quat_gt, rtol=1e-4, atol=1e-4)
+
+
 def test_attutude_estimation_error():
     tm = testing_utils.TestingMaterial(use_existing=True)
 
     cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
-    ae = attitude_estimation.AttitudeEstimator(cal, tm.stardata_dir)
+    ae_conf = attitude_estimation.AttitudeEstimatorConfig(n_match=12)
+    ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
 
-    sig = testing_utils.StarImageGenerator(cal, noise_sigma=10)
+    # Get very noisy image
+    sig = testing_utils.StarImageGenerator(cal, noise_sigma=200)
 
-    # Get noisy image
     image, _, _ = sig([0, 0, 1], [0, 1, 0])
 
     att_res = ae(image)
@@ -28,7 +48,8 @@ def test_attutude_estimation():
     rng = np.random.default_rng(42)
 
     cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
-    ae = attitude_estimation.AttitudeEstimator(cal, tm.stardata_dir)
+    ae_conf = attitude_estimation.AttitudeEstimatorConfig(n_match=12)
+    ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
     sig = testing_utils.StarImageGenerator(cal)
 
     vectors = rng.normal(size=(10, 3))
@@ -37,7 +58,7 @@ def test_attutude_estimation():
     true_positive_mags = []
     false_negative_mags = []
 
-    for vector in vectors:
+    for _, vector in enumerate(vectors):
         image, gt_xy, mag = sig(vector, [0, 1, 0])
 
         att_res = ae(image)

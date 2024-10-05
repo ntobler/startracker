@@ -3,44 +3,17 @@
 import dataclasses
 import enum
 import logging
-import pathlib
+import math
 import threading
 import time
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
-import cots_star_tracker
 import numpy as np
+import ruststartracker
 import scipy.spatial.transform
 from typing_extensions import Self
 
 from startracker import camera, kalkam, persistent
-
-
-def create_catalog(
-    cal: kalkam.IntrinsicCalibration,
-    data_dir: Union[pathlib.Path, str],
-    magnitude_threshold: float = 5.5,
-    *,
-    verbose: bool = False,
-):
-    """Create a new star catalog.
-
-    Args:
-        cal: Calibration object.
-        data_dir: Directory to store catalog in.
-        magnitude_threshold: Star magnitudes to include in the catalog.
-        verbose: Print information.
-    """
-    cots_star_tracker.create_catalog(
-        _get_camera_params(cal), data_dir, b_thresh=magnitude_threshold, verbose=verbose
-    )
-
-
-def _get_camera_params(
-    cal: kalkam.IntrinsicCalibration,
-) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Return arguments for cots_star_tracker function."""
-    return (cal.intrinsic, np.array(cal.image_size), cal.dist_coeffs)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,7 +48,7 @@ class AttitudeEstimatorConfig:
     """Minimum area in pixels for a star to be detected."""
     max_star_area: int = 100
     """Maximum area in pixels for a star to be detected"""
-    n_match: int = 5
+    n_match: int = 7
     """Number of required star matches for a sucessful attitude estimation."""
     star_match_pixel_tol: float = 2.0
     """Tolerance in pixels for a star to be recognized as match."""
@@ -88,32 +61,41 @@ class AttitudeEstimator:
     def __init__(
         self,
         cal: kalkam.IntrinsicCalibration,
-        data_dir: Union[pathlib.Path, str],
         config: Optional[AttitudeEstimatorConfig] = None,
     ):
         """Star based attitude estimation.
 
         Args:
             cal: Camera calibration instance.
-            data_dir: Star catalog data directory.
             config: Attitude estimation configuration to be used
         """
         if config is None:
             config = AttitudeEstimatorConfig()
 
-        self._data_dir = pathlib.Path(data_dir)
         self.cal = cal
 
-        self._k = np.load(self._data_dir / "k.npy")
-        self._m = np.load(self._data_dir / "m.npy")
-        self._q = np.load(self._data_dir / "q.npy")
-        self.cat_xyz = np.load(self._data_dir / "u.npy")
-        self._indexed_star_pairs = np.load(self._data_dir / "indexed_star_pairs.npy")
-        self.cat_mag = np.load(self._data_dir / "mag.npy")
-
-        self._isa_thresh = 0.0
-
         self.config = config
+
+        catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
+        self.cat_xyz = catalog.normalized_positions(epoch=2024.7)
+        self.cat_mag = catalog.magnitude
+
+        camera_params = ruststartracker.CameraParameters(
+            camera_matrix=cal.intrinsic,
+            cam_resolution=cal.image_size,
+            dist_coefs=cal.dist_coeffs,
+        )
+
+        # Approximate angle tolerance from pixel tolerance
+        fx = float(self.cal.intrinsic[0, 0])
+        isa_angle_tol = math.atan(config.star_match_pixel_tol / fx)
+
+        self._backend = ruststartracker.StarTracker(
+            self.cat_xyz,
+            camera_params,
+            inter_star_angle_tolerance=isa_angle_tol,
+            n_minimum_matches=self._config.n_match,
+        )
 
     @property
     def config(self) -> AttitudeEstimatorConfig:
@@ -122,9 +104,6 @@ class AttitudeEstimator:
     @config.setter
     def config(self, config: AttitudeEstimatorConfig):
         self._config = config
-
-        fx = float(self.cal.intrinsic[0, 0])
-        self._isa_thresh = config.star_match_pixel_tol / fx
 
     def image_xyz_to_xy(self, image_xyz: np.ndarray) -> np.ndarray:
         image_xy = (self.cal.intrinsic @ image_xyz.T).T
@@ -145,37 +124,34 @@ class AttitudeEstimator:
             AttitudeEstimationResult: attitude estimation result object.
         """
         try:
-            q_est, id_match, n_matches, x_obs, _ = cots_star_tracker.star_tracker(
+            result = self._backend.process_image(
                 image,
-                _get_camera_params(self.cal),
                 darkframe=darkframe,
-                m=self._m,
-                q=self._q,
-                x_cat=self.cat_xyz,
-                k=self._k,
-                indexed_star_pairs=self._indexed_star_pairs,
-                graphics=False,
                 min_star_area=self._config.min_star_area,
                 max_star_area=self._config.max_star_area,
-                isa_thresh=self._isa_thresh,
-                nmatch=self._config.n_match,
             )
-        except cots_star_tracker.StartrackerError:
+        except ruststartracker.StarTrackerError:
             return ERROR_ATTITUDE_RESULT
 
-        id_match = id_match[:, 0]
-        image_xyz = x_obs.T[id_match != -1]
-        id_match = id_match[id_match != -1]
-        cat_xyz = self.cat_xyz.T[id_match]
+        q_est = result.quat
+        id_match = result.match_ids
+        n_matches = result.n_matches
+
+        image_xyz = result.mached_obs_x
+        cat_xyz = self.cat_xyz[id_match]
         star_mags = self.cat_mag[id_match]
-        cat_xyz = scipy.spatial.transform.Rotation.from_quat(q_est).inv().apply(cat_xyz)
+
+        # Convert vectors into camera frame
+        rot = scipy.spatial.transform.Rotation.from_quat(q_est).inv()
+        image_xyz = rot.apply(image_xyz)
+        cat_xyz = rot.apply(cat_xyz)
 
         return AttitudeEstimationResult(q_est, n_matches, image_xyz, cat_xyz, id_match, star_mags)
 
     def calculate_statistics(self, res: AttitudeEstimationResult):
         """Calculate true potitive and false negative magnitudes."""
         rot = scipy.spatial.transform.Rotation.from_quat(res.quat)
-        points = rot.inv().apply(self.cat_xyz.T)
+        points = rot.inv().apply(self.cat_xyz)
 
         z = points[..., 2]
 
@@ -285,14 +261,9 @@ class ImageAcquisitioner:
             logging.critical("Missing camera calibration")
             self._attitude_estimator = None
             self.mode = AttitudeEstimationModeEnum.FAULT
-        elif not pers.star_data_dir.exists():
-            logging.critical("Missing star data catalog")
-            self._attitude_estimator = None
-            self.mode = AttitudeEstimationModeEnum.FAULT
         else:
             self._attitude_estimator = AttitudeEstimator(
                 kalkam.IntrinsicCalibration.from_json(pers.cam_file),
-                pers.star_data_dir,
             )
 
         self._dark_frame_file = pers.dark_frame_file

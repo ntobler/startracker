@@ -82,19 +82,17 @@ class App(webutil.QueueAbstractionClass):
         settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
 
-        self._attitude_est = attitude_estimation.AttitudeEstimator(self._cal, pers.star_data_dir)
+        self._attitude_est = attitude_estimation.AttitudeEstimator(self._cal)
 
         axis_relative_to_camera = self._rng.normal(size=(3,)) * 0.5 + [0, 0, 1]
         axis_relative_to_camera /= np.linalg.norm(axis_relative_to_camera)
         axis_rotm = kalkam.look_at_extrinsic(axis_relative_to_camera, [0, 0, 0], [0, -1, 0])[:3, :3]
         self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
 
-        self._cat_xyz = self._attitude_est.cat_xyz.T
-        self._cat_mags = self._attitude_est.cat_mag
-
-        bright = self._cat_mags <= 4
-        self._cat_xyz = self._cat_xyz[bright]
-        self._cat_mags = self._cat_mags[bright]
+        # Get bright stars
+        bright = self._attitude_est.cat_mag <= 4
+        self._cat_xyz = self._attitude_est.cat_xyz[bright]
+        self._cat_mags = self._attitude_est.cat_mag[bright]
 
         self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
         self._calibration_rots: List[npt.NDArray[np.floating]] = []
@@ -315,6 +313,7 @@ def main():
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
         camera.RpiCamera = testing_utils.AxisAlignCalibrationTestCam
+        camera.RpiCamera.time_warp_factor = 3000
 
     webapp = WebApp()
     webapp.run()

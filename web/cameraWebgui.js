@@ -145,26 +145,6 @@ document.getElementById('calibrate').onclick = () => {
     });
 }
 
-document.getElementById('create_star_data').onclick = () => {
-
-    let interval = setInterval(function () {
-        let el = document.getElementById('create_star_data')
-        el.innerHTML += "."
-    }, 1000)
-
-    fetch('/create_star_data', {
-        method: 'POST',
-    }).then(response => response.json()).then((state) => {
-        document.getElementById('create_star_data').innerHTML = "Create"
-        clearInterval(interval)
-        updateState(state)
-    }).catch(error => {
-        document.getElementById('create_star_data').innerHTML = "Create"
-        clearInterval(interval)
-        console.error('Error:', error);
-    });
-}
-
 window.addEventListener('DOMContentLoaded', () => {
     fetch('/get_state', {
         method: 'POST',

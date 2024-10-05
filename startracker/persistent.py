@@ -32,7 +32,4 @@ class Persistent:
 
         self.cam_file = self.user_data_dir / "cam_file.json"
 
-        self.star_data_dir = self.user_data_dir / "star_data"
-        self.star_data_dir.mkdir(exist_ok=True)
-
         self.dark_frame_file = self.user_data_dir / "darkframe.npy"
