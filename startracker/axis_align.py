@@ -73,11 +73,7 @@ class App(webutil.QueueAbstractionClass):
 
         self.status = QueueDistributingStatus()
 
-        self._rng = np.random.default_rng(42)
-
         self._pers = persistent.Persistent.get_instance()
-
-        self._cal = kalkam.IntrinsicCalibration.from_json(self._pers.cam_file)
 
         # Load camera settings if available
         if self._pers.cam_config_file.exists():
@@ -86,12 +82,18 @@ class App(webutil.QueueAbstractionClass):
             settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
 
+        # Load camera calibration and create attitude estimator
+        self._cal = kalkam.IntrinsicCalibration.from_json(self._pers.cam_file)
         self._attitude_est = attitude_estimation.AttitudeEstimator(self._cal)
 
-        axis_relative_to_camera = self._rng.normal(size=(3,)) * 0.5 + [0, 0, 1]
-        axis_relative_to_camera /= np.linalg.norm(axis_relative_to_camera)
-        axis_rotm = kalkam.look_at_extrinsic(axis_relative_to_camera, [0, 0, 0], [0, -1, 0])[:3, :3]
-        self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
+        # Assign default
+        if self._pers.axis_rot_quat_file.exists():
+            self._axis_rot = scipy.spatial.transform.Rotation.from_quat(
+                np.load(self._pers.axis_rot_quat_file)
+            )
+        else:
+            self._axis_rot = None
+        self._quat = np.array([0.0, 0.0, 0.0, 1.0])
 
         # Get bright stars
         bright = self._attitude_est.cat_mag <= 4
@@ -100,8 +102,6 @@ class App(webutil.QueueAbstractionClass):
 
         self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
         self._calibration_rots: List[npt.NDArray[np.floating]] = []
-
-        self._quat = np.array([0.0, 0.0, 0.0, 1.0])
 
     def _get_stars(self):
         image = self._cam.capture()
@@ -118,15 +118,17 @@ class App(webutil.QueueAbstractionClass):
             # Rotate into camera coordinate frame
             cat_xyz = inverse_rotation.apply(self._cat_xyz)
             north_south = inverse_rotation.apply([[0, 0, 1], [0, 0, -1]])
+            star_coords = att_res.image_xyz
 
             # Merge catalog stars and detected stars (so both are displayed in the GUI)
             cat_xyz = np.concatenate((cat_xyz, att_res.cat_xyz), axis=0)
             cat_mags = np.concatenate((self._cat_mags, att_res.mags), axis=0)
 
-            # Rotate into the axis coordinate frame
-            star_coords = self.axis_rot.apply(att_res.image_xyz)
-            cat_xyz = self.axis_rot.apply(cat_xyz)
-            north_south = self.axis_rot.apply(north_south)
+            # Rotate into the axis coordinate frame if the axis has been calibrated
+            if self._axis_rot is not None:
+                star_coords = self._axis_rot.apply(star_coords)
+                cat_xyz = self._axis_rot.apply(cat_xyz)
+                north_south = self._axis_rot.apply(north_south)
 
             # Calculate alignment error
             alignment_error = np.arccos(north_south[0, 2]) * (180 / np.pi)
@@ -150,12 +152,13 @@ class App(webutil.QueueAbstractionClass):
             "north_south": to_rounded_list(north_south, 2),
             "processing_time": int(tm.t * 1000),
         }
-
         return d
 
     def _get_camera_frame(self, segments_per_side: int = 10) -> np.ndarray:
         points = calibration.get_distorted_camera_frame(self._cal, segments_per_side)
-        points = project_radial(self.axis_rot.apply(points))
+        if self._axis_rot is not None:
+            points = self._axis_rot.apply(points)
+        points = project_radial(points)
         return points
 
     @webutil.QueueAbstractionClass.queue_abstract
@@ -179,7 +182,10 @@ class App(webutil.QueueAbstractionClass):
         axis_vec = axis_vec if axis_vec[2] > 0 else -axis_vec
         # Create camea rotation to axis, such that camera is horizontal
         axis_rotm = kalkam.look_at_extrinsic(axis_vec, [0, 0, 0], [0, -1, 0])[:3, :3]
-        self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
+        self._axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
+
+        # Save calibrated rotation
+        np.save(self._pers.axis_rot_quat_file, self._axis_rot.as_quat())
 
         self._update_camera_frame()
         return {
@@ -309,9 +315,7 @@ class WebApp:
         try:
             self._app_thread.start()
             self._app_loaded_event.wait()
-            self.flask_app.run(
-                debug=True, host="0.0.0.0", use_reloader=False, processes=1
-            )
+            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False, processes=1)
         finally:
             logging.info("Terminated. Clean up app..")
             if self.app is not None:

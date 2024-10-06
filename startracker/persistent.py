@@ -35,3 +35,5 @@ class Persistent:
         self.dark_frame_file = self.user_data_dir / "darkframe.npy"
 
         self.cam_config_file = self.user_data_dir / "cam_config.pkl"
+
+        self.axis_rot_quat_file = self.user_data_dir / "axis_rot_quat.npy"
