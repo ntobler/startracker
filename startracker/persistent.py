@@ -33,3 +33,5 @@ class Persistent:
         self.cam_file = self.user_data_dir / "cam_file.json"
 
         self.dark_frame_file = self.user_data_dir / "darkframe.npy"
+
+        self.cam_config_file = self.user_data_dir / "cam_config.pkl"

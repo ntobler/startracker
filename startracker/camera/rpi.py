@@ -77,10 +77,10 @@ class RpiCamera(camera.Camera):
         """
         self._check_context_manager()
         with self._lock:
-            t0 = time.time()
+            t0 = time.monotonic()
             self._logger.info("Taking image")
             raw = self._picam2.capture_array("raw")
-            self._logger.info(f"Capturing took:{time.time() - t0:.2f}s")
+            self._logger.info(f"Capturing took:{time.monotonic() - t0:.2f}s")
             bayer = image_processing.decode_srggb10(raw)
         return bayer
 

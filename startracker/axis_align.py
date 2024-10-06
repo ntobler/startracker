@@ -75,12 +75,15 @@ class App(webutil.QueueAbstractionClass):
 
         self._rng = np.random.default_rng(42)
 
-        pers = persistent.Persistent.get_instance()
+        self._pers = persistent.Persistent.get_instance()
 
-        self._cal = kalkam.IntrinsicCalibration.from_json(pers.cam_file)
+        self._cal = kalkam.IntrinsicCalibration.from_json(self._pers.cam_file)
 
-        # TODO load real settings
-        settings = camera.CameraSettings()
+        # Load camera settings if available
+        if self._pers.cam_config_file.exists():
+            settings = camera.CameraSettings.load(self._pers.cam_config_file)
+        else:
+            settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
 
         self._attitude_est = attitude_estimation.AttitudeEstimator(self._cal)
@@ -189,10 +192,10 @@ class App(webutil.QueueAbstractionClass):
 
     def run(self):
         """App logic."""
+        if self._cam is None:
+            raise RuntimeError("Camera hasn't been initialized")
         self._update_camera_frame()
         self._logger.info("Starting camera")
-        settings = camera.CameraSettings()
-        self._cam = camera.RpiCamera(settings)
         with self._cam:
             self._logger.info("Starting event processor")
             while not self.terminate:
@@ -302,7 +305,9 @@ class WebApp:
         try:
             self._app_thread.start()
             self._app_loaded_event.wait()
-            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False, processes=1)
+            self.flask_app.run(
+                debug=True, host="0.0.0.0", use_reloader=False, processes=1
+            )
         finally:
             logging.info("Terminated. Clean up app..")
             if self.app is not None:

@@ -110,20 +110,26 @@ class App(webutil.QueueAbstractionClass):
     def __init__(self) -> None:
         super().__init__()
 
-        self.pers = persistent.Persistent.get_instance()
-
         self.terminate = False
+
+        self._pers = persistent.Persistent.get_instance()
 
         self.image_container = webutil.ImageData()
 
         self._logger = logging.getLogger("App")
         self._image_cache = None
         self._intrinsic_calibrator = IntrinsicCalibrator(
-            self.pers.calibration_dir, self.pers.cam_file
+            self._pers.calibration_dir, self._pers.cam_file
         )
 
+        # Load camera settings if available
+        if self._pers.cam_config_file.exists():
+            settings = camera.CameraSettings.load(self._pers.cam_config_file)
+        else:
+            settings = camera.CameraSettings()
+        self._cam = camera.RpiCamera(settings)
+
         self._camera_job = "stop"
-        self._cam = None
 
         self._attitude_overlay = False
         self._attitude_result = None
@@ -198,6 +204,8 @@ class App(webutil.QueueAbstractionClass):
         self._logger.info(f"Setting camera settings {settings}")
         self._cam.settings = settings
 
+        settings.save(self._pers.cam_config_file)
+
         self._intrinsic_calibrator.set_pattern(pattern_width, pattern_height, pattern_size)
 
         self._attitude_overlay = attitude_overlay
@@ -254,9 +262,9 @@ class App(webutil.QueueAbstractionClass):
         return self._ae(image)
 
     def run(self) -> None:
+        if self._cam is None:
+            raise RuntimeError("Camera hasn't been initialized")
         self._logger.info("Starting camera")
-        settings = camera.CameraSettings()
-        self._cam = camera.RpiCamera(settings)
         with self._cam:
             self._logger.info("Starting event processor")
             while not self.terminate:
@@ -339,7 +347,9 @@ class WebApp:
         try:
             app_thread.start()
             self._app_loaded_event.wait()
-            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False, processes=1)
+            self.flask_app.run(
+                debug=True, host="0.0.0.0", use_reloader=False, processes=1
+            )
         finally:
             logging.info("Terminated. Clean up app..")
             if self.app is not None:

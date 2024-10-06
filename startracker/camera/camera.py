@@ -22,7 +22,7 @@ class CameraSettings:
     """Analog gain value."""
     stack: int = 1
     """Number of image to accumulate"""
-    binning: int = 1
+    binning: int = 2
     """Binning factor 1, 2, 4 or 8"""
     bias: Union[None, int, np.ndarray] = 55
     """Bias value or bias frame i.e. the value subtracted to correct black level."""
@@ -56,7 +56,7 @@ class CameraSettings:
 
     @classmethod
     def load(cls, filename: pathlib.Path) -> Self:
-        with filename.open("wb") as f:
+        with filename.open("rb") as f:
             obj = cls.from_dict(pickle.load(f))
         return obj
 
