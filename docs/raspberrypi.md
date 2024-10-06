@@ -48,7 +48,7 @@ Before we reboot, lets increase the swap
 ``` bash
 sudo dphys-swapfile swapoff
 sudo sed -i 's/CONF_SWAPFILE/#CONF_SWAPFILE/g' /etc/dphys-swapfile
-sudo bash -c "echo 'CONF_SWAPSIZE=1024' >> /etc/dphys-swapfile"
+sudo bash -c "echo 'CONF_SWAPSIZE=2048' >> /etc/dphys-swapfile"
 sudo dphys-swapfile setup
 sudo dphys-swapfile swapon
 sudo reboot now
@@ -67,6 +67,13 @@ sudo reboot now
 You might want to test if the camera works using
 ```bash
 libcamera-still -o test.jpg
+```
+
+Install rust toolchain. We set the number of cores to 1, as the Raspberry Pi runs low on RAM
+and is more likely to access swap with the standard amount of cores 
+```bash
+mkdir -p ~/.cargo && echo -e "[build]\njobs = 1" >> ~/.cargo/config.toml
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 Install startracker git repo
