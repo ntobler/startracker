@@ -101,6 +101,8 @@ class App(webutil.QueueAbstractionClass):
         self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
         self._calibration_rots: List[npt.NDArray[np.floating]] = []
 
+        self._quat = np.array([0.0, 0.0, 0.0, 1.0])
+
     def _get_stars(self):
         image = self._cam.capture()
 
@@ -108,8 +110,10 @@ class App(webutil.QueueAbstractionClass):
             att_res = self._attitude_est(image)
 
             self._last_attitude_res = att_res
+            if self._last_attitude_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:
+                self._quat = att_res.quat
 
-            inverse_rotation = scipy.spatial.transform.Rotation.from_quat(att_res.quat).inv()
+            inverse_rotation = scipy.spatial.transform.Rotation.from_quat(self._quat).inv()
 
             # Rotate into camera coordinate frame
             cat_xyz = inverse_rotation.apply(self._cat_xyz)

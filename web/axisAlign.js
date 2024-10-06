@@ -111,8 +111,13 @@ function drawRings(ctx) {
 function drawCameraFrame(ctx) {
 
     ctx.save()
+    if (state.n_matches > 0) {
     ctx.strokeStyle = "red"
     ctx.fillStyle = "red"
+    } else { 
+        ctx.strokeStyle = "#f004"
+        ctx.fillStyle = "#f004"
+    }
 
     let x = state.frame_points[0]
     let y = state.frame_points[1]
