@@ -52,6 +52,8 @@ class AttitudeEstimatorConfig:
     """Number of required star matches for a sucessful attitude estimation."""
     star_match_pixel_tol: float = 2.0
     """Tolerance in pixels for a star to be recognized as match."""
+    timeout_secs: float = 0.2
+    """Timeout for computation in seconds."""
 
     def copy(self) -> Self:
         return dataclasses.replace(self)
@@ -95,6 +97,7 @@ class AttitudeEstimator:
             camera_params,
             inter_star_angle_tolerance=isa_angle_tol,
             n_minimum_matches=self._config.n_match,
+            timeout_secs=self._config.timeout_secs,
         )
 
     @property
