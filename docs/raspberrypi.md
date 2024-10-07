@@ -87,4 +87,14 @@ virtualenv venv --system-site-packages
 pip install -e ./startracker
 sudo startracker/install/install_service.sh
 ```
+
+Set up automatic wifi switch over to a mobile hotspot (find with `sudo nmcli dev wifi`)
+```bash
+sudo nmcli dev wifi connect "wifi_name" password "password"
+sudo nmcli connection modify wifi_name connection.autoconnect-priority 10
+sudo nmcli connection modify preconfigured connection.autoconnect-priority 5
+nmcli --fields autoconnect-priority,name connection
+sudo systemctl restart NetworkManager
+```
+
 Your Startracker is ready to go.
