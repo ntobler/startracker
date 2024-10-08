@@ -262,10 +262,11 @@ class WebApp:
 
         self.flask_app.route("/")(self._index)
         self.flask_app.route("/<path:filename>")(self._serve_file)
-        self.flask_app.post("/add_to_calibration")(self.add_to_calibration)
-        self.flask_app.post("/calibrate")(self.calibrate)
+        self.flask_app.post("/api/add_to_calibration")(self.add_to_calibration)
+        self.flask_app.post("/api/reset_calibration")(self.reset_calibration)
+        self.flask_app.post("/api/calibrate")(self.calibrate)
 
-        self.sock.route("/state")(self._state)
+        self.sock.route("/api/state")(self._state)
 
     def _run_app(self) -> None:
         self.app = App()

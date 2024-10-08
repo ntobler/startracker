@@ -1,4 +1,4 @@
-let url = 'ws://' + window.location.host + "/image"
+let url = 'ws://' + window.location.host + "/api/image"
 var ws = new WebSocket(url);
 
 var img = document.getElementById('image');
@@ -30,7 +30,7 @@ function setSettings() {
         pattern_size: document.getElementById('pattern_s').value,
         overlay: document.getElementById('overlay').buttonValue == true,
     }
-    fetch('/set_settings', {
+    fetch('/api/set_settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -78,7 +78,7 @@ function capture(mode) {
     let payload = {
         mode: mode
     }
-    fetch('/capture', {
+    fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -106,7 +106,7 @@ document.getElementById('capture_darkframe').onclick = () => {
 }
 
 document.getElementById('put_calibration_image').onclick = () => {
-    fetch('/put_calibration_image', {
+    fetch('/api/put_calibration_image', {
         method: 'POST',
     }).then(response => response.json()).then((state) => {
         updateState(state)
@@ -116,7 +116,7 @@ document.getElementById('put_calibration_image').onclick = () => {
 }
 
 document.getElementById('reset_calibration').onclick = () => {
-    fetch('/reset_calibration', {
+    fetch('/api/reset_calibration', {
         method: 'POST',
     }).then(response => response.json()).then((state) => {
         updateState(state)
@@ -132,7 +132,7 @@ document.getElementById('calibrate').onclick = () => {
         el.innerHTML += "."
     }, 1000)
 
-    fetch('/calibrate', {
+    fetch('/api/calibrate', {
         method: 'POST',
     }).then(response => response.json()).then((state) => {
         document.getElementById('calibrate').innerHTML = "Calibrate"
@@ -146,7 +146,7 @@ document.getElementById('calibrate').onclick = () => {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    fetch('/get_state', {
+    fetch('/api/get_state', {
         method: 'POST',
     }).then(response => response.json()).then((state) => {
         document.getElementById("exposure").value = state.camera_settings.exposure_ms

@@ -205,7 +205,7 @@ function parseSize(size) {
     }
 }
 
-let url = 'ws://' + window.location.host + "/state"
+let url = 'ws://' + window.location.host + "/api/state"
 var ws = new WebSocket(url);
 ws.onmessage = response => {
     state = JSON.parse(response.data)
@@ -216,22 +216,8 @@ ws.onmessage = response => {
     document.getElementById("packetSize").innerHTML = `Packet size: ${parseSize(response.data.length)}`
 }
 
-document.getElementById('canvas').onclick = () => {
-    payload = {
-        action: "dunno"
-    }
-    fetch('/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }).then(response => response.json()).then((data) => {
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-}
-
 document.getElementById('add_to_calibration').onclick = () => {
-    fetch('/add_to_calibration', {
+    fetch('/api/add_to_calibration', {
         method: 'POST',
     }).then(response => response.json()).then((data) => {
         console.log(data)
@@ -241,7 +227,7 @@ document.getElementById('add_to_calibration').onclick = () => {
 }
 
 document.getElementById('reset_calibration').onclick = () => {
-    fetch('/reset_calibration', {
+    fetch('/api/reset_calibration', {
         method: 'POST',
     }).then(response => response.json()).then((data) => {
         console.log(data)
@@ -257,7 +243,7 @@ document.getElementById('calibrate').onclick = () => {
         el.innerHTML += "."
     }, 1000)
 
-    fetch('/calibrate', {
+    fetch('/api/calibrate', {
         method: 'POST',
     }).then(response => response.json()).then((data) => {
         document.getElementById('calibrate').innerHTML = "Calibrate"

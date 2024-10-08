@@ -45,7 +45,7 @@
     <div id="camera-overlay">No image captured</div>
     <img id="image" src="" alt="Image">
     <div id="footerBar">
-        <div>Exposure <input type="number" step="10" value="1.00" id="exposure" name="exposure" style="width: 4em" /> ms</div>
+        <div>Exposure <input type="number" step="1" value="10" id="exposure" name="exposure" style="width: 4em" /> ms</div>
         <div>Gain <input type="number" value="1" id="analog_gain" name="analog_gain" /></div>
         <div>Digital gain <input type="number" value="1" id="digital_gain" name="digital_gain" /></div>
         <div>Binning <input type="number" value="2" id="binning" name="binning" /></div>
@@ -64,14 +64,14 @@
             @
             <input type="number" value="40" id="pattern_s" name="binning"  size="1" />
             mm
-            <button type="button" onclick="window.open('calibration_pattern', '_blank'); return false;">Open</button>
+            <button type="button" onclick="window.open('api/calibration_pattern', '_blank'); return false;">Open</button>
         </div>
         <div>
             Calibration
             <button type="button" id="put_calibration_image">Put</button>
             <button type="button" id="reset_calibration">Reset</button>
             <button type="button" id="calibrate">Calibrate</button>
-            <button type="button" onclick="window.open('calibration_result', '_blank'); return false;">Result</button>
+            <button type="button" onclick="window.open('api/calibration_result', '_blank'); return false;">Result</button>
         </div>
         <div>
             Display
