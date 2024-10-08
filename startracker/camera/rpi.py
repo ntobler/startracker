@@ -60,7 +60,8 @@ class RpiCamera(camera.Camera):
             self._picam2.start()
 
             self._logger.info("Set inital exposure and gain")
-            self._apply_settings()
+
+        self._apply_settings()
 
     def __exit__(self, type, value, traceback):
         super().__exit__(type, value, traceback)
