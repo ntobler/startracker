@@ -93,13 +93,24 @@ class Camera(abc.ABC):
             raise RuntimeError("Context manager not entered")
 
     @abc.abstractmethod
-    def capture_raw(self) -> npt.NDArray[np.uint16]: ...
+    def capture_raw(self) -> npt.NDArray[np.uint16]:
+        """Capture a raw image.
+
+        Returns:
+            np.ndarray: uint16 bayer image
+        """
 
     @abc.abstractmethod
-    def capture(self) -> npt.NDArray[np.uint8]: ...
+    def capture(self) -> npt.NDArray[np.uint8]:
+        """Capture corrected, potentially stacked and binned image.
+
+        Returns:
+            np.ndarray: uint8 image
+        """
 
     @abc.abstractmethod
-    def record_darkframe(self) -> None: ...
+    def record_darkframe(self) -> None:
+        """Record a dark frame for bias correction and store it to the settings."""
 
 
 class MockCamera(Camera):

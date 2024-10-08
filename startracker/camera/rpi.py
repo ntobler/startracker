@@ -25,17 +25,21 @@ class RpiCamera(camera.Camera):
     def __init__(self, camera_settings: camera.CameraSettings):
         super().__init__(camera_settings)
         self._lock = threading.Lock()
-        self._exposure_ms = 0
-        self._analog_gain = 0
+        self._exposure_ms = -1
+        self._analog_gain = -1
 
     @override
     def _apply_settings(self):
         if self._exposure_ms != self.settings.exposure_ms:
             self._exposure_ms = self.settings.exposure_ms
-            self._picam2.set_controls({"ExposureTime": int(self._exposure_ms * 1000)})
+            self._logger.info("Set ExposureTime")
+            with self._lock:
+                self._picam2.set_controls({"ExposureTime": int(self._exposure_ms * 1000)})
         if self._analog_gain != self.settings.analog_gain:
             self._analog_gain = self.settings.analog_gain
-            self._picam2.set_controls({"AnalogueGain": int(self._analog_gain)})
+            self._logger.info("Set AnalogueGain")
+            with self._lock:
+                self._picam2.set_controls({"AnalogueGain": int(self._analog_gain)})
 
     def __enter__(self):
         super().__enter__()
@@ -52,16 +56,11 @@ class RpiCamera(camera.Camera):
             config = self._picam2.create_still_configuration(buffer_count=1, queue=False)
             self._picam2.configure(config)
 
-            self._logger.info("Set inital exposure and gain")
-            self._picam2.set_controls(
-                {
-                    "ExposureTime": int(self._exposure_ms * 1000),
-                    "AnalogueGain": int(self._analog_gain),
-                }
-            )
-
+            self._logger.info("Start camera")
             self._picam2.start()
-            self._logger.info("Started")
+
+            self._logger.info("Set inital exposure and gain")
+            self._apply_settings()
 
     def __exit__(self, type, value, traceback):
         super().__exit__(type, value, traceback)
@@ -70,27 +69,17 @@ class RpiCamera(camera.Camera):
 
     @override
     def capture_raw(self) -> npt.NDArray[np.uint16]:
-        """Capture a raw image.
-
-        Returns:
-            np.ndarray: uint16 bayer image
-        """
         self._check_context_manager()
+        self._logger.info("Taking image")
+        t0 = time.monotonic()
         with self._lock:
-            t0 = time.monotonic()
-            self._logger.info("Taking image")
             raw = self._picam2.capture_array("raw")
-            self._logger.info(f"Capturing took:{time.monotonic() - t0:.2f}s")
-            bayer = image_processing.decode_srggb10(raw)
+        self._logger.info(f"Capturing took:{time.monotonic() - t0:.2f}s")
+        bayer = image_processing.decode_srggb10(raw)
         return bayer
 
     @override
     def capture(self) -> npt.NDArray[np.uint8]:
-        """Capture corrected, potentially stacked and binned image.
-
-        Returns:
-            np.ndarray: uint8 image
-        """
         image = None
         for _ in range(self.settings.stack):
             raw = self.capture_raw()
@@ -119,7 +108,6 @@ class RpiCamera(camera.Camera):
 
     @override
     def record_darkframe(self) -> None:
-        """Record a dark frame for bias correction and store it to the settings."""
         darkframe = None
         for _ in range(self.settings.darkframe_averaging):
             if darkframe is None:
