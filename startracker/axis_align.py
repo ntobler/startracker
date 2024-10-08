@@ -76,8 +76,8 @@ class App(webutil.QueueAbstractionClass):
         self._pers = persistent.Persistent.get_instance()
 
         # Load camera settings if available
-        if self._pers.cam_config_file.exists():
-            settings = camera.CameraSettings.load(self._pers.cam_config_file)
+        if self._pers.cam_settings_file.exists():
+            settings = camera.CameraSettings.load(self._pers.cam_settings_file)
         else:
             settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)

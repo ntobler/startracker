@@ -1,5 +1,6 @@
 """Flask web application to capture images using a smartphone browser or any other browser."""
 
+import contextlib
 import enum
 import io
 import logging
@@ -123,8 +124,8 @@ class App(webutil.QueueAbstractionClass):
         )
 
         # Load camera settings if available
-        if self._pers.cam_config_file.exists():
-            settings = camera.CameraSettings.load(self._pers.cam_config_file)
+        if self._pers.cam_settings_file.exists():
+            settings = camera.CameraSettings.load(self._pers.cam_settings_file)
         else:
             settings = camera.CameraSettings()
         self._cam = camera.RpiCamera(settings)
@@ -204,8 +205,6 @@ class App(webutil.QueueAbstractionClass):
         self._logger.info(f"Setting camera settings {settings}")
         self._cam.settings = settings
 
-        settings.save(self._pers.cam_config_file)
-
         self._intrinsic_calibrator.set_pattern(pattern_width, pattern_height, pattern_size)
 
         self._attitude_overlay = attitude_overlay
@@ -261,11 +260,17 @@ class App(webutil.QueueAbstractionClass):
             return None
         return self._ae(image)
 
+    @contextlib.contextmanager
+    def _camera_settings_saver(self):
+        yield
+        self._logger.info("Safing camera settings")
+        self._cam.settings.save(self._pers.cam_settings_file)
+
     def run(self) -> None:
         if self._cam is None:
             raise RuntimeError("Camera hasn't been initialized")
         self._logger.info("Starting camera")
-        with self._cam:
+        with self._cam, self._camera_settings_saver():
             self._logger.info("Starting event processor")
             while not self.terminate:
                 with util.max_rate(10):
