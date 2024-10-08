@@ -114,7 +114,7 @@ function drawCameraFrame(ctx) {
     if (state.n_matches > 0) {
     ctx.strokeStyle = "red"
     ctx.fillStyle = "red"
-    } else { 
+    } else {
         ctx.strokeStyle = "#f004"
         ctx.fillStyle = "#f004"
     }
