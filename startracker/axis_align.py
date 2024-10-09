@@ -11,7 +11,7 @@ from typing import List, Optional
 import numpy as np
 import numpy.typing as npt
 import scipy.spatial.transform
-from flask import Flask, jsonify, render_template, send_from_directory
+from flask import Flask, jsonify, send_from_directory
 from flask_sock import ConnectionClosed, Server, Sock
 
 from startracker import (
@@ -274,7 +274,7 @@ class WebApp:
         self.app.run()
 
     def _index(self) -> FlaskResponse:
-        return render_template("axisAlign.html")
+        return send_from_directory("../web", "axisAlign.html")
 
     def _serve_file(self, filename: str):
         return send_from_directory("../web", filename)

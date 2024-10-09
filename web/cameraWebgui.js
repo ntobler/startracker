@@ -1,162 +1,98 @@
-let url = 'ws://' + window.location.host + "/api/image"
-var ws = new WebSocket(url);
 
-var img = document.getElementById('image');
+import { api } from './util.js';
+import { ref } from './vue.esm-browser.prod.min.js';
 
-ws.onmessage = function (event) {
-    var blob = new Blob([event.data], { type: 'image/png' });
-    img.src = URL.createObjectURL(blob);
-    img.style.display = "block"
-};
-
-function updateState(state) {
-    console.log(state)
-
-    if (state.intrinsic_calibrator.index > 0) {
-        document.getElementById('put_calibration_image').innerHTML = `Put (${state.intrinsic_calibrator.index})`
-    } else {
-        document.getElementById('put_calibration_image').innerHTML = `Put`
+export default {
+    setup() {
+        return {
+            camera_settings: ref({
+                exposure_ms: 1,
+                analog_gain: 2,
+                digital_gain: 3,
+                binning: 1,
+            }),
+            intrinsic_calibrator: ref({
+                index: 1,
+                pattern_width: 1,
+                pattern_height: 1,
+                pattern_size: 1,
+            }),
+            attitude: ref({
+                quat: [],
+                n_matches: 1,
+                overlay: 1,
+            }),
+            brightness: ref(1),
+            calibrating: false,
+        }
+    },
+    methods: {
+        connectWebSocket() {
+            let url = 'ws://' + window.location.host + "/api/image"
+            var ws = new WebSocket(url);
+            var img = document.getElementById('image');
+            ws.onmessage = function (event) {
+                var blob = new Blob([event.data], { type: 'image/png' });
+                img.src = URL.createObjectURL(blob);
+                img.style.display = "block"
+            };
+        },
+        setSettings() {
+            let payload = {
+                exposure_ms: this.camera_settings.exposure_ms,
+                analog_gain: this.camera_settings.analog_gain,
+                digital_gain: this.camera_settings.digital_gain,
+                binning: this.camera_settings.binning,
+                pattern_width: this.intrinsic_calibrator.pattern_width,
+                pattern_height: this.intrinsic_calibrator.pattern_height,
+                pattern_size: this.intrinsic_calibrator.pattern_size,
+                overlay: this.attitude.overlay,
+            }
+            console.log(payload)
+            api('/api/set_settings', payload, this.updateState);
+        },
+        updateState(data) {
+            this.camera_settings = data.camera_settings
+            this.intrinsic_calibrator = data.intrinsic_calibrator
+            this.attitude = data.attitude
+        },
+        toggleOverlay() {
+            let el = document.getElementById("overlay")
+            this.attitude.overlay = this.attitude.overlay ? false : true
+            el.classList = this.attitude.overlay ? ["active"] : []
+            this.setSettings()
+        },
+        toggleBrightness() {
+            let brightness = {
+                1: 2, 2: 4, 4: 1,
+            }[Number(this.brightness)];
+            console.log(brightness)
+            let img = document.getElementById('image');
+            img.style.filter = `brightness(${brightness})`
+            this.brightness = brightness
+        },
+        capture(mode) {
+            let payload = { mode: mode };
+            api('/api/capture', payload, this.updateState);
+        },
+        putCalibrationImage() {
+            api('/api/put_calibration_image', null, this.updateState);
+        },
+        resetCalibration() {
+            api('/api/reset_calibration', null, this.updateState);
+        },
+        calibrate() {
+            if (this.intrinsic_calibrator.index < 1) return;
+            this.calibrating = true;
+            api(
+                '/api/calibrate', null,
+                data => { this.calibrating = false; },
+                error => { this.calibrating = true; },
+            );
+        },
+    },
+    mounted() {
+        this.connectWebSocket();
+        api('/api/get_state', null, this.updateState);
     }
 }
-
-function setSettings() {
-    let payload = {
-        exposure_ms: document.getElementById('exposure').value,
-        analog_gain: document.getElementById('analog_gain').value,
-        digital_gain: document.getElementById('digital_gain').value,
-        binning: document.getElementById('binning').value,
-        pattern_width: document.getElementById('pattern_w').value,
-        pattern_height: document.getElementById('pattern_h').value,
-        pattern_size: document.getElementById('pattern_s').value,
-        overlay: document.getElementById('overlay').buttonValue == true,
-    }
-    fetch('/api/set_settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }).then(response => response.json()).then((state) => {
-        updateState(state)
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-}
-
-document.getElementById("exposure").onchange = setSettings
-document.getElementById("analog_gain").onchange = setSettings
-document.getElementById("digital_gain").onchange = setSettings
-document.getElementById("binning").onchange = () => {
-    let el = document.getElementById("binning")
-    if (["1", "2", "4", "8"].includes(el.value)) {
-        el.classList.remove("error")
-    } else {
-        el.classList.add("error")
-    }
-    setSettings()
-}
-document.getElementById("pattern_w").onchange = setSettings
-document.getElementById("pattern_h").onchange = setSettings
-document.getElementById("pattern_s").onchange = setSettings
-document.getElementById("overlay").onclick = () => {
-    let el = document.getElementById("overlay")
-    let active = el.buttonValue == true ? false : true
-    el.buttonValue = active
-    el.classList = active ? ["active"] : []
-    setSettings()
-}
-document.getElementById("brightness").onclick = () => {
-    let el = document.getElementById("brightness")
-    let value = {
-        "Brightness 1x": ["Brightness 2x", "brightness(2)"],
-        "Brightness 2x": ["Brightness 4x", "brightness(4)"],
-        "Brightness 4x": ["Brightness 1x", "brightness(1)"],
-    }[el.innerHTML]
-    el.innerHTML = value[0]
-    img.style.filter = value[1]
-}
-
-function capture(mode) {
-    let payload = {
-        mode: mode
-    }
-    fetch('/api/capture', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }).then(response => response.json()).then((state) => {
-        updateState(state)
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-}
-
-document.getElementById('capture_single').onclick = () => {
-    capture("single")
-}
-
-document.getElementById('capture_continuous').onclick = () => {
-    capture("continuous")
-}
-
-document.getElementById('capture_stop').onclick = () => {
-    capture("stop")
-}
-
-document.getElementById('capture_darkframe').onclick = () => {
-    capture("darkframe")
-}
-
-document.getElementById('put_calibration_image').onclick = () => {
-    fetch('/api/put_calibration_image', {
-        method: 'POST',
-    }).then(response => response.json()).then((state) => {
-        updateState(state)
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-}
-
-document.getElementById('reset_calibration').onclick = () => {
-    fetch('/api/reset_calibration', {
-        method: 'POST',
-    }).then(response => response.json()).then((state) => {
-        updateState(state)
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-}
-
-document.getElementById('calibrate').onclick = () => {
-
-    let interval = setInterval(function () {
-        let el = document.getElementById('calibrate')
-        el.innerHTML += "."
-    }, 1000)
-
-    fetch('/api/calibrate', {
-        method: 'POST',
-    }).then(response => response.json()).then((state) => {
-        document.getElementById('calibrate').innerHTML = "Calibrate"
-        clearInterval(interval)
-        updateState(state)
-    }).catch(error => {
-        document.getElementById('calibrate').innerHTML = "Calibrate"
-        clearInterval(interval)
-        console.error('Error:', error);
-    });
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-    fetch('/api/get_state', {
-        method: 'POST',
-    }).then(response => response.json()).then((state) => {
-        document.getElementById("exposure").value = state.camera_settings.exposure_ms
-        document.getElementById("analog_gain").value = state.camera_settings.analog_gain
-        document.getElementById("digital_gain").value = state.camera_settings.digital_gain
-        document.getElementById("binning").value = state.camera_settings.binning
-        document.getElementById("pattern_w").value = state.intrinsic_calibrator.pattern_width
-        document.getElementById("pattern_h").value = state.intrinsic_calibrator.pattern_height
-        document.getElementById("pattern_s").value = state.intrinsic_calibrator.pattern_size
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-})

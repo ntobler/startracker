@@ -1,75 +1,119 @@
 
-import ZoomHandler from './zoomHandler.js';
+import { ZoomHandler, api } from './util.js';
+import { ref } from './vue.esm-browser.prod.min.js';
 
-var state = null
-var ui_zoom = 0.8
+export default {
+    setup() {
+        return {
+            state: null,
+            display: ref({
+                n_matches: "??",
+                alignment_error: "??",
+                processing_time: "??",
+                packet_size: "??",
+            }),
+            ui_zoom: 0.8,
+            calibrating: false,
+            calibration_orientations: 0,
+        }
+    },
+    methods: {
+        onmessage(response) {
+            let state = JSON.parse(response.data)
+            this.state = state
+            this.display = {
+                n_matches: state.n_matches,
+                alignment_error: state.alignment_error.toFixed(3),
+                processing_time: state.processing_time,
+                packet_size: parseSize(response.data.length),
+            }
+            this.redraw()
+        },
+        connectWebSocket() {
+            let url = 'ws://' + window.location.host + "/api/state";
+            let ws = new WebSocket(url);
+            ws.onmessage = this.onmessage.bind(this);
+
+        },
+        resize() {
+            let canvas = document.getElementById('canvas')
+            canvas.width = document.body.clientWidth * window.devicePixelRatio
+            canvas.height = document.body.clientHeight * window.devicePixelRatio
+            this.redraw()
+        },
+
+        redraw() {
+            const scale = 50
+
+            let state = this.state
+            let ui_zoom = this.ui_zoom
+
+            let canvas = document.getElementById('canvas')
+
+            if (state === null) return
+
+            let ctx = canvas.getContext("2d")
+
+            ctx.save()
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.lineWidth = 1
+            ctx.fillStyle = "white";
+            ctx.strokeStyle = "white";
+
+            let s = Math.min(canvas.height, canvas.width) / scale
+            ctx.translate(canvas.width / 2, canvas.height / 2)
+
+            ctx.lineWidth = 4
+            drawCross(ctx, canvas.width / 2, canvas.height / 2)
+
+            ctx.scale(s, s)
+            ctx.lineWidth = 10 / scale
+            ctx.font = "1px Consolas";
+            drawRings(ctx, ui_zoom)
+            drawCameraFrame(ctx, state, ui_zoom)
+
+            ctx.lineWidth = 2 / scale
+            drawStars(ctx, state, ui_zoom)
+
+            ctx.restore()
+        },
+        addToCalibration() {
+            api('/api/add_to_calibration', null, data => {
+                this.calibration_orientations = data.calibration_orientations
+            });
+        },
+        resetCalibration() {
+            api('/api/reset_calibration', null, data => {
+                this.calibration_orientations = data.calibration_orientations
+            });
+        },
+        calibrate() {
+            if (this.calibration_orientations < 1) return;
+            this.calibrating = true;
+            api(
+                '/api/calibrate', null,
+                data => { this.calibrating = false; },
+                error => { this.calibrating = true; },
+            );
+        },
+
+    },
+    mounted() {
+        this.connectWebSocket();
+
+        window.onresize = this.resize
+        this.resize()
+
+        const zoomHandler = new ZoomHandler(0.25, 5, (zoom) => {
+            this.ui_zoom = zoom
+            this.redraw()
+        });
+        zoomHandler.attachEventListeners(document.getElementById('canvas'))
+    }
+}
+
 const R_MARGIN = 0.5
-
-
-function resize() {
-    let canvas = document.getElementById('canvas')
-    canvas.width = document.body.clientWidth * window.devicePixelRatio
-    canvas.height = document.body.clientHeight * window.devicePixelRatio
-    redraw()
-}
-
-
-const zoomHandler = new ZoomHandler(0.25, 5, (zoom) => {
-    ui_zoom = zoom
-    redraw()
-});
-
-window.addEventListener('DOMContentLoaded', () => {
-    window.onresize = resize
-    resize()
-    zoomHandler.attachEventListeners(document.getElementById('canvas'))
-})
-
-function redraw() {
-
-    const scale = 50
-
-    ui_zoom = zoomHandler.zoomLevel
-
-    let canvas = document.getElementById('canvas')
-
-    if (state === null) return
-
-    let ctx = canvas.getContext("2d")
-
-
-    ctx.save()
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.lineWidth = 1
-    ctx.fillStyle = "white";
-    ctx.strokeStyle = "white";
-
-    let s = Math.min(canvas.height, canvas.width) / scale
-    ctx.translate(canvas.width / 2, canvas.height / 2)
-
-
-    ctx.lineWidth = 4
-
-
-    drawCross(ctx, canvas.width / 2, canvas.height / 2)
-
-    ctx.scale(s, s)
-
-
-    ctx.lineWidth = 10 / scale
-    ctx.font = "1px Consolas";
-
-    drawRings(ctx)
-
-    drawCameraFrame(ctx)
-
-    ctx.lineWidth = 2 / scale
-
-    drawStars(ctx)
-
-    ctx.restore()
-}
 
 function drawCross(ctx, w, h) {
     ctx.save()
@@ -84,7 +128,7 @@ function drawCross(ctx, w, h) {
     ctx.restore()
 }
 
-function drawRings(ctx) {
+function drawRings(ctx, ui_zoom) {
     const ANGLE = Math.PI / 180 * -30
     const C = Math.cos(ANGLE)
     const S = Math.sin(ANGLE)
@@ -108,12 +152,12 @@ function drawRings(ctx) {
     ctx.restore()
 }
 
-function drawCameraFrame(ctx) {
+function drawCameraFrame(ctx, state, ui_zoom) {
 
     ctx.save()
     if (state.n_matches > 0) {
-    ctx.strokeStyle = "red"
-    ctx.fillStyle = "red"
+        ctx.strokeStyle = "red"
+        ctx.fillStyle = "red"
     } else {
         ctx.strokeStyle = "#f004"
         ctx.fillStyle = "#f004"
@@ -133,7 +177,7 @@ function drawCameraFrame(ctx) {
     ctx.restore()
 }
 
-function drawStars(ctx) {
+function drawStars(ctx, state, ui_zoom) {
 
     if (state.cat_xyz === undefined) return
 
@@ -195,7 +239,6 @@ function drawStars(ctx) {
     ctx.restore()
 }
 
-
 function parseSize(size) {
     let unit
     for (unit of ["B", "kB", "MB", "GB"]) {
@@ -203,55 +246,4 @@ function parseSize(size) {
         if (size < 100) return size.toFixed(0) + unit
         size /= 1024
     }
-}
-
-let url = 'ws://' + window.location.host + "/api/state"
-var ws = new WebSocket(url);
-ws.onmessage = response => {
-    state = JSON.parse(response.data)
-    redraw()
-    document.getElementById("trackedStars").innerHTML = `Tracked stars: ${state.n_matches}`
-    document.getElementById("alignmentError").innerHTML = `Alignment error: ${state.alignment_error.toFixed(3)}°`
-    document.getElementById("processingTime").innerHTML = `Processing time: ${state.processing_time}ms`
-    document.getElementById("packetSize").innerHTML = `Packet size: ${parseSize(response.data.length)}`
-}
-
-document.getElementById('add_to_calibration').onclick = () => {
-    fetch('/api/add_to_calibration', {
-        method: 'POST',
-    }).then(response => response.json()).then((data) => {
-        console.log(data)
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-}
-
-document.getElementById('reset_calibration').onclick = () => {
-    fetch('/api/reset_calibration', {
-        method: 'POST',
-    }).then(response => response.json()).then((data) => {
-        console.log(data)
-    }).catch(error => {
-        console.error('Error:', error);
-    });
-}
-
-document.getElementById('calibrate').onclick = () => {
-
-    let interval = setInterval(function () {
-        let el = document.getElementById('calibrate')
-        el.innerHTML += "."
-    }, 1000)
-
-    fetch('/api/calibrate', {
-        method: 'POST',
-    }).then(response => response.json()).then((data) => {
-        document.getElementById('calibrate').innerHTML = "Calibrate"
-        clearInterval(interval)
-        console.log(data)
-    }).catch(error => {
-        document.getElementById('calibrate').innerHTML = "Calibrate"
-        clearInterval(interval)
-        console.error('Error:', error);
-    });
 }

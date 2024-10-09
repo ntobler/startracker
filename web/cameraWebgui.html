@@ -16,6 +16,7 @@
             object-fit: contain;
             image-rendering: pixelated;
         }
+
         #camera-overlay {
             position: absolute;
             top: 50%;
@@ -28,57 +29,73 @@
             padding: 10px;
             text-align: center;
             border-radius: 5px;
-            background: repeating-linear-gradient(
-                -45deg,
-                transparent,
-                transparent 0.1em,
-                #f004 0.1em,
-                #f004 0.2em
-            );
+            background: repeating-linear-gradient(-45deg,
+                    transparent,
+                    transparent 0.1em,
+                    #f004 0.1em,
+                    #f004 0.2em);
             user-select: none;
         }
     </style>
-    <script src="cameraWebgui.js" type="module"></script>
 </head>
 
 <body>
-    <div id="camera-overlay">No image captured</div>
-    <img id="image" src="" alt="Image">
-    <div id="footerBar">
-        <div>Exposure <input type="number" step="1" value="10" id="exposure" name="exposure" style="width: 4em" /> ms</div>
-        <div>Gain <input type="number" value="1" id="analog_gain" name="analog_gain" /></div>
-        <div>Digital gain <input type="number" value="1" id="digital_gain" name="digital_gain" /></div>
-        <div>Binning <input type="number" value="2" id="binning" name="binning" /></div>
-        <div>
-            Capture
-            <button type="button" id="capture_single">Single</button>
-            <button type="button" id="capture_continuous">Continuous</button>
-            <button type="button" id="capture_stop">Stop</button>
-            <button type="button" id="capture_darkframe">Darkframe</button>
-        </div>
-        <div>
-            Pattern
-            <input type="number" value="13" id="pattern_w" name="binning"  size="0" />
-            x
-            <input type="number" value="9" id="pattern_h" name="binning"  size="1" />
-            @
-            <input type="number" value="40" id="pattern_s" name="binning"  size="1" />
-            mm
-            <button type="button" onclick="window.open('api/calibration_pattern', '_blank'); return false;">Open</button>
-        </div>
-        <div>
-            Calibration
-            <button type="button" id="put_calibration_image">Put</button>
-            <button type="button" id="reset_calibration">Reset</button>
-            <button type="button" id="calibrate">Calibrate</button>
-            <button type="button" onclick="window.open('api/calibration_result', '_blank'); return false;">Result</button>
-        </div>
-        <div>
-            Display
-            <button type="button" id="brightness">Brightness 1x</button>
-            <button type="button" id="overlay">Attitude</button>
+    <div id="app">
+        <div id="camera-overlay">No image captured</div>
+        <img id="image" src="" alt="Image">
+        <div id="footerBar">
+            <div>Exposure <input type="number" step="1" v-model.number="camera_settings.exposure_ms"
+                    @change="setSettings" style="width: 4em" /> ms</div>
+            <div>Gain <input type="number" v-model.number="camera_settings.analog_gain" @change="setSettings" /></div>
+            <div>Digital gain <input type="number" v-model.number="camera_settings.digital_gain"
+                    @change="setSettings" /></div>
+            <div>Binning
+                <select name="cars" v-model.number="camera_settings.binning" @change="setSettings">
+                    <option>1</option>
+                    <option>2</option>
+                    <option>4</option>
+                    <option>8</option>
+                </select>
+            </div>
+            <div>
+                Capture
+                <button type="button" @click="capture('single')">Single</button>
+                <button type="button" @click="capture('continuous')">Continuous</button>
+                <button type="button" @click="capture('stop')">Stop</button>
+                <button type="button" @click="capture('darkframe')">Darkframe</button>
+            </div>
+            <div>
+                Pattern
+                <input type="number" value="13" v-model.number="intrinsic_calibrator.pattern_width"
+                    @change="setSettings" size="0" /> x
+                <input type="number" value="9" v-model.number="intrinsic_calibrator.pattern_height"
+                    @change="setSettings" size="1" /> @
+                <input type="number" value="40" v-model.number="intrinsic_calibrator.pattern_size" @change="setSettings"
+                    size="1" /> mm
+                <button type="button"
+                    onclick="window.open('api/calibration_pattern', '_blank'); return false;">Open</button>
+            </div>
+            <div>
+                Calibration
+                <button type="button" @click="putCalibrationImage">Put {{ intrinsic_calibrator.index > 0 ?
+                    intrinsic_calibrator.index : ""}}</button>
+                <button type="button" @click="resetCalibration">Reset</button>
+                <button type="button" @click="calibrate">Calibrate</button>
+                <button type="button"
+                    onclick="window.open('api/calibration_result', '_blank'); return false;">Result</button>
+            </div>
+            <div>
+                Display
+                <button type="button" @click="toggleBrightness()">Brightness {{ brightness }}x</button>
+                <button type="button" @click="toggleOverlay()" id="overlay">Attitude</button>
+            </div>
         </div>
     </div>
+    <script type="module">
+        import { createApp } from './vue.esm-browser.prod.min.js'
+        import CameraWebgui from './cameraWebgui.js'
+        createApp(CameraWebgui).mount('#app')
+    </script>
 </body>
 
 </html>

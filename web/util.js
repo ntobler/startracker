@@ -1,4 +1,4 @@
-class ZoomHandler {
+export class ZoomHandler {
     constructor(minZoom, maxZoom, callback) {
         this.zoomLevel = 1;
         this.minZoom = minZoom;
@@ -47,4 +47,18 @@ class ZoomHandler {
     }
 }
 
-export default ZoomHandler;
+
+export function api(url, payload=null, onSuccess=null, onFailure=null) {
+    let context = { method: 'POST' }
+    if (payload !== null) {
+        context.headers = { 'Content-Type': 'application/json' }
+        context.body = JSON.stringify(payload)
+    }
+    fetch(url, context ).then(response => response.json()).then((data) => {
+        if (onSuccess !== null) onSuccess(data);
+        console.log(data)
+    }).catch(error => {
+        if (onFailure !== null) onFailure(error);
+        console.error('Error:', error);
+    });
+}

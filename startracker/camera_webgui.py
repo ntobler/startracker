@@ -13,14 +13,7 @@ from typing import Any, BinaryIO, List, Optional
 import cv2
 import numpy as np
 import scipy.spatial
-from flask import (
-    Flask,
-    Response,
-    jsonify,
-    render_template,
-    request,
-    send_from_directory,
-)
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_sock import ConnectionClosed, Server, Sock
 
 from startracker import attitude_estimation, camera, image_utils, kalkam, persistent, util, webutil
@@ -342,7 +335,7 @@ class WebApp:
         self.app.run()
 
     def _index(self) -> FlaskResponse:
-        return render_template("cameraWebgui.html")
+        return send_from_directory("../web", "cameraWebgui.html")
 
     def _serve_file(self, filename: str) -> FlaskResponse:
         return send_from_directory("../web", filename)

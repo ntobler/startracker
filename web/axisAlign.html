@@ -1,11 +1,8 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>Starraker</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="zoomHandler.js" type="module"></script>
-    <script src="axisAlign.js" type="module"></script>
     <link rel="stylesheet" type="text/css" href="style.css">
     <style>
         #canvas {
@@ -19,21 +16,26 @@
         }
     </style>
 </head>
-
 <body>
-    <canvas id="canvas" width="100" height="100"></canvas>
-    <div id="footerBar">
-        <div id="trackedStars">Tracked stars: ?</div>
-        <div id="alignmentError">Alignment error: ?</div>
-        <div id="processingTime">Processing time: ?</div>
-        <div id="packetSize">Packet size: ?</div>
-        <div>
-            Calibration:
-            <button type="button" id="add_to_calibration">Add</button>
-            <button type="button" id="reset_calibration">Clear</button>
-            <button type="button" id="calibrate">Calibrate</button>
+    <div id="app">
+        <canvas id="canvas" width="100" height="100"></canvas>
+        <div id="footerBar">
+            <div id="trackedStars">Tracked stars: {{display.n_matches}}</div>
+            <div id="alignmentError">Alignment error: {{display.alignment_error}}°</div>
+            <div id="processingTime">Processing time: {{display.processing_time}}</div>
+            <div id="packetSize">Packet size: {{display.packet_size}}</div>
+            <div>
+                Calibration:
+                <button type="button" @click="addToCalibration">Add {{calibration_orientations > 0? `(${calibration_orientations})` : "" }}</button>
+                <button type="button" @click="resetCalibration" v-if="calibration_orientations > 0">Clear</button>
+                <button type="button" @click="calibrate" v-if="calibration_orientations > 0">Calibrate{{calibrating? ' \u25CF' : "" }}</button>
+            </div>
         </div>
     </div>
+    <script type="module">
+        import { createApp } from './vue.esm-browser.prod.min.js'
+        import AxisAlign from './axisAlign.js'
+        createApp(AxisAlign).mount('#app')
+    </script>
 </body>
-
 </html>

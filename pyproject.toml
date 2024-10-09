@@ -42,6 +42,9 @@ startracker-camera-recorder = "startracker.camera_recorder:main"
 startracker-camera-calibration = "startracker.camera_webgui:main"
 startracker-aligned = "startracker.axis_align:main"
 
+[tool.poetry.build]
+script = "build_project.py"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
