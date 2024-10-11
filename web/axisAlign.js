@@ -15,6 +15,7 @@ export default {
             ui_zoom: 0.8,
             calibrating: false,
             calibration_orientations: 0,
+            history: [],
         }
     },
     methods: {
@@ -27,13 +28,17 @@ export default {
                 processing_time: state.processing_time,
                 packet_size: parseSize(response.data.length),
             }
+            this.history.push({
+                n_matches: state.n_matches,
+                processing_time: state.processing_time,
+            })
+            if (this.history.length > 20) this.history.shift();
             this.redraw()
         },
         connectWebSocket() {
             let url = 'ws://' + window.location.host + "/api/state";
             let ws = new WebSocket(url);
             ws.onmessage = this.onmessage.bind(this);
-
         },
         resize() {
             let canvas = document.getElementById('canvas')
@@ -54,9 +59,9 @@ export default {
 
             let ctx = canvas.getContext("2d")
 
-            ctx.save()
             ctx.setTransform(1, 0, 0, 1, 0, 0)
             ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.save()
             ctx.lineWidth = 1
             ctx.fillStyle = "white";
             ctx.strokeStyle = "white";
@@ -77,6 +82,9 @@ export default {
             drawStars(ctx, state, ui_zoom)
 
             ctx.restore()
+
+            drawPlot(ctx, this.history)
+
         },
         addToCalibration() {
             api('/api/add_to_calibration', null, data => {
@@ -237,6 +245,7 @@ function drawStars(ctx, state, ui_zoom) {
     }
 
     ctx.restore()
+    ctx.restore()
 }
 
 function parseSize(size) {
@@ -246,4 +255,58 @@ function parseSize(size) {
         if (size < 100) return size.toFixed(0) + unit
         size /= 1024
     }
+}
+
+function drawPlot(ctx, history) {
+
+    let width = 300
+    let height = 200
+
+    ctx.strokeStyle = "red"
+    ctx.fillStyle = "red"
+
+    ctx.save()
+
+    ctx.translate(20, 20)
+
+    ctx.lineWidth = 3
+
+    ctx.save()
+    ctx.beginPath();
+    ctx.rect(0, 0, width, height);
+    ctx.clip();
+    for (let [label, color, lw] of [["n_matches", "red", 3]]) {
+
+        if (history.length < 1) break;
+
+        ctx.save()
+        ctx.lineWidth = lw
+        ctx.strokeStyle = color
+        ctx.fillStyle = color
+        ctx.globalAlpha = 0.4;
+        ctx.save()
+
+        ctx.translate(0, height)
+        ctx.scale(width / (history.length - 1), -height / 40)
+        ctx.beginPath();
+        for (let i = 0; i < history.length; i++) {
+            ctx.lineTo(i, history[i][label])
+        }
+        ctx.lineTo(history.length - 1, 0)
+        ctx.lineTo(0, 0)
+        ctx.restore()
+        ctx.fill()
+        ctx.globalAlpha = 1;
+        ctx.stroke()
+        ctx.restore()
+    }
+    ctx.restore()
+
+    ctx.lineWidth = 4
+    ctx.strokeStyle = "red"
+    ctx.beginPath();
+    ctx.rect(0, 0, width, height);
+    ctx.stroke()
+
+    ctx.restore()
 }
