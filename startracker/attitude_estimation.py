@@ -76,21 +76,24 @@ class AttitudeEstimator:
 
         self.cal = cal
 
-        self.config = config
+        self._config = config
 
         catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
         self.cat_xyz = catalog.normalized_positions(epoch=2024.7)
         self.cat_mag = catalog.magnitude
 
+        self._initialize_backend()
+
+    def _initialize_backend(self) -> None:
         camera_params = ruststartracker.CameraParameters(
-            camera_matrix=cal.intrinsic,
-            cam_resolution=cal.image_size,
-            dist_coefs=cal.dist_coeffs,
+            camera_matrix=self.cal.intrinsic,
+            cam_resolution=self.cal.image_size,
+            dist_coefs=self.cal.dist_coeffs,
         )
 
         # Approximate angle tolerance from pixel tolerance
         fx = float(self.cal.intrinsic[0, 0])
-        isa_angle_tol = math.atan(config.star_match_pixel_tol / fx)
+        isa_angle_tol = math.atan(self._config.star_match_pixel_tol / fx)
 
         self._backend = ruststartracker.StarTracker(
             self.cat_xyz,
@@ -106,7 +109,18 @@ class AttitudeEstimator:
 
     @config.setter
     def config(self, config: AttitudeEstimatorConfig):
-        self._config = config
+        config_requireds_reinitialization = [
+            "n_match",
+            "timeout_secs",
+            "star_match_pixel_tol",
+        ]
+        old_config_dict = self._config.to_dict()
+        new_config_dict = config.to_dict()
+        if any(old_config_dict[k] != new_config_dict[k] for k in config_requireds_reinitialization):
+            self._config = config
+            self._initialize_backend()
+        else:
+            self._config = config
 
     def image_xyz_to_xy(self, image_xyz: np.ndarray) -> np.ndarray:
         image_xy = (self.cal.intrinsic @ image_xyz.T).T

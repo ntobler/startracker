@@ -19,6 +19,9 @@ export default {
             }),
             attitude: ref({
                 overlay: 1,
+                min_matches: 12,
+                pixel_tolerance: 3.0,
+                timeout_secs: 3.0,
             }),
             stream: ref({
                 quat: [],
@@ -61,6 +64,9 @@ export default {
                 pattern_height: this.intrinsic_calibrator.pattern_height,
                 pattern_size: this.intrinsic_calibrator.pattern_size,
                 overlay: this.attitude.overlay,
+                min_matches: this.attitude.min_matches,
+                pixel_tolerance: this.attitude.pixel_tolerance,
+                timeout_secs: this.attitude.timeout_secs,
             }
             console.log(payload)
             api('/api/set_settings', payload, this.updateState);

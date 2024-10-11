@@ -157,6 +157,17 @@ class App(webutil.QueueAbstractionClass):
         else:
             camera_settings = {}
 
+        attitude = (
+            {
+                "overlay": self._attitude_overlay,
+                "min_matches": self._attitude_est.config.n_match,
+                "pixel_tolerance": self._attitude_est.config.star_match_pixel_tol,
+                "timeout_secs": self._attitude_est.config.timeout_secs,
+            }
+            if self._attitude_est is not None
+            else {}
+        )
+
         state = {
             "intrinsic_calibrator": {
                 "index": self._intrinsic_calibrator.index,
@@ -164,9 +175,7 @@ class App(webutil.QueueAbstractionClass):
                 "pattern_height": self._intrinsic_calibrator.pattern.height,
                 "pattern_size": self._intrinsic_calibrator.pattern.square_size,
             },
-            "attitude": {
-                "overlay": self._attitude_overlay,
-            },
+            "attitude": attitude,
             "camera_settings": camera_settings,
         }
         return state
@@ -176,32 +185,32 @@ class App(webutil.QueueAbstractionClass):
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def set_settings(
-        self,
-        exposure_ms: float,
-        analog_gain: int,
-        digital_gain: int,
-        binning: int,
-        pattern_width: int,
-        pattern_height: int,
-        pattern_size: float,
-        *,
-        attitude_overlay: bool = False,
-    ) -> dict:
+    def set_settings(self, params: dict[str, float | int | bool]) -> dict:
         if self._cam is None:
             raise ValueError("Camera is not initialized")
 
         settings = self._cam.settings
-        settings.exposure_ms = exposure_ms
-        settings.analog_gain = analog_gain
-        settings.digital_gain = digital_gain
-        settings.binning = binning
+        settings.exposure_ms = float(params["exposure_ms"])
+        settings.analog_gain = int(params["analog_gain"])
+        settings.digital_gain = int(params["digital_gain"])
+        settings.binning = int(params["binning"])
         self._logger.info(f"Setting camera settings {settings}")
         self._cam.settings = settings
 
-        self._intrinsic_calibrator.set_pattern(pattern_width, pattern_height, pattern_size)
+        self._intrinsic_calibrator.set_pattern(
+            int(params["pattern_width"]),
+            int(params["pattern_height"]),
+            float(params["pattern_size"]),
+        )
 
-        self._attitude_overlay = attitude_overlay
+        self._attitude_overlay = bool(params["overlay"])
+
+        if self._attitude_est is not None:
+            config = self._attitude_est.config
+            config.star_match_pixel_tol = float(params["pixel_tolerance"])
+            config.n_match = int(params["min_matches"])
+            config.timeout_secs = float(params["timeout_secs"])
+            self._attitude_est.config = config
 
         return self._get_state()
 
@@ -392,16 +401,7 @@ class WebApp:
         if self.app is None:
             return "Server error", 500
         params = request.get_json()
-        d = self.app.set_settings(
-            float(params["exposure_ms"]),
-            int(params["analog_gain"]),
-            int(params["digital_gain"]),
-            int(params["binning"]),
-            int(params["pattern_width"]),
-            int(params["pattern_height"]),
-            float(params["pattern_size"]),
-            attitude_overlay=bool(params["overlay"]),
-        )
+        d = self.app.set_settings(params)
         return jsonify(d)
 
     def _capture(self) -> FlaskResponse:
