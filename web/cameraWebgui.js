@@ -23,7 +23,8 @@ export default {
             stream: ref({
                 quat: [],
                 obs_pix: [],
-                n_matches: 1,
+                n_matches: 0,
+                processing_time: 0,
                 image_size: [960, 540],
             }),
             brightness: ref(1),

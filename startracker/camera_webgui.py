@@ -263,7 +263,8 @@ class App(webutil.QueueAbstractionClass):
         if self._ae is None:
             return image
 
-        attitude_result = self._ae(image)
+        with util.TimeMeasurer() as tm:
+            attitude_result = self._ae(image)
 
         xy = self._ae.image_xyz_to_xy(attitude_result.image_xyz)
         image_size = (image.shape[1], image.shape[0])
@@ -273,6 +274,7 @@ class App(webutil.QueueAbstractionClass):
                 "n_matches": attitude_result.n_matches,
                 "obs_pix": xy.tolist(),
                 "image_size": image_size,
+                "processing_time": int(tm.t * 1000),
             }
         )
 

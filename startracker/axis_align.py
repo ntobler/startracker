@@ -28,7 +28,7 @@ from startracker.webutil import FlaskResponse
 
 def project_radial(xyz: np.ndarray) -> np.ndarray:
     """Return radial projection around +z of xyz vector."""
-    xyz = xyz / np.linalg.norm(xyz, axis=1, keepdims=True)
+    xyz = xyz / (np.linalg.norm(xyz, axis=1, keepdims=True) + 1e-12)
     x, y, z = np.moveaxis(xyz, -1, 0)
     r = np.linalg.norm(xyz[..., :2], axis=-1)
     s = np.arctan2(r, z)

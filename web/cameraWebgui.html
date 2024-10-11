@@ -101,6 +101,7 @@
                 <button type="button" @click="toggleBrightness()">Brightness {{ brightness }}x</button>
                 <button type="button" @click="toggleOverlay()" id="overlay">Attitude</button>
             </div>
+            <div>Stars: Tracked: {{stream.n_matches}} Processing time: {{stream.processing_time}}ms</div>
         </div>
     </div>
     <script type="module">
