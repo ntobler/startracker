@@ -3,17 +3,17 @@
 import abc
 import dataclasses
 import logging
-import pathlib
-import pickle
 from typing import Union
 
 import numpy as np
 import numpy.typing as npt
-from typing_extensions import Self, override
+from typing_extensions import override
+
+from startracker import util
 
 
 @dataclasses.dataclass
-class CameraSettings:
+class CameraSettings(util.PickleDataclass):
     exposure_ms: float = 100
     """Exposure value in miliseconds."""
     digital_gain: int = 1
@@ -40,25 +40,6 @@ class CameraSettings:
             raise ValueError("binning must be 1, 2 or 4")
         if self.stack * self.digital_gain > 16:
             raise ValueError("stack and binning gain must be below 16 due to overflow reasons")
-
-    def to_dict(self) -> dict:
-        """Return dictionary of the object."""
-        return dataclasses.asdict(self)
-
-    @classmethod
-    def from_dict(cls, dictionary: dict) -> Self:
-        """Create object from a dictionary."""
-        return cls(**dictionary)
-
-    def save(self, filename: pathlib.Path) -> None:
-        with filename.open("wb") as f:
-            pickle.dump(self.to_dict(), f)
-
-    @classmethod
-    def load(cls, filename: pathlib.Path) -> Self:
-        with filename.open("rb") as f:
-            obj = cls.from_dict(pickle.load(f))
-        return obj
 
 
 class Camera(abc.ABC):

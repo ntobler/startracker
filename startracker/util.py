@@ -1,7 +1,36 @@
 """General utility functions."""
 
 import contextlib
+import dataclasses
+import pathlib
+import pickle
 import time
+
+from typing_extensions import Self
+
+
+@dataclasses.dataclass
+class PickleDataclass:
+    """Baseclass for picklable dataclasses."""
+
+    def to_dict(self) -> dict:
+        """Return dictionary of the object."""
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, dictionary: dict) -> Self:
+        """Create object from a dictionary."""
+        return cls(**dictionary)
+
+    def save(self, filename: pathlib.Path) -> None:
+        with filename.open("wb") as f:
+            pickle.dump(self.to_dict(), f)
+
+    @classmethod
+    def load(cls, filename: pathlib.Path) -> Self:
+        with filename.open("rb") as f:
+            obj = cls.from_dict(pickle.load(f))
+        return obj
 
 
 @contextlib.contextmanager
