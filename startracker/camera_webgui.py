@@ -345,7 +345,7 @@ class WebApp:
         try:
             app_thread.start()
             self._app_loaded_event.wait()
-            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False, processes=1)
+            self.flask_app.run(debug=False, host="0.0.0.0", use_reloader=False, processes=1)
         finally:
             logging.info("Terminated. Clean up app..")
             if self.app is not None:

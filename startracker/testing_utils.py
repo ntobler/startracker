@@ -70,7 +70,7 @@ class StarImageGenerator:
         else:
             self.distorter = None
 
-        catalog = ruststartracker.StarCatalog(max_magnitude=8)
+        catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
         self.stars_nwu = catalog.normalized_positions()
         self.stars_mags = catalog.magnitude
 

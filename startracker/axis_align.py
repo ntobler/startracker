@@ -167,6 +167,7 @@ class App(webutil.QueueAbstractionClass):
             self._calibration_rots.append(self._last_attitude_res.quat)
         return {"calibration_orientations": len(self._calibration_rots)}
 
+    @webutil.QueueAbstractionClass.queue_abstract
     def reset_calibration(self):
         self._calibration_rots.clear()
         return {"calibration_orientations": len(self._calibration_rots)}
@@ -316,7 +317,7 @@ class WebApp:
         try:
             self._app_thread.start()
             self._app_loaded_event.wait()
-            self.flask_app.run(debug=True, host="0.0.0.0", use_reloader=False, processes=1)
+            self.flask_app.run(debug=False, host="0.0.0.0", use_reloader=False, processes=1)
         finally:
             logging.info("Terminated. Clean up app..")
             if self.app is not None:
