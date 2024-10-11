@@ -13,7 +13,7 @@ import ruststartracker
 import scipy.spatial.transform
 from typing_extensions import Self
 
-from startracker import camera, kalkam, persistent
+from startracker import camera, kalkam, persistent, util
 
 
 @dataclasses.dataclass(frozen=True)
@@ -43,7 +43,7 @@ ERROR_ATTITUDE_RESULT = AttitudeEstimationResult(
 
 
 @dataclasses.dataclass
-class AttitudeEstimatorConfig:
+class AttitudeEstimatorConfig(util.PickleDataclass):
     min_star_area: int = 3
     """Minimum area in pixels for a star to be detected."""
     max_star_area: int = 100

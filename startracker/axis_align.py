@@ -88,11 +88,26 @@ class App(webutil.QueueAbstractionClass):
         self._calibration_rots: List[npt.NDArray[np.floating]] = []
         self._camera_frame = []
 
+    def _initialize_attitude_estimator(self) -> None:
+        if self._cal is None:
+            self._attitude_est = None
+            return
+        if self._pers.attitude_estimation_config_file.exists():
+            config = attitude_estimation.AttitudeEstimatorConfig.load(
+                self._pers.attitude_estimation_config_file
+            )
+        else:
+            config = attitude_estimation.AttitudeEstimatorConfig()
+        self._attitude_est = attitude_estimation.AttitudeEstimator(self._cal, config=config)
+
     def _get_stars(self):
         image = self._cam.capture()
 
         with util.TimeMeasurer() as tm:
-            att_res = self._attitude_est(image)
+            if self._attitude_est is not None:
+                att_res = self._attitude_est(image)
+            else:
+                att_res = attitude_estimation.ERROR_ATTITUDE_RESULT
 
             self._last_attitude_res = att_res
             if self._last_attitude_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:

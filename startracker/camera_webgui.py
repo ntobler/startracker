@@ -128,18 +128,23 @@ class App(webutil.QueueAbstractionClass):
         self._camera_job = "stop"
 
         self._attitude_overlay = False
-        self._ae = None
+        self._attitude_est = None
 
         self._initialize_attitude_estimator()
 
     def _initialize_attitude_estimator(self) -> None:
         if self._intrinsic_calibrator.cal is None:
-            self._ae = None
+            self._attitude_est = None
             return
-        try:
-            self._ae = attitude_estimation.AttitudeEstimator(self._intrinsic_calibrator.cal)
-        except FileNotFoundError:
-            self._ae = None
+        if self._pers.attitude_estimation_config_file.exists():
+            config = attitude_estimation.AttitudeEstimatorConfig.load(
+                self._pers.attitude_estimation_config_file
+            )
+        else:
+            config = attitude_estimation.AttitudeEstimatorConfig()
+        self._attitude_est = attitude_estimation.AttitudeEstimator(
+            self._intrinsic_calibrator.cal, config=config
+        )
 
     def _get_state(self) -> dict[str, Any]:
         if self._cam is not None:
@@ -243,16 +248,18 @@ class App(webutil.QueueAbstractionClass):
         return png
 
     @contextlib.contextmanager
-    def _camera_settings_saver(self):
+    def _settings_saver(self):
         yield
         self._logger.info("Safing camera settings")
         self._cam.settings.save(self._pers.cam_settings_file)
+        if self._attitude_est is not None:
+            self._attitude_est.config.save(self._pers.attitude_estimation_config_file)
 
     def run(self) -> None:
         if self._cam is None:
             raise RuntimeError("Camera hasn't been initialized")
         self._logger.info("Starting camera")
-        with self._cam, self._camera_settings_saver():
+        with self._cam, self._settings_saver():
             self._logger.info("Starting event processor")
             while not self.terminate:
                 with util.max_rate(10):
@@ -260,13 +267,13 @@ class App(webutil.QueueAbstractionClass):
         self._logger.info("Terminating event processor")
 
     def _get_attitude(self, image: np.ndarray) -> np.ndarray:
-        if self._ae is None:
+        if self._attitude_est is None:
             return image
 
         with util.TimeMeasurer() as tm:
-            attitude_result = self._ae(image)
+            attitude_result = self._attitude_est(image)
 
-        xy = self._ae.image_xyz_to_xy(attitude_result.image_xyz)
+        xy = self._attitude_est.image_xyz_to_xy(attitude_result.image_xyz)
         image_size = (image.shape[1], image.shape[0])
         self.stream.put(
             {
