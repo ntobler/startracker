@@ -54,10 +54,15 @@
             <div>Exposure <input type="number" step="1" v-model.number="camera_settings.exposure_ms"
                     @change="setSettings" style="width: 4em" /> ms</div>
             <div>Gain <input type="number" v-model.number="camera_settings.analog_gain" @change="setSettings" /></div>
-            <div>Digital gain <input type="number" v-model.number="camera_settings.digital_gain"
-                    @change="setSettings" /></div>
+            <div>Digital gain
+                <select v-model.number="camera_settings.digital_gain" @change="setSettings">
+                    <option>1</option>
+                    <option>2</option>
+                    <option>4</option>
+                </select>
+            </div>
             <div>Binning
-                <select name="cars" v-model.number="camera_settings.binning" @change="setSettings">
+                <select v-model.number="camera_settings.binning" @change="setSettings">
                     <option>1</option>
                     <option>2</option>
                     <option>4</option>
