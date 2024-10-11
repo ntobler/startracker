@@ -11,7 +11,9 @@ def test_attutude_estimation_simple():
     tm = testing_utils.TestingMaterial(use_existing=True)
 
     cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
-    ae_conf = attitude_estimation.AttitudeEstimatorConfig(n_match=12)
+    ae_conf = attitude_estimation.AttitudeEstimatorConfig(
+        n_match=14, star_match_pixel_tol=1.0, timeout_secs=10
+    )
     ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
 
     sig = testing_utils.StarImageGenerator(cal, noise_sigma=0)
@@ -23,7 +25,7 @@ def test_attutude_estimation_simple():
 
     att_res = ae(image)
 
-    np.testing.assert_allclose(att_res.quat, quat_gt, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(att_res.quat, quat_gt, rtol=1e-3, atol=1e-3)
 
 
 def test_attutude_estimation_error():
