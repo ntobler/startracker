@@ -3,6 +3,7 @@
 import contextlib
 import enum
 import io
+import json
 import logging
 import os
 import pathlib
@@ -105,6 +106,8 @@ class App(webutil.QueueAbstractionClass):
 
         self.terminate = False
 
+        self.stream = webutil.DataDispatcher()
+
         self._pers = persistent.Persistent.get_instance()
 
         self.image_container = webutil.DataDispatcher()
@@ -125,7 +128,6 @@ class App(webutil.QueueAbstractionClass):
         self._camera_job = "stop"
 
         self._attitude_overlay = False
-        self._attitude_result = None
         self._ae = None
 
         self._initialize_attitude_estimator()
@@ -140,9 +142,6 @@ class App(webutil.QueueAbstractionClass):
             self._ae = None
 
     def _get_state(self) -> dict[str, Any]:
-        quat = self._attitude_result.quat.tolist() if self._attitude_result is not None else []
-        n_matches = self._attitude_result.n_matches if self._attitude_result is not None else 0
-
         if self._cam is not None:
             camera_settings = {
                 "exposure_ms": self._cam.settings.exposure_ms,
@@ -161,8 +160,6 @@ class App(webutil.QueueAbstractionClass):
                 "pattern_size": self._intrinsic_calibrator.pattern.square_size,
             },
             "attitude": {
-                "quat": quat,
-                "n_matches": n_matches,
                 "overlay": self._attitude_overlay,
             },
             "camera_settings": camera_settings,
@@ -262,6 +259,34 @@ class App(webutil.QueueAbstractionClass):
                     self._tick()
         self._logger.info("Terminating event processor")
 
+    def _get_attitude(self, image: np.ndarray) -> np.ndarray:
+        if self._ae is None:
+            return image
+
+        attitude_result = self._ae(image)
+
+        xy = self._ae.image_xyz_to_xy(attitude_result.image_xyz)
+        image_size = (image.shape[1], image.shape[0])
+        self.stream.put(
+            {
+                "quat": attitude_result.quat.tolist(),
+                "n_matches": attitude_result.n_matches,
+                "obs_pix": xy.tolist(),
+                "image_size": image_size,
+            }
+        )
+
+        # Draw overlay if possible and enabled
+        if self._attitude_overlay and self._intrinsic_calibrator.cal is not None:
+            self._logger.info("Draw overlay")
+            r = scipy.spatial.transform.Rotation.from_quat(attitude_result.quat)
+            extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
+            image = image_utils.draw_grid(
+                image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
+            )
+
+        return image
+
     def _tick(self) -> None:
         if self._cam is None:
             raise RuntimeError("Camera hasn't been initialized")
@@ -275,20 +300,7 @@ class App(webutil.QueueAbstractionClass):
             image = self._cam.capture()
             self._image_cache = image
             self._logger.info("Get attitude ...")
-            self._attitude_result = self._ae(image) if self._ae is not None else None
-
-            # Draw overlay if possible and enabled
-            if (
-                self._attitude_overlay
-                and self._attitude_result is not None
-                and self._intrinsic_calibrator.cal is not None
-            ):
-                self._logger.info("Draw overlay")
-                r = scipy.spatial.transform.Rotation.from_quat(self._attitude_result.quat)
-                extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
-                image = image_utils.draw_grid(
-                    image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
-                )
+            image = self._get_attitude(image)
 
             success, encoded_array = cv2.imencode(".png", image)
             if success:
@@ -323,7 +335,9 @@ class WebApp:
         self.flask_app.post("/api/put_calibration_image")(self._put_calibration_image)
         self.flask_app.post("/api/reset_calibration")(self._reset_calibration)
         self.flask_app.post("/api/calibrate")(self._calibrate)
+
         self.sock.route("/api/image")(self._image)
+        self.sock.route("/api/stream")(self._stream)
 
     def _run_app(self) -> None:
         self.app = App()
@@ -406,13 +420,24 @@ class WebApp:
         d = self.app.calibrate()
         return jsonify(d)
 
+    def _stream(self, ws: Server) -> None:
+        """Websocket handler for app status updates."""
+        if self.app is None:
+            raise RuntimeError("App should be initialized at this point")
+        try:
+            while True:
+                d = self.app.stream.get_blocking()
+                ws.send(json.dumps(d))
+        except ConnectionClosed:
+            pass
+
     def _image(self, ws: Server) -> None:
         if self.app is None:
             raise RuntimeError("App should be initialized at this point")
         try:
             while True:
-                image_data = self.app.image_container.get_blocking()
-                ws.send(image_data)
+                data = self.app.image_container.get_blocking()
+                ws.send(data)
         except ConnectionClosed:
             pass
 

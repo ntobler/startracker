@@ -16,7 +16,13 @@
             object-fit: contain;
             image-rendering: pixelated;
         }
-
+        #canvas {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
         #camera-overlay {
             position: absolute;
             top: 50%;
@@ -43,6 +49,7 @@
     <div id="app">
         <div id="camera-overlay">No image captured</div>
         <img id="image" src="" alt="Image">
+        <canvas id="canvas" width="100" height="100"></canvas>
         <div id="footerBar">
             <div>Exposure <input type="number" step="1" v-model.number="camera_settings.exposure_ms"
                     @change="setSettings" style="width: 4em" /> ms</div>

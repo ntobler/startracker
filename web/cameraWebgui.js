@@ -18,16 +18,20 @@ export default {
                 pattern_size: 1,
             }),
             attitude: ref({
-                quat: [],
-                n_matches: 1,
                 overlay: 1,
+            }),
+            stream: ref({
+                quat: [],
+                obs_pix: [],
+                n_matches: 1,
+                image_size: [960, 540],
             }),
             brightness: ref(1),
             calibrating: false,
         }
     },
     methods: {
-        connectWebSocket() {
+        connectImageWebSocket() {
             let url = 'ws://' + window.location.host + "/api/image"
             var ws = new WebSocket(url);
             var img = document.getElementById('image');
@@ -36,6 +40,15 @@ export default {
                 img.src = URL.createObjectURL(blob);
                 img.style.display = "block"
             };
+        },
+        onmessage(response) {
+            this.stream = JSON.parse(response.data)
+            this.redraw()
+        },
+        connectStreamWebSocket() {
+            let url = 'ws://' + window.location.host + "/api/stream";
+            let ws = new WebSocket(url);
+            ws.onmessage = this.onmessage.bind(this);
         },
         setSettings() {
             let payload = {
@@ -55,6 +68,7 @@ export default {
             this.camera_settings = data.camera_settings
             this.intrinsic_calibrator = data.intrinsic_calibrator
             this.attitude = data.attitude
+            this.redraw()
         },
         toggleOverlay() {
             let el = document.getElementById("overlay")
@@ -90,9 +104,70 @@ export default {
                 error => { this.calibrating = true; },
             );
         },
+        resize() {
+            let canvas = document.getElementById('canvas')
+            canvas.width = document.body.clientWidth * window.devicePixelRatio
+            canvas.height = document.body.clientHeight * window.devicePixelRatio
+            this.redraw()
+        },
+        redraw() {
+            let canvas = document.getElementById('canvas')
+            let ctx = canvas.getContext("2d")
+
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.save()
+            ctx.lineWidth = 1
+            ctx.fillStyle = "white";
+            ctx.strokeStyle = "white";
+
+            ctx.translate(canvas.width / 2, canvas.height / 2)
+
+            let width = this.stream.image_size[0]
+            let height = this.stream.image_size[1]
+
+            let s = Math.min(canvas.width / width, canvas.height / height)
+            ctx.scale(s, s)
+            ctx.translate(0.5-width/2 , 0.5-height/2)
+
+            ctx.lineWidth = 1
+            ctx.strokeStyle = "red"
+            ctx.save()
+
+            ctx.beginPath();
+            ctx.rect(-0.5, -0.5, width, height);
+            ctx.clip();
+
+            this.drawStars(ctx)
+
+            ctx.restore()
+
+            ctx.beginPath();
+            ctx.rect(-1, -1, width + 1, height + 1);
+            ctx.stroke()
+
+            ctx.restore()
+        },
+        drawStars(ctx) {
+            if (this.stream.obs_pix === undefined) return
+            let obs_pix = this.stream.obs_pix;
+            ctx.save()
+            for (let i = 0; i < obs_pix.length; i++) {
+                let coord = obs_pix[i]
+                ctx.beginPath()
+                ctx.arc(coord[0], coord[1], 5, 0, 2 * Math.PI)
+                ctx.stroke()
+            }
+            ctx.restore()
+        },
     },
     mounted() {
-        this.connectWebSocket();
+        this.connectImageWebSocket();
+        this.connectStreamWebSocket();
+
         api('/api/get_state', null, this.updateState);
+
+        window.onresize = this.resize
+        this.resize()
     }
 }
