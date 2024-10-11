@@ -79,8 +79,7 @@ class IntrinsicCalibrator:
         success, png = cv2.imencode(".png", plot)
         if not success:
             raise ValueError("Error while encoding plot PNG")
-
-        filehandler.write(png)
+        filehandler.write(png.tobytes())
 
     def save(self) -> None:
         """Save calibration to the filesystem."""
@@ -108,7 +107,7 @@ class App(webutil.QueueAbstractionClass):
 
         self._pers = persistent.Persistent.get_instance()
 
-        self.image_container = webutil.ImageData()
+        self.image_container = webutil.DataDispatcher()
 
         self._logger = logging.getLogger("App")
         self._image_cache = None
@@ -246,13 +245,6 @@ class App(webutil.QueueAbstractionClass):
             png = buffer.read()
         return png
 
-    def get_attitude(
-        self, image: np.ndarray
-    ) -> Optional[attitude_estimation.AttitudeEstimationResult]:
-        if self._ae is None:
-            return None
-        return self._ae(image)
-
     @contextlib.contextmanager
     def _camera_settings_saver(self):
         yield
@@ -283,7 +275,7 @@ class App(webutil.QueueAbstractionClass):
             image = self._cam.capture()
             self._image_cache = image
             self._logger.info("Get attitude ...")
-            self._attitude_result = self.get_attitude(image)
+            self._attitude_result = self._ae(image) if self._ae is not None else None
 
             # Draw overlay if possible and enabled
             if (
@@ -298,7 +290,11 @@ class App(webutil.QueueAbstractionClass):
                     image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
                 )
 
-            self.image_container.put(image)
+            success, encoded_array = cv2.imencode(".png", image)
+            if success:
+                image_data = encoded_array.tobytes()
+                self.image_container.put(image_data)
+
             self._logger.info("Capture image done")
 
             if self._camera_job != "continuous":

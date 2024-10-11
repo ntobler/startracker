@@ -4,9 +4,8 @@ import functools
 import logging
 import queue
 import threading
-from typing import Union
+from typing import Generic, TypeVar, Union
 
-import cv2
 from flask import Response
 
 FlaskResponse = Union[str, tuple[str, int], Response]
@@ -15,7 +14,7 @@ FlaskResponse = Union[str, tuple[str, int], Response]
 class QueueAbstractionClass:
     """Simplifies abstraction of calling functions through a queue interface."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._calls_queue = queue.Queue()
         self._logger = logging.getLogger("QueueAbstractionClass")
 
@@ -35,7 +34,7 @@ class QueueAbstractionClass:
 
         return inner
 
-    def _process_pending_calls(self):
+    def _process_pending_calls(self) -> None:
         """Process all pending function calls to functions wrapped with queue_abstract."""
         try:
             while True:
@@ -51,24 +50,22 @@ class QueueAbstractionClass:
             pass
 
 
-class ImageData:
-    def __init__(self):
-        self._image = None
+T = TypeVar("T")
+
+
+class DataDispatcher(Generic[T]):
+    def __init__(self) -> None:
+        self._data = None
         self._data_lock = threading.Lock()
         self._data_changed = threading.Condition(lock=self._data_lock)
 
-    def put(self, image):
-        success, encoded_array = cv2.imencode(".png", image)
-        if not success:
-            return
-        image_data = encoded_array.tobytes()
-
-        self._image = image_data
+    def put(self, data: T) -> None:
+        self._data = data
         with self._data_lock:
             self._data_changed.notify_all()
 
-    def get_blocking(self):
+    def get_blocking(self) -> T:
         with self._data_lock:
             self._data_changed.wait()
-        assert self._image is not None
-        return self._image
+        assert self._data is not None
+        return self._data
