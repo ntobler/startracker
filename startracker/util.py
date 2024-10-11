@@ -11,3 +11,17 @@ def max_rate(max_rate_hz: float):
     yield
     if (diff := t - time.monotonic()) > 0:
         time.sleep(diff)
+
+
+class TimeMeasurer:
+    """Context manager to measure execution time."""
+
+    def __init__(self):
+        self.t = 0
+
+    def __enter__(self, *args, **kwargs):
+        self._t0 = time.monotonic()
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.t = time.monotonic() - self._t0

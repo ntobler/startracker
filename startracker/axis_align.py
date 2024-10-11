@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import threading
-import time
 from typing import List, Optional
 
 import numpy as np
@@ -45,20 +44,6 @@ def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None):
     if decimals is not None:
         x = x.round(decimals)
     return x.tolist()
-
-
-class TimeMeasurer:
-    """Context manager to measure execution time."""
-
-    def __init__(self):
-        self.t = 0
-
-    def __enter__(self, *args, **kwargs):
-        self._t0 = time.monotonic()
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        self.t = time.monotonic() - self._t0
 
 
 class App(webutil.QueueAbstractionClass):
@@ -106,7 +91,7 @@ class App(webutil.QueueAbstractionClass):
     def _get_stars(self):
         image = self._cam.capture()
 
-        with TimeMeasurer() as tm:
+        with util.TimeMeasurer() as tm:
             att_res = self._attitude_est(image)
 
             self._last_attitude_res = att_res
