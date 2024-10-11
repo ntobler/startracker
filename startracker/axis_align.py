@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import queue
 import threading
 import time
 from typing import List, Optional
@@ -71,7 +70,7 @@ class App(webutil.QueueAbstractionClass):
 
         self.terminate = False
 
-        self.status = QueueDistributingStatus()
+        self.status = webutil.DataDispatcher()
 
         self._pers = persistent.Persistent.get_instance()
 
@@ -102,6 +101,7 @@ class App(webutil.QueueAbstractionClass):
 
         self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
         self._calibration_rots: List[npt.NDArray[np.floating]] = []
+        self._camera_frame = []
 
     def _get_stars(self):
         image = self._cam.capture()
@@ -151,15 +151,16 @@ class App(webutil.QueueAbstractionClass):
             "cat_mags": to_rounded_list(cat_mags, 2),
             "north_south": to_rounded_list(north_south, 2),
             "processing_time": int(tm.t * 1000),
+            "frame_points": self._camera_frame,
         }
         return d
 
-    def _get_camera_frame(self, segments_per_side: int = 10) -> np.ndarray:
+    def _update_camera_frame(self, segments_per_side: int = 10) -> None:
         points = calibration.get_distorted_camera_frame(self._cal, segments_per_side)
         if self._axis_rot is not None:
             points = self._axis_rot.apply(points)
         points = project_radial(points)
-        return points
+        self._camera_frame = to_rounded_list(points.T, 2)
 
     @webutil.QueueAbstractionClass.queue_abstract
     def add_to_calibration(self):
@@ -194,13 +195,6 @@ class App(webutil.QueueAbstractionClass):
             "calibration_error_deg": np.degrees(error_std),
         }
 
-    def _update_camera_frame(self):
-        self.status.update(
-            {
-                "frame_points": to_rounded_list(self._get_camera_frame().T, 2),
-            }
-        )
-
     def run(self):
         """App logic."""
         if self._cam is None:
@@ -217,36 +211,8 @@ class App(webutil.QueueAbstractionClass):
     def _tick(self) -> None:
         if self._cam is None:
             raise RuntimeError("Camera hasn't been initialized")
-        if self.status.number_of_users():
-            self.status.update(self._get_stars())
+        self.status.put(self._get_stars())
         self._process_pending_calls()
-
-
-class QueueDistributingStatus:
-    def __init__(self) -> None:
-        self._status_lock = threading.Lock()
-        self._status_queues = []
-        self._status = {}
-
-    def update(self, d: dict):
-        with self._status_lock:
-            self._status.update(d)
-            for q in self._status_queues:
-                q.put(self._status)
-
-    def register(self, q: queue.Queue):
-        with self._status_lock:
-            if q not in self._status_queues:
-                self._status_queues.append(q)
-                q.put(self._status)
-
-    def unregister(self, q: queue.Queue):
-        with self._status_lock:
-            if q in self._status_queues:
-                self._status_queues.remove(q)
-
-    def number_of_users(self):
-        return len(self._status_queues)
 
 
 class WebApp:
@@ -302,16 +268,12 @@ class WebApp:
         """Websocket handler for app status updates."""
         if self.app is None:
             raise RuntimeError("App should be initialized at this point")
-        q = queue.Queue()
         try:
-            self.app.status.register(q)
             while True:
-                d = q.get()
+                d = self.app.status.get_blocking()
                 ws.send(json.dumps(d))
         except ConnectionClosed:
             pass
-        finally:
-            self.app.status.unregister(q)
 
     def run(self) -> None:
         try:
