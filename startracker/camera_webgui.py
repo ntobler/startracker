@@ -279,8 +279,13 @@ class App(webutil.QueueAbstractionClass):
         if self._attitude_est is None:
             return image
 
-        with util.TimeMeasurer() as tm:
-            attitude_result = self._attitude_est(image)
+        with util.TimeMeasurer() as tm1:
+            kernel = np.ones((7, 7), np.uint8)
+            processed_image = cv2.morphologyEx(image, cv2.MORPH_TOPHAT, kernel)
+            cv2.blur(processed_image, (3, 3), dst=processed_image)
+
+        with util.TimeMeasurer() as tm2:
+            attitude_result = self._attitude_est(processed_image)
 
         xy = self._attitude_est.image_xyz_to_xy(attitude_result.image_xyz)
         image_size = (image.shape[1], image.shape[0])
@@ -290,7 +295,8 @@ class App(webutil.QueueAbstractionClass):
                 "n_matches": attitude_result.n_matches,
                 "obs_pix": xy.tolist(),
                 "image_size": image_size,
-                "processing_time": int(tm.t * 1000),
+                "image_processing_time": int(tm1.t * 1000),
+                "processing_time": int(tm2.t * 1000),
             }
         )
 
@@ -299,9 +305,10 @@ class App(webutil.QueueAbstractionClass):
             self._logger.info("Draw overlay")
             r = scipy.spatial.transform.Rotation.from_quat(attitude_result.quat)
             extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
-            image = image_utils.draw_grid(
-                image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
+            processed_image = image_utils.draw_grid(
+                processed_image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
             )
+            return processed_image
 
         return image
 

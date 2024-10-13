@@ -110,7 +110,7 @@
             <div v_if="attitude != {}">Timeout (s) <input type="number" value="40"
                     v-model.number="attitude.timeout_secs" @change="setSettings" size="1" /></div>
             <div v_if="attitude != {}">
-                Tracked: {{stream.n_matches}} Processing time: {{stream.processing_time}}ms
+                Tracked: {{stream.n_matches}} Processing time: {{stream.processing_time}}ms, Image processing time: {{stream.image_processing_time}}ms
             </div>
         </div>
     </div>
