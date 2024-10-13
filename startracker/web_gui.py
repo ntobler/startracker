@@ -9,15 +9,26 @@ import os
 import pathlib
 import tempfile
 import threading
-from typing import Any, BinaryIO, List, Optional
+from typing import Any, BinaryIO, Generator, List, Optional
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 import scipy.spatial
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_sock import ConnectionClosed, Server, Sock
 
-from startracker import attitude_estimation, camera, image_utils, kalkam, persistent, util, webutil
+from startracker import (
+    attitude_estimation,
+    calibration,
+    camera,
+    image_utils,
+    kalkam,
+    persistent,
+    transform,
+    util,
+    webutil,
+)
 from startracker.webutil import FlaskResponse
 
 
@@ -97,6 +108,193 @@ class CaptureMode(enum.Enum):
     DARKFRAME = "darkframe"
 
 
+def project_radial(xyz: np.ndarray) -> np.ndarray:
+    """Return radial projection around +z of xyz vector."""
+    xyz = xyz / (np.linalg.norm(xyz, axis=1, keepdims=True) + 1e-12)
+    x, y, z = np.moveaxis(xyz, -1, 0)
+    r = np.linalg.norm(xyz[..., :2], axis=-1)
+    s = np.arctan2(r, z)
+    s *= (180 / np.pi) / r
+    return np.stack((x * s, y * s), axis=-1)
+
+
+def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None) -> list:
+    """Convert numpy array in a list of rounded floats.
+
+    JSON serialization is able to correcty truncate floats to the desired length.
+    """
+    x = np.array(x, dtype=np.float64, copy=False)
+    if decimals is not None:
+        x = x.round(decimals)
+    return x.tolist()
+
+
+class AxisCalibrator:
+    axis_rot: scipy.spatial.transform.Rotation
+    error_rad: float
+
+    def __init__(self, pers: persistent.Persistent) -> None:
+        self._calibration_rots = []
+        self.error_rad = 0
+
+        self._file = pers.axis_rot_quat_file
+
+        if self._file.exists():
+            self.axis_rot = scipy.spatial.transform.Rotation.from_quat(np.load(self._file))
+        else:
+            self.axis_rot = scipy.spatial.transform.Rotation.identity()
+
+    def put(self, quat: np.ndarray) -> None:
+        self._calibration_rots.append(quat)
+
+    def reset(self) -> None:
+        self._calibration_rots.clear()
+
+    def calibrate(self) -> float:
+        if len(self._calibration_rots) < 2:
+            raise ValueError("Not enough data to calibrate")
+
+        axis_vec, error_std = transform.find_common_rotation_axis(np.array(self._calibration_rots))
+
+        # Make sure vector points in general direction of camera
+        axis_vec = axis_vec if axis_vec[2] > 0 else -axis_vec
+        # Create camea rotation to axis, such that camera is horizontal
+        axis_rotm = kalkam.look_at_extrinsic(axis_vec, [0, 0, 0], [0, -1, 0])[:3, :3]
+        self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
+
+        # Save calibrated rotation
+        np.save(self._file, self.axis_rot.as_quat(canonical=False))
+
+        return error_std
+
+    def count(self) -> int:
+        return len(self._calibration_rots)
+
+
+class AttitudeEstimation:
+    overlay: bool
+
+    def __init__(
+        self,
+        pers: persistent.Persistent,
+        cal: kalkam.IntrinsicCalibration,
+        axis_calibrator: AxisCalibrator,
+    ) -> None:
+        self._cal = cal
+        self._axis_calibrator = axis_calibrator
+
+        if pers.attitude_estimation_config_file.exists():
+            config = attitude_estimation.AttitudeEstimatorConfig.load(
+                pers.attitude_estimation_config_file
+            )
+        else:
+            config = attitude_estimation.AttitudeEstimatorConfig()
+        self._attitude_est = attitude_estimation.AttitudeEstimator(cal, config=config)
+
+        # Get bright stars
+        bright = self._attitude_est.cat_mag <= 4
+        self._cat_xyz = self._attitude_est.cat_xyz[bright]
+        self._cat_mags = self._attitude_est.cat_mag[bright]
+
+        self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
+        self._calibration_rots: List[npt.NDArray[np.floating]] = []
+        self._camera_frame = []
+
+        self.overlay = False
+
+        self.quat = np.array([0.0, 0.0, 0.0, 1.0])
+
+    @property
+    def config(self) -> attitude_estimation.AttitudeEstimatorConfig:
+        return self._attitude_est.config
+
+    @config.setter
+    def config(self, value: attitude_estimation.AttitudeEstimatorConfig) -> None:
+        self._attitude_est.config = value
+
+    def process(self, image: npt.NDArray[np.uint8]) -> tuple[dict, npt.NDArray[np.uint8]]:
+        with util.TimeMeasurer() as tm1:
+            kernel = np.ones((7, 7), np.uint8)
+            processed_image = cv2.morphologyEx(image, cv2.MORPH_TOPHAT, kernel)
+            cv2.blur(processed_image, (3, 3), dst=processed_image)
+
+        with util.TimeMeasurer() as tm2:
+            att_res = self._attitude_est(processed_image)
+
+        xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz)
+        image_size = (image.shape[1], image.shape[0])
+
+        if att_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:
+            self.quat = att_res.quat
+
+        with util.TimeMeasurer() as tm3:
+            inverse_rotation = scipy.spatial.transform.Rotation.from_quat(self.quat).inv()
+
+            # Rotate into camera coordinate frame
+            cat_xyz = inverse_rotation.apply(self._cat_xyz)
+            north_south = inverse_rotation.apply([[0, 0, 1], [0, 0, -1]])
+            star_coords = att_res.image_xyz
+
+            # Merge catalog stars and detected stars (so both are displayed in the GUI)
+            cat_xyz = np.concatenate((cat_xyz, att_res.cat_xyz), axis=0)
+            cat_mags = np.concatenate((self._cat_mags, att_res.mags), axis=0)
+
+            # Rotate into the axis coordinate frame if the axis has been calibrated
+            if self._axis_calibrator is not None:
+                star_coords = self._axis_calibrator.axis_rot.apply(star_coords)
+                cat_xyz = self._axis_calibrator.axis_rot.apply(cat_xyz)
+                north_south = self._axis_calibrator.axis_rot.apply(north_south)
+
+            # Calculate alignment error
+            alignment_error = np.arccos(north_south[0, 2]) * (180 / np.pi)
+            alignment_error = 180 - alignment_error if alignment_error > 90 else alignment_error
+
+            # Only show hemisphere
+            pos_z = cat_xyz[:, 2] > 0
+            cat_xyz = cat_xyz[pos_z]
+            cat_mags = cat_mags[pos_z]
+
+            star_coords = project_radial(star_coords)
+            cat_xyz = project_radial(cat_xyz)
+            north_south = project_radial(north_south)
+
+            self._update_camera_frame()
+
+        data = {
+            "star_coords": to_rounded_list(star_coords, 2),
+            "alignment_error": alignment_error,
+            "cat_xyz": to_rounded_list(cat_xyz, 2),
+            "cat_mags": to_rounded_list(cat_mags, 2),
+            "north_south": to_rounded_list(north_south, 2),
+            "frame_points": self._camera_frame,
+            "quat": self.quat.tolist(),
+            "n_matches": att_res.n_matches,
+            "obs_pix": xy.tolist(),
+            "image_size": image_size,
+            "pre_processing_time": int(tm1.t * 1000),
+            "processing_time": int(tm2.t * 1000),
+            "post_processing_time": int(tm3.t * 1000),
+        }
+
+        # Draw overlay if possible and enabled
+        if self.overlay:
+            r = scipy.spatial.transform.Rotation.from_quat(att_res.quat)
+            extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
+            processed_image = image_utils.draw_grid(
+                processed_image, extrinsic, self._cal, inplace=False
+            )
+            image = processed_image
+
+        return data, image
+
+    def _update_camera_frame(self, segments_per_side: int = 10) -> None:
+        points = calibration.get_distorted_camera_frame(self._cal, segments_per_side)
+        if self._axis_calibrator is not None:
+            points = self._axis_calibrator.axis_rot.apply(points)
+        points = project_radial(points)
+        self._camera_frame = to_rounded_list(points.T, 2)
+
+
 class App(webutil.QueueAbstractionClass):
     terminate: bool
     """Set True to terminate the application loop."""
@@ -127,7 +325,7 @@ class App(webutil.QueueAbstractionClass):
 
         self._camera_job = "stop"
 
-        self._attitude_overlay = False
+        self._axis_calibrator = None
         self._attitude_est = None
 
         self._initialize_attitude_estimator()
@@ -136,14 +334,9 @@ class App(webutil.QueueAbstractionClass):
         if self._intrinsic_calibrator.cal is None:
             self._attitude_est = None
             return
-        if self._pers.attitude_estimation_config_file.exists():
-            config = attitude_estimation.AttitudeEstimatorConfig.load(
-                self._pers.attitude_estimation_config_file
-            )
-        else:
-            config = attitude_estimation.AttitudeEstimatorConfig()
-        self._attitude_est = attitude_estimation.AttitudeEstimator(
-            self._intrinsic_calibrator.cal, config=config
+        self._axis_calibrator = AxisCalibrator(self._pers)
+        self._attitude_est = AttitudeEstimation(
+            self._pers, self._intrinsic_calibrator.cal, self._axis_calibrator
         )
 
     def _get_state(self) -> dict[str, Any]:
@@ -157,16 +350,16 @@ class App(webutil.QueueAbstractionClass):
         else:
             camera_settings = {}
 
-        attitude = (
-            {
-                "overlay": self._attitude_overlay,
-                "min_matches": self._attitude_est.config.n_match,
-                "pixel_tolerance": self._attitude_est.config.star_match_pixel_tol,
-                "timeout_secs": self._attitude_est.config.timeout_secs,
+        if self._attitude_est is not None:
+            attitude_est_config = self._attitude_est.config
+            attitude = {
+                "overlay": self._attitude_est.overlay,
+                "min_matches": attitude_est_config.n_match,
+                "pixel_tolerance": attitude_est_config.star_match_pixel_tol,
+                "timeout_secs": attitude_est_config.timeout_secs,
             }
-            if self._attitude_est is not None
-            else {}
-        )
+        else:
+            attitude = {}
 
         state = {
             "intrinsic_calibrator": {
@@ -203,14 +396,13 @@ class App(webutil.QueueAbstractionClass):
             float(params["pattern_size"]),
         )
 
-        self._attitude_overlay = bool(params["overlay"])
-
         if self._attitude_est is not None:
             config = self._attitude_est.config
             config.star_match_pixel_tol = float(params["pixel_tolerance"])
             config.n_match = int(params["min_matches"])
             config.timeout_secs = float(params["timeout_secs"])
             self._attitude_est.config = config
+            self._attitude_est.overlay = bool(params["overlay"])
 
         return self._get_state()
 
@@ -222,21 +414,35 @@ class App(webutil.QueueAbstractionClass):
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def put_calibration_image(self) -> dict:
-        image = self._image_cache
-        if image is not None:
-            self._intrinsic_calibrator.put_image(image)
-        return self._get_state()
+    def axis_calibration(self, command: str) -> dict:
+        if self._axis_calibrator is None or self._attitude_est is None:
+            return {}
+        if command == "put":
+            self._axis_calibrator.put(self._attitude_est.quat)
+        elif command == "reset":
+            self._axis_calibrator.reset()
+        elif command == "calibrate":
+            self._axis_calibrator.calibrate()
+        else:
+            raise ValueError(f"unknown command '{command}'")
+        return {
+            "calibration_error_deg": np.degrees(self._axis_calibrator.error_rad),
+            "calibration_orientations": self._axis_calibrator.count(),
+        }
 
     @webutil.QueueAbstractionClass.queue_abstract
-    def reset_calibration(self):
-        self._intrinsic_calibrator.reset()
-        return self._get_state()
-
-    @webutil.QueueAbstractionClass.queue_abstract
-    def calibrate(self) -> dict:
-        self._intrinsic_calibrator.calibrate()
-        self._initialize_attitude_estimator()
+    def camera_calibration(self, command: str) -> dict:
+        if command == "put":
+            image = self._image_cache
+            if image is not None:
+                self._intrinsic_calibrator.put_image(image)
+        elif command == "reset":
+            self._intrinsic_calibrator.reset()
+        elif command == "calibrate":
+            self._intrinsic_calibrator.calibrate()
+            self._initialize_attitude_estimator()
+        else:
+            raise ValueError(f"unknown command '{command}'")
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
@@ -257,7 +463,7 @@ class App(webutil.QueueAbstractionClass):
         return png
 
     @contextlib.contextmanager
-    def _settings_saver(self):
+    def _settings_saver(self) -> Generator[None, None, None]:
         yield
         self._logger.info("Safing camera settings")
         self._cam.settings.save(self._pers.cam_settings_file)
@@ -275,43 +481,6 @@ class App(webutil.QueueAbstractionClass):
                     self._tick()
         self._logger.info("Terminating event processor")
 
-    def _get_attitude(self, image: np.ndarray) -> np.ndarray:
-        if self._attitude_est is None:
-            return image
-
-        with util.TimeMeasurer() as tm1:
-            kernel = np.ones((7, 7), np.uint8)
-            processed_image = cv2.morphologyEx(image, cv2.MORPH_TOPHAT, kernel)
-            cv2.blur(processed_image, (3, 3), dst=processed_image)
-
-        with util.TimeMeasurer() as tm2:
-            attitude_result = self._attitude_est(processed_image)
-
-        xy = self._attitude_est.image_xyz_to_xy(attitude_result.image_xyz)
-        image_size = (image.shape[1], image.shape[0])
-        self.stream.put(
-            {
-                "quat": attitude_result.quat.tolist(),
-                "n_matches": attitude_result.n_matches,
-                "obs_pix": xy.tolist(),
-                "image_size": image_size,
-                "image_processing_time": int(tm1.t * 1000),
-                "processing_time": int(tm2.t * 1000),
-            }
-        )
-
-        # Draw overlay if possible and enabled
-        if self._attitude_overlay and self._intrinsic_calibrator.cal is not None:
-            self._logger.info("Draw overlay")
-            r = scipy.spatial.transform.Rotation.from_quat(attitude_result.quat)
-            extrinsic = np.concatenate((r.as_matrix().T, np.zeros((3, 1))), axis=-1)
-            processed_image = image_utils.draw_grid(
-                processed_image, extrinsic, self._intrinsic_calibrator.cal, inplace=False
-            )
-            return processed_image
-
-        return image
-
     def _tick(self) -> None:
         if self._cam is None:
             raise RuntimeError("Camera hasn't been initialized")
@@ -325,7 +494,10 @@ class App(webutil.QueueAbstractionClass):
             image = self._cam.capture()
             self._image_cache = image
             self._logger.info("Get attitude ...")
-            image = self._get_attitude(image)
+
+            if self._attitude_est is not None:
+                data, image = self._attitude_est.process(image)
+                self.stream.put(data)
 
             success, encoded_array = cv2.imencode(".png", image)
             if success:
@@ -357,9 +529,8 @@ class WebApp:
         self.flask_app.post("/api/get_state")(self._get_state)
         self.flask_app.post("/api/set_settings")(self._set_settings)
         self.flask_app.post("/api/capture")(self._capture)
-        self.flask_app.post("/api/put_calibration_image")(self._put_calibration_image)
-        self.flask_app.post("/api/reset_calibration")(self._reset_calibration)
-        self.flask_app.post("/api/calibrate")(self._calibrate)
+        self.flask_app.post("/api/camera_calibration")(self._camera_calibration)
+        self.flask_app.post("/api/axis_calibration")(self._axis_calibration)
 
         self.sock.route("/api/image")(self._image)
         self.sock.route("/api/stream")(self._stream)
@@ -418,22 +589,18 @@ class WebApp:
         d = self.app.capture(CaptureMode(params["mode"]))
         return jsonify(d)
 
-    def _put_calibration_image(self) -> FlaskResponse:
+    def _camera_calibration(self) -> FlaskResponse:
         if self.app is None:
             return "Server error", 500
-        d = self.app.put_calibration_image()
+        params = request.get_json()
+        d = self.app.camera_calibration(params["command"])
         return jsonify(d)
 
-    def _reset_calibration(self) -> FlaskResponse:
+    def _axis_calibration(self) -> FlaskResponse:
         if self.app is None:
             return "Server error", 500
-        d = self.app.reset_calibration()
-        return jsonify(d)
-
-    def _calibrate(self) -> FlaskResponse:
-        if self.app is None:
-            return "Server error", 500
-        d = self.app.calibrate()
+        params = request.get_json()
+        d = self.app.axis_calibration(params["command"])
         return jsonify(d)
 
     def _stream(self, ws: Server) -> None:
@@ -471,7 +638,9 @@ def main() -> None:
 
         logging.warning("Using debug data")
         testing_utils.TestingMaterial(use_existing=True).patch_persistent()
-        camera.RpiCamera = testing_utils.RandomStarCam
+        # camera.RpiCamera = testing_utils.RandomStarCam
+        camera.RpiCamera = testing_utils.AxisAlignCalibrationTestCam
+        camera.RpiCamera.time_warp_factor = 1000
         camera.RpiCamera.simulate_exposure_time = True
 
     webapp = WebApp()

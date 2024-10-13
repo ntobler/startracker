@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Starraker</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,20 +17,27 @@
         }
     </style>
 </head>
+
 <body>
     <div id="app">
         <canvas id="canvas" width="100" height="100"></canvas>
+        <div id="view"><a href="./cameraWebgui.html">Camera View</a></div>
         <div id="footerBar">
             <div>Stars:</div>
-            <div>Tracked: {{display.n_matches}}</div>
-            <div>Alignment error: {{display.alignment_error}}°</div>
-            <div>Processing time: {{display.processing_time}}ms</div>
-            <div>Packet size: {{display.packet_size}}</div>
+            <div>Tracked: {{stream.n_matches}}</div>
+            <div>Alignment error: {{stream.alignment_error.toFixed(3)}}°</div>
+            <div>Times: {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms {{stream.post_processing_time}}ms
+            </div>
+            <div>Packet size: {{packet_size}}</div>
             <div>
                 Calibration:
-                <button type="button" @click="addToCalibration">Add {{calibration_orientations > 0? `(${calibration_orientations})` : "" }}</button>
+                <button type="button" @click="addToCalibration">
+                    Add {{calibration_orientations > 0 ? `(${calibration_orientations})` : "" }}
+                </button>
                 <button type="button" @click="resetCalibration" v-if="calibration_orientations > 0">Clear</button>
-                <button type="button" @click="calibrate" v-if="calibration_orientations > 0">Calibrate{{calibrating? ' \u25CF' : "" }}</button>
+                <button type="button" @click="calibrate" v-if="calibration_orientations > 0">
+                    Calibrate{{calibrating? '\u25CF' : "" }}
+                </button>
             </div>
         </div>
     </div>
@@ -39,4 +47,5 @@
         createApp(AxisAlign).mount('#app')
     </script>
 </body>
+
 </html>

@@ -5,13 +5,18 @@ import { ref } from './vue.esm-browser.prod.min.js';
 export default {
     setup() {
         return {
-            state: null,
-            display: ref({
-                n_matches: "??",
-                alignment_error: "??",
-                processing_time: "??",
-                packet_size: "??",
+            stream: ref({
+                quat: [],
+                obs_pix: [],
+                n_matches: 0,
+                pre_processing_time: 0,
+                processing_time: 0,
+                post_processing_time: 0,
+                alignment_error: 0,
+                image_size: [960, 540],
+                frame_points: [],
             }),
+            packet_size: ref("??"),
             ui_zoom: 0.8,
             calibrating: false,
             calibration_orientations: 0,
@@ -20,23 +25,17 @@ export default {
     },
     methods: {
         onmessage(response) {
-            let state = JSON.parse(response.data)
-            this.state = state
-            this.display = {
-                n_matches: state.n_matches,
-                alignment_error: state.alignment_error.toFixed(3),
-                processing_time: state.processing_time,
-                packet_size: parseSize(response.data.length),
-            }
-            this.history.push({
-                n_matches: state.n_matches,
-                processing_time: state.processing_time,
-            })
+            this.stream = JSON.parse(response.data)
+            this.packet_size = parseSize(response.data.length),
+                this.history.push({
+                    n_matches: this.stream.n_matches,
+                    processing_time: this.stream.processing_time,
+                })
             if (this.history.length > 20) this.history.shift();
             this.redraw()
         },
         connectWebSocket() {
-            let url = 'ws://' + window.location.host + "/api/state";
+            let url = 'ws://' + window.location.host + "/api/stream";
             let ws = new WebSocket(url);
             ws.onmessage = this.onmessage.bind(this);
         },
@@ -46,11 +45,10 @@ export default {
             canvas.height = document.body.clientHeight * window.devicePixelRatio
             this.redraw()
         },
-
         redraw() {
             const scale = 50
 
-            let state = this.state
+            let state = this.stream
             let ui_zoom = this.ui_zoom
 
             let canvas = document.getElementById('canvas')
@@ -87,22 +85,25 @@ export default {
 
         },
         addToCalibration() {
-            api('/api/add_to_calibration', null, data => {
-                this.calibration_orientations = data.calibration_orientations
+            let self = this
+            api('/api/axis_calibration', { command: "put" }, data => {
+                self.calibration_orientations = data.calibration_orientations
             });
         },
         resetCalibration() {
-            api('/api/reset_calibration', null, data => {
-                this.calibration_orientations = data.calibration_orientations
+            let self = this
+            api('/api/axis_calibration', { command: "reset" }, data => {
+                self.calibration_orientations = data.calibration_orientations
             });
         },
         calibrate() {
             if (this.calibration_orientations < 1) return;
             this.calibrating = true;
+            let self = this
             api(
-                '/api/calibrate', null,
-                data => { this.calibrating = false; },
-                error => { this.calibrating = true; },
+                '/api/axis_calibration', { command: "calibrate" },
+                data => { self.calibrating = false; },
+                error => { self.calibrating = true; },
             );
         },
 
@@ -171,16 +172,18 @@ function drawCameraFrame(ctx, state, ui_zoom) {
         ctx.fillStyle = "#f004"
     }
 
-    let x = state.frame_points[0]
-    let y = state.frame_points[1]
-    ctx.fillText("Camera frame", x[0] * ui_zoom, y[0] * ui_zoom - R_MARGIN);
-    ctx.beginPath()
-    ctx.moveTo(x[0] * ui_zoom, y[0] * ui_zoom)
-    for (let i = 1; i < x.length; i++) {
-        ctx.lineTo(x[i] * ui_zoom, y[i] * ui_zoom)
+    if (state.frame_points.length >= 2) {
+        let x = state.frame_points[0]
+        let y = state.frame_points[1]
+        ctx.fillText("Camera frame", x[0] * ui_zoom, y[0] * ui_zoom - R_MARGIN);
+        ctx.beginPath()
+        ctx.moveTo(x[0] * ui_zoom, y[0] * ui_zoom)
+        for (let i = 1; i < x.length; i++) {
+            ctx.lineTo(x[i] * ui_zoom, y[i] * ui_zoom)
+        }
+        ctx.closePath()
+        ctx.stroke()
     }
-    ctx.closePath()
-    ctx.stroke()
 
     ctx.restore()
 }

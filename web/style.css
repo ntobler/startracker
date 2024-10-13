@@ -63,13 +63,11 @@ button[type=button].active {
 }
 
 input.error {
-    background: repeating-linear-gradient(
-        -45deg,
-        transparent,
-        transparent 0.1em,
-        #f004 0.1em,
-        #f004 0.2em
-    );
+    background: repeating-linear-gradient(-45deg,
+            transparent,
+            transparent 0.1em,
+            #f004 0.1em,
+            #f004 0.2em);
 }
 
 select {
@@ -78,4 +76,27 @@ select {
     border: 2px solid red;
     background-color: #0000;
     color: red;
+    border-color: red;
+}
+
+#view {
+    position: fixed;
+    top: 1em;
+    right: 1em;
+}
+
+#view a {
+    display: inline-block;
+    text-decoration: none;
+    color: red;
+    padding: 1em;
+    text-align: center;
+    border: 2px solid red;
+    border-radius: 5px;
+    background-color: black;
+}
+
+#view a:hover {
+    color: white;
+    border-color: white;
 }

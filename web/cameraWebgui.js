@@ -27,8 +27,9 @@ export default {
                 quat: [],
                 obs_pix: [],
                 n_matches: 0,
+                pre_processing_time: 0,
                 processing_time: 0,
-                image_processing_time: 0,
+                post_processing_time: 0,
                 image_size: [960, 540],
             }),
             brightness: ref(1),
@@ -98,16 +99,16 @@ export default {
             api('/api/capture', payload, this.updateState);
         },
         putCalibrationImage() {
-            api('/api/put_calibration_image', null, this.updateState);
+            api('/api/camera_calibration', { command: "put" }, this.updateState);
         },
         resetCalibration() {
-            api('/api/reset_calibration', null, this.updateState);
+            api('/api/camera_calibration', { command: "reset" }, this.updateState);
         },
         calibrate() {
             if (this.intrinsic_calibrator.index < 1) return;
             this.calibrating = true;
             api(
-                '/api/calibrate', null,
+                '/api/camera_calibration', { command: "calibrate" },
                 data => { this.calibrating = false; },
                 error => { this.calibrating = true; },
             );
@@ -136,7 +137,7 @@ export default {
 
             let s = Math.min(canvas.width / width, canvas.height / height)
             ctx.scale(s, s)
-            ctx.translate(0.5-width/2 , 0.5-height/2)
+            ctx.translate(0.5 - width / 2, 0.5 - height / 2)
 
             ctx.lineWidth = 1
             ctx.strokeStyle = "red"

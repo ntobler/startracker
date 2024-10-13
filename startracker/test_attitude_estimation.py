@@ -19,7 +19,7 @@ def test_attutude_estimation_simple():
     sig = testing_utils.StarImageGenerator(cal, noise_sigma=0)
 
     rng = np.random.default_rng(42)
-    quat_gt = scipy.spatial.transform.Rotation.random(random_state=rng).as_quat()
+    quat_gt = scipy.spatial.transform.Rotation.random(random_state=rng).as_quat(canonical=False)
 
     image, _, _ = sig.image_from_quaternion(quat_gt)
 
