@@ -26,6 +26,7 @@ export default {
             stream: ref({
                 quat: [],
                 obs_pix: [],
+                cat_pix: [],
                 n_matches: 0,
                 pre_processing_time: 0,
                 processing_time: 0,
@@ -160,11 +161,18 @@ export default {
         drawStars(ctx) {
             if (this.stream.obs_pix === undefined) return
             let obs_pix = this.stream.obs_pix;
+            let cat_pix = this.stream.cat_pix;
             ctx.save()
-            for (let i = 0; i < obs_pix.length; i++) {
+            for (let i = 0; i < Math.min(obs_pix.length, cat_pix.length); i++) {
                 let coord = obs_pix[i]
                 ctx.beginPath()
                 ctx.arc(coord[0], coord[1], 5, 0, 2 * Math.PI)
+                ctx.stroke()
+
+                ctx.beginPath()
+                ctx.moveTo(coord[0], coord[1])
+                coord = cat_pix[i]
+                ctx.lineTo(coord[0], coord[1])
                 ctx.stroke()
             }
             ctx.restore()

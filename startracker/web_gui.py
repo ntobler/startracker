@@ -221,7 +221,8 @@ class AttitudeEstimation:
         with util.TimeMeasurer() as tm2:
             att_res = self._attitude_est(processed_image)
 
-        xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz)
+        obs_xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz)
+        cat_xy = self._attitude_est.image_xyz_to_xy(att_res.cat_xyz)
         image_size = (image.shape[1], image.shape[0])
 
         if att_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:
@@ -269,7 +270,8 @@ class AttitudeEstimation:
             "frame_points": self._camera_frame,
             "quat": self.quat.tolist(),
             "n_matches": att_res.n_matches,
-            "obs_pix": xy.tolist(),
+            "obs_pix": obs_xy.tolist(),
+            "cat_pix": cat_xy.tolist(),
             "image_size": image_size,
             "pre_processing_time": int(tm1.t * 1000),
             "processing_time": int(tm2.t * 1000),
