@@ -7,6 +7,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable startracker.service
 sudo systemctl start startracker.service
 
-sudo cp nginx.conf /etc/nginx/sites-available/default
+sudo cp nginx.conf /etc/nginx/nginx.conf
+sudo nginx -t
 sudo systemctl enable nginx.service
 sudo systemctl restart nginx.service

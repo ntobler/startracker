@@ -80,7 +80,7 @@ Install startracker git repo
 ``` bash
 cd ~
 export DPKG_DEB_THREADS_MAX=1
-sudo apt install -y git libcairo2-dev python3-pip vim python3-virtualenv
+sudo apt install -y git libcairo2-dev python3-pip vim python3-virtualenv nginx
 git clone https://github.com/ntobler/startracker.git
 virtualenv venv --system-site-packages
 . venv/bin/activate
@@ -93,6 +93,7 @@ Set up automatic wifi switch over to a mobile hotspot (find with `sudo nmcli dev
 sudo nmcli dev wifi connect "wifi_name" password "password"
 sudo nmcli connection modify wifi_name connection.autoconnect-priority 10
 sudo nmcli connection modify preconfigured connection.autoconnect-priority 5
+sudo nmcli connection modify wifi_name connection.autoconnect true
 nmcli --fields autoconnect-priority,name connection
 sudo systemctl restart NetworkManager
 ```
