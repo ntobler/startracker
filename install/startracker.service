@@ -16,8 +16,8 @@ User=pi
 Group=pi
 WorkingDirectory=/home/pi/
 ExecStart=/home/pi/venv/bin/startracker-web-gui
-ExecStop=pkill --signal SIGINT -x startracker
-TimeoutStopSec=10
+TimeoutStopSec=15
+KillSignal=SIGINT
 
 [Install]
 WantedBy=graphical.target
