@@ -1,12 +1,14 @@
 """Flask web application to capture images using a smartphone browser or any other browser."""
 
 import contextlib
+import datetime
 import enum
 import io
 import json
 import logging
 import os
 import pathlib
+import pickle
 import tempfile
 import threading
 from typing import Any, BinaryIO, Generator, List, Optional
@@ -204,6 +206,12 @@ class AttitudeEstimation:
 
         self.quat = np.array([0.0, 0.0, 0.0, 1.0])
 
+        # Database of image/object points for more accurate calibration
+        self._database_folder = pers.user_data_dir / "database"
+        self._database_folder.mkdir(exist_ok=True)
+        self._image_database = []
+        self._object_database = []
+
     @property
     def config(self) -> attitude_estimation.AttitudeEstimatorConfig:
         return self._attitude_est.config
@@ -221,12 +229,18 @@ class AttitudeEstimation:
         with util.TimeMeasurer() as tm2:
             att_res = self._attitude_est(processed_image)
 
-        obs_xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz)
+        inverse_rotation = scipy.spatial.transform.Rotation.from_quat(att_res.quat)
+        obs_xy = self._attitude_est.image_xyz_to_xy(inverse_rotation.apply(att_res.image_xyz))
         cat_xy = self._attitude_est.image_xyz_to_xy(att_res.cat_xyz)
         image_size = (image.shape[1], image.shape[0])
 
         if att_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:
             self.quat = att_res.quat
+
+            self._image_database.append(obs_xy)
+            self._object_database.append(att_res.cat_xyz)
+            if len(self._image_database) > 100:
+                self.save_database()
 
         with util.TimeMeasurer() as tm3:
             inverse_rotation = scipy.spatial.transform.Rotation.from_quat(self.quat).inv()
@@ -295,6 +309,21 @@ class AttitudeEstimation:
             points = self._axis_calibrator.axis_rot.apply(points)
         points = project_radial(points)
         self._camera_frame = to_rounded_list(points.T, 2)
+
+    def save_database(self) -> None:
+        if len(self._image_database) == 0:
+            return
+        data = {
+            "image": self._image_database,
+            "object": self._object_database,
+        }
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        name = f"data_{now.strftime('%Y%m%d_%H%M%S')}.pkl"
+        with (self._database_folder / name).open("wb") as f:
+            pickle.dump(data, f)
+
+        self._image_database.clear()
+        self._object_database.clear()
 
 
 class App(webutil.QueueAbstractionClass):
@@ -471,6 +500,7 @@ class App(webutil.QueueAbstractionClass):
         self._cam.settings.save(self._pers.cam_settings_file)
         if self._attitude_est is not None:
             self._attitude_est.config.save(self._pers.attitude_estimation_config_file)
+            self._attitude_est.save_database()
 
     def run(self) -> None:
         if self._cam is None:
