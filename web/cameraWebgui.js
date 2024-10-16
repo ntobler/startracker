@@ -163,6 +163,9 @@ export default {
             let obs_pix = this.stream.obs_pix;
             let cat_pix = this.stream.cat_pix;
             ctx.save()
+
+            ctx.lineCap = "round"
+
             for (let i = 0; i < Math.min(obs_pix.length, cat_pix.length); i++) {
                 let coord = obs_pix[i]
                 ctx.beginPath()

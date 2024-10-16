@@ -230,7 +230,7 @@ class AttitudeEstimation:
             att_res = self._attitude_est(processed_image)
 
         inverse_rotation = scipy.spatial.transform.Rotation.from_quat(att_res.quat)
-        obs_xy = self._attitude_est.image_xyz_to_xy(inverse_rotation.apply(att_res.image_xyz))
+        obs_xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz)
         cat_xy = self._attitude_est.image_xyz_to_xy(att_res.cat_xyz)
         image_size = (image.shape[1], image.shape[0])
 

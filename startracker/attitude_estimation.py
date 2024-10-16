@@ -160,7 +160,6 @@ class AttitudeEstimator:
 
         # Convert vectors into camera frame
         rot = scipy.spatial.transform.Rotation.from_quat(q_est).inv()
-        image_xyz = rot.apply(image_xyz)
         cat_xyz = rot.apply(cat_xyz)
 
         return AttitudeEstimationResult(q_est, n_matches, image_xyz, cat_xyz, id_match, star_mags)
