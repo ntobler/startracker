@@ -40,6 +40,7 @@ jax = {extras = ["cpu"], version = "^0.4.25"}
 startracker = "startracker.main:main"
 startracker-camera-recorder = "startracker.camera_recorder:main"
 startracker-web-gui = "startracker.web_gui:main"
+startracker-starcamcal = "startracker.starcamcal:cli"
 
 [tool.poetry.build]
 script = "build_project.py"
