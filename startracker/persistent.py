@@ -10,6 +10,7 @@ class Persistent:
 
     @classmethod
     def get_instance(cls):
+        """Get the singleton instance of the Persistent class."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

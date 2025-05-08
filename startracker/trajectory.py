@@ -1,9 +1,10 @@
 """Trajectory calculations to tilt startracker to correct attitude."""
 
 import dataclasses
-from typing import Union
+from typing import TypeVar, Union
 
 import numpy as np
+import numpy.typing as npt
 import scipy.spatial.transform
 
 
@@ -242,12 +243,17 @@ def astro_rotation_matrix(
     return rot_matrix
 
 
-def seconds_to_degrees(seconds: Union[float, np.ndarray]):
+T = TypeVar("T", float, npt.NDArray)
+
+
+def seconds_to_degrees(seconds: T) -> T:
+    """Convert seconds to degrees Earth rotation."""
     return seconds * (360 / (24 * 60 * 60))
 
 
-def degrees_to_seconds(degrees: Union[float, np.ndarray]):
-    return degrees / (360 / (24 * 60 * 60))
+def degrees_to_seconds(degrees: T) -> T:
+    """Convert degrees Earth rotation to seconds."""
+    return degrees * ((24 * 60 * 60) / 360)
 
 
 @dataclasses.dataclass
@@ -263,6 +269,15 @@ class PolynomTrajectory:
 
 
 def find_continuous_zero_slice(x: np.ndarray, mid_index: int) -> slice:
+    """Find a slice of zeros in the given array around the mid_index.
+
+    Args:
+        x: input array
+        mid_index: index pointing to a zero value.
+
+    Returns:
+        slice of input array containing zeros
+    """
     assert 0 <= mid_index <= len(x)
     start_index = mid_index - x[mid_index::-1].argmax().item()
     if x[start_index] == 0:
@@ -287,6 +302,7 @@ class TrajectoryCalculator:
         self._motor_solver = motor_solver
 
     def __call__(self, azimuth: float, elevation: float) -> PolynomTrajectory:
+        """Calculate the trajectory polynomial coefficients."""
         seconds = np.linspace(-self._max_seconds / 2, self._max_seconds / 2, 100)
         roll = seconds_to_degrees(seconds)
 

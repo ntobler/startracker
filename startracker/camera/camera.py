@@ -52,6 +52,7 @@ class Camera(abc.ABC):
 
     @property
     def settings(self) -> CameraSettings:
+        """Camera settings instance."""
         return self._settings
 
     @settings.setter

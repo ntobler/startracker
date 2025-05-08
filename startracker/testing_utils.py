@@ -26,6 +26,8 @@ UINT8_MAX = 255
 
 
 class TestingMaterial:
+    """Create a testing directory and calibration file for testing purposes."""
+
     testing_dir: pathlib.Path
     cam_file: pathlib.Path
 
@@ -42,6 +44,7 @@ class TestingMaterial:
             cal.to_json(self.cam_file)
 
     def patch_persistent(self):
+        """Patch the persistent instance to use the testing directory."""
         persistent.Persistent.get_instance().cam_file = self.cam_file
 
 
@@ -118,11 +121,13 @@ class StarImageGenerator:
     def image_from_quaternion(
         self, quat: np.ndarray, *, grid: bool = False
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Create image of stars from a quaternion."""
         rot = scipy.spatial.transform.Rotation.from_quat(quat)
         extrinsic = np.concatenate((rot.as_matrix().T, np.zeros((3, 1))), axis=-1)
         return self.image_from_extrinsic(extrinsic, grid=grid)
 
-    def stars_from_extrinsic(self, extrinsic: np.ndarray):
+    def stars_from_extrinsic(self, extrinsic: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Get star magnitudes and pixel positions from extrinsic matrix."""
         # Take z image vector of the inverted extrinsic
         target_vector = extrinsic[2, :3]
 
@@ -138,6 +143,7 @@ class StarImageGenerator:
         return stars_mags, stars_xy
 
     def image_from_extrinsic(self, extrinsic: np.ndarray, *, grid: bool = False):
+        """Create image of stars from extrinsic matrix."""
         width, height = self.width, self.height
 
         stars_mags, stars_xy = self.stars_from_extrinsic(extrinsic)
@@ -408,6 +414,10 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         self.phi = 0
 
     def get_extrinsic(self) -> np.ndarray:
+        """Get the current extrinsic matrix of the camera.
+
+        Changes with time.
+        """
         t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
 
         self.phi = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
@@ -426,7 +436,8 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         image, _, _ = self._sig.image_from_extrinsic(extrinsic, grid=self.grid)
         return image
 
-    def gui(self):
+    def gui(self) -> None:
+        """Play with this camera in a GUI."""
         ct = CameraTester(self)
         ct.add_arg("t", 0, 60 * 60 * 24, init=0, dtype=float)
         ct.add_arg("theta", -np.pi / 2, np.pi / 2, dtype=float)

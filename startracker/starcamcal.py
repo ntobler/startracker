@@ -213,6 +213,7 @@ def calibrate(
 
 
 def cli(argv: list[str] | None = None) -> int:
+    """Entrypoint for star-based camera calibraion."""
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument(

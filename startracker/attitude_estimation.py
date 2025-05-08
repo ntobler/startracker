@@ -56,6 +56,7 @@ class AttitudeEstimatorConfig(util.PickleDataclass):
     """Timeout for computation in seconds."""
 
     def copy(self) -> Self:
+        """Create a copy of this instance."""
         return dataclasses.replace(self)
 
 
@@ -105,6 +106,7 @@ class AttitudeEstimator:
 
     @property
     def config(self) -> AttitudeEstimatorConfig:
+        """Return copy of the configuration."""
         return self._config.copy()
 
     @config.setter
@@ -123,6 +125,7 @@ class AttitudeEstimator:
             self._config = config
 
     def image_xyz_to_xy(self, image_xyz: np.ndarray) -> np.ndarray:
+        """Convert camera frame XYZ coordinates to image pixel coordinates."""
         image_xy = (self.cal.intrinsic @ image_xyz.T).T
         image_xy = image_xy[..., :2] / image_xy[..., 2:]
         image_xy = kalkam.PointUndistorter(self.cal).distort(image_xy)
@@ -264,6 +267,7 @@ class ImageAcquisitioner:
         self.n_matches = 0
         self.positions = None
         self._attitude_filter = attitude_filter
+        self._thread = None
 
         self._cam_settings = camera.CameraSettings(
             exposure_ms=250,
@@ -289,10 +293,13 @@ class ImageAcquisitioner:
             self._dark_frame = None
 
     def start_thread(self):
-        self._thread = threading.Thread(target=self.run, daemon=True)
+        """Start the image acquisition thread."""
+        if self._thread is not None:
+            raise RuntimeError("Thread already started")
+        self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def run(self):
+    def _run(self):
         cam = camera.RpiCamera(self._cam_settings)
         with cam:
             while True:

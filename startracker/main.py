@@ -9,7 +9,7 @@ from typing import Optional, Type
 
 import numpy as np
 import serial
-from typing_extensions import Never
+from typing_extensions import Never, override
 
 from startracker import attitude_estimation, communication, config, trajectory
 
@@ -109,6 +109,7 @@ class GetStatus(communication.Command):
         self._trajectory_calculator = trajectory_calculator
         self._image_acquisitioner = image_acquisitioner
 
+    @override
     def execute(self, request: EmptyMessage) -> Status:
         _ = request
         quat = self._attitude_filter.attitude_quat
@@ -131,6 +132,7 @@ class SetSettings(communication.Command):
     request_type: Type[communication.Message] = Settings
     response_type: Type[communication.Message] = Acknowledge
 
+    @override
     def execute(self, request: Settings) -> Acknowledge:
         settings = request
         _ = settings
@@ -153,6 +155,7 @@ class CalcTrajectory(communication.Command):
         self._attitude_filter = attitude_filter
         self._trajectory_calculator = trajectory_calculator
 
+    @override
     def execute(self, request: EmptyMessage) -> Trajectory:
         _ = request
         az_el = self._attitude_filter.get_azimuth_elevation()
@@ -190,6 +193,7 @@ class Shutdown(communication.Command):
         self._enable_shutdown = enable_shutdown
         self._shutdown_delay = shutdown_delay
 
+    @override
     def execute(self, request: EmptyMessage) -> Never:
         _ = request
         if self._enable_shutdown:
@@ -211,6 +215,7 @@ class SetAttitudeEstimationMode(communication.Command):
     ):
         self._image_acquisitioner = image_acquisitioner
 
+    @override
     def execute(self, request: AttitudeEstimationMode) -> Status:
         self._image_acquisitioner.mode = request.mode
         return ACK
@@ -229,6 +234,7 @@ class GetStars(communication.Command):
     ):
         self._image_acquisitioner = image_acquisitioner
 
+    @override
     def execute(self, request: EmptyMessage) -> Status:
         _ = request
         positions = self._image_acquisitioner.positions

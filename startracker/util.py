@@ -23,11 +23,13 @@ class PickleDataclass:
         return cls(**dictionary)
 
     def save(self, filename: pathlib.Path) -> None:
+        """Save the object to a file using pickle."""
         with filename.open("wb") as f:
             pickle.dump(self.to_dict(), f)
 
     @classmethod
     def load(cls, filename: pathlib.Path) -> Self:
+        """Load the object from a file using pickle."""
         with filename.open("rb") as f:
             obj = cls.from_dict(pickle.load(f))
         return obj

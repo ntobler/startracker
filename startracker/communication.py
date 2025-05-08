@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Type, TypeVar, Union
 import numpy as np
 import serial
 import serial.serialutil
-from typing_extensions import Self
+from typing_extensions import Self, override
 
 
 class CommunicationTimeoutError(Exception):
@@ -104,6 +104,7 @@ class PacketHandler(serial.Serial):
 
         self._ser.write(length_cmd + payload + crc)
 
+    @override
     def reset_input_buffer(self) -> None:
         self._ser.reset_input_buffer()
 
@@ -135,6 +136,7 @@ class Field:
         self.desc = desc
 
     def c_definition(self, name: str) -> str:
+        """Return definition in the c programming language."""
         c_code = f"{self.c_type} {name};"
         if self.desc is not None:
             c_code += f" // {self.desc}"
@@ -142,9 +144,11 @@ class Field:
         return c_code
 
     def parse(self, value):
+        """Parse value from bytes to python type."""
         return value
 
     def format(self, value):
+        """Format value from python type to bytes."""
         return value
 
 
@@ -158,13 +162,16 @@ class EnumField(Field):
         self.default = enum_type(0)
         self._enum_type = enum_type
 
+    @override
     def parse(self, value) -> enum.Enum:
         return self._enum_type(value)
 
+    @override
     def format(self, value) -> int:
         assert isinstance(value, self._enum_type), f"{value} is not {self._enum_type}"
         return int(value.value)
 
+    @override
     def c_definition(self, name: str) -> str:
         c_code = f"{self._enum_type.__name__} {name};"
         if self.desc is not None:
@@ -173,6 +180,7 @@ class EnumField(Field):
         return c_code
 
     def generate_c_code(self, enum_args: str, indent: int) -> str:
+        """Create c code of message struct definition."""
         _ = enum_args
         c_code = f"typedef enum {self._enum_type.__name__} : {self.c_type} {{\n"
         for k in self._enum_type:
@@ -193,9 +201,11 @@ class StructField(Field):
         self.default = 0
         self.desc = desc
 
+    @override
     def parse(self, value: bytes) -> "Message":
         return self.dtype.from_bytes(value)
 
+    @override
     def format(self, value: "Message") -> bytes:
         assert isinstance(value, self.dtype), f"{value} is not of type {self.dtype}"
         return value.to_bytes()
@@ -211,6 +221,7 @@ class ArrayField(Field):
         self.struct_char = f"{self.byte_size}s"
         self.shape = shape
 
+    @override
     def c_definition(self, name: str) -> str:
         shape = "".join(f"[{x}]" for x in self.shape)
         c_code = f"{self.c_type} {name}{shape};"
@@ -219,9 +230,11 @@ class ArrayField(Field):
         c_code += "\n"
         return c_code
 
+    @override
     def parse(self, value: bytes) -> np.ndarray:
         return np.frombuffer(value, dtype=self._numpy_dtype).reshape(self.shape)
 
+    @override
     def format(self, value: np.ndarray) -> bytes:
         return np.asarray(value, dtype=self._numpy_dtype).tobytes()
 
@@ -233,22 +246,26 @@ class Message:
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> Self:
+        """Decode message from bytes."""
         values = struct.unpack(cls._data_format, payload)
         values = [f.parse(v) for f, v in zip(cls._fields.values(), values)]
         return cls(*values)
 
     def to_bytes(self) -> bytes:
+        """Encode Mesage to bytes."""
         values = [f.format(v) for f, v in zip(self._fields.values(), self.__dict__.values())]
         return struct.pack(self._data_format, *values)
 
     @classmethod
     def print_help(cls) -> None:
+        """Print field types of this message."""
         print(cls.__name__)
         for k, v in cls._fields.items():
             print(f"- {k}: {v.dtype}")
 
     @classmethod
     def generate_c_code(cls, struct_args: str, indent: int) -> str:
+        """Create c code of message struct definition."""
         c_code = f"typedef struct {struct_args} {{\n"
         for k, v in cls._fields.items():
             c_code += " " * indent + v.c_definition(k)
@@ -265,10 +282,7 @@ def array_safe_eq(a: T, b: T) -> bool:
         return True
     if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
         return a.shape == b.shape and (a == b).all()
-    try:
-        return a == b
-    except TypeError:
-        return NotImplemented
+    return a == b
 
 
 def dataclass_eq(dc1: Any, dc2: Any) -> bool:
@@ -282,7 +296,7 @@ def dataclass_eq(dc1: Any, dc2: Any) -> bool:
     return all(array_safe_eq(a1, a2) for a1, a2 in zip(t1, t2))
 
 
-def make_message(cls: type) -> type:
+def make_message(cls: type) -> type[Message]:
     """Compose a message dataclass."""
     fields: Dict[str, Field] = {}
     for attr_name in cls.__dict__:
@@ -384,10 +398,15 @@ class Command(abc.ABC):
     response_type: Type[Message] = Message
 
     @abc.abstractmethod
-    def execute(self, payload: Message) -> Message: ...
+    def execute(self, payload: Message) -> Message:
+        """Execute command.
+
+        Override this method to implement the command logic.
+        """
 
     @classmethod
     def generate_c_code(cls):
+        """Create c code of command struct definition."""
         c_code = f"{cls.response_type.__name__}* {cls.__name__}({cls.request_type.__name__});"
         c_code += f" // cmd_id: {cls.cmd}\n"
         return c_code

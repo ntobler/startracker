@@ -11,6 +11,7 @@ import cairo
 import cv2
 import numpy as np
 from numpy.typing import ArrayLike
+from typing_extensions import override
 
 
 def _parse_version(version_str: str) -> int:
@@ -257,6 +258,7 @@ class ChArUcoPattern(CalibrationPattern):
 
         self.marker_ids = np.arange(len(self.marker_positions))
 
+    @override
     def to_dict(self) -> dict:
         d = {
             "type": type(self).__name__,
@@ -266,10 +268,12 @@ class ChArUcoPattern(CalibrationPattern):
         }
         return d
 
+    @override
     @classmethod
     def from_dict(cls, d: dict):
         return cls(d["width"], d["height"], d["square_size"])
 
+    @override
     def draw_cairo(self, ctx: cairo.Context):
         # Draw chessboard squares
         s = self.square_size
@@ -289,6 +293,7 @@ class ChArUcoPattern(CalibrationPattern):
             self._aruco.draw(ctx, marker_id, self.markersize)
             ctx.restore()
 
+    @override
     def find_in_image(
         self, image: np.ndarray, *, plot: bool = False
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -364,6 +369,7 @@ class ArUco:
             self.aruco_dict = cv2.aruco.getPredefinedDictionary(aruco_dict_def)
 
     def draw(self, ctx: cairo.Context, marker_id: int, marker_size: float):
+        """Draw an ArUco marker on a cairo context."""
         c = self.marker_pixel_count
 
         ctx.save()
@@ -384,6 +390,7 @@ class ArUco:
         ctx.restore()
 
     def detect(self, image: np.ndarray):
+        """Detect ArUco markers in the image."""
         try:
             # OpenCV < 4.7.x
             aruco_params = cv2.aruco.DetectorParameters_create()
@@ -398,6 +405,7 @@ class ArUco:
         return np.asarray(all_corners), all_ids
 
     def create_charuco_board(self, width: int, height: int, square_size: float, marker_size: float):
+        """Create a cv2 ChArUco board instance."""
         try:
             # OpenCV < 4.7.x
             charuco_board = cv2.aruco.CharucoBoard_create(
@@ -411,6 +419,7 @@ class ArUco:
         return charuco_board
 
     def detect_board(self, image: np.ndarray, charuco_board):
+        """Detect a ChArUco board in the image."""
         try:
             # OpenCV < 4.7.x
             all_corners, all_ids = self.detect(image)
@@ -438,6 +447,7 @@ class IntrinsicCalibration:
     """Width and height in pixels."""
 
     def cos_phi(self, angle_margin_factor: float = 1) -> float:
+        """Get cosinus of angle between optical axis and frame corner."""
         return float(
             np.cos(
                 angle_margin_factor
@@ -490,6 +500,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
     """Squared reprojection error distance for all image points."""
 
     def plot(*, self, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
+        """Plot calibration quality using matplotlib."""
         import matplotlib.pyplot as plt
         from scipy.interpolate import griddata
 

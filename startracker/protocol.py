@@ -7,10 +7,10 @@ from startracker import communication, main
 
 
 def generate_code(c_file: Union[str, pathlib.Path] = "out.c"):
+    """Utility function to generate code for the STM project."""
     c_file = pathlib.Path(c_file)
     h_file = c_file.parent / (c_file.stem + ".h")
 
-    """Utility function to generate code for the STM project."""
     communication.gen_code_with_dependencies(
         [
             main.Acknowledge,

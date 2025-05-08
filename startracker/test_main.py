@@ -4,6 +4,7 @@ import queue
 import threading
 
 import serial
+from typing_extensions import override
 
 from startracker import attitude_estimation, communication, config, main, testing_utils
 
@@ -14,17 +15,20 @@ class MockSerial(serial.SerialBase):
         self.mosi_channel = queue.Queue()
         self.miso_channel = queue.Queue()
 
-    def read(self, count: int):
+    @override
+    def read(self, count: int) -> bytes:
         ret = bytes(self.mosi_channel.get() for _ in range(count))
         print(f"Device read: {ret}")
         return ret
 
-    def write(self, data: bytes):
+    @override
+    def write(self, data: bytes) -> None:
         print(f"Device wrote: {data}")
         for x in data:
             self.miso_channel.put(x)
 
-    def reset_input_buffer(self):
+    def reset_input_buffer(self) -> None:
+        """Clear the input buffer."""
         while not self.mosi_channel.empty():
             self.mosi_channel.get_nowait()
 
@@ -34,15 +38,18 @@ class MockSerialMaster(serial.SerialBase):
         super().__init__()
         self.test_serial = test_serial
 
-    def read(self, count: int):
+    @override
+    def read(self, count: int) -> bytes:
         return bytes(self.test_serial.miso_channel.get() for _ in range(count))
 
-    def write(self, data: bytes):
+    @override
+    def write(self, data: bytes) -> None:
         print(f"Master wrote: {data}")
         for x in data:
             self.test_serial.mosi_channel.put(x)
 
     def reset_input_buffer(self):
+        """Clear the input buffer."""
         while not self.test_serial.miso_channel.empty():
             self.test_serial.miso_channel.get_nowait()
 
@@ -111,12 +118,14 @@ class MasterEmulator:
         print("success")
 
     def send(self, command: type[communication.Command], tx_message: communication.Message):
+        """Send a command to the device."""
         assert command.request_type == type(tx_message)
         self.ser.write_cmd(command.cmd, tx_message.to_bytes())
 
     def transceive(
         self, command: type[communication.Command], tx_message: communication.Message
     ) -> communication.Message:
+        """Send a command and receive the response."""
         self.ser.reset_input_buffer()
         self.send(command, tx_message)
         cmd, payload = self.ser.read_cmd()
@@ -127,7 +136,8 @@ class MasterEmulator:
         rx_message = command.response_type.from_bytes(payload)
         return rx_message
 
-    def assert_response(self, command, rx_message, rx_expected, tx_message):
+    def assert_response(self, command, rx_message, rx_expected, tx_message) -> None:
+        """Assert that the response message is as expected."""
         assert rx_message == rx_expected, (
             f"Command {command} with arguments {tx_message} "
             f"returned {rx_message} instead of {rx_expected}"

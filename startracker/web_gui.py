@@ -132,6 +132,8 @@ def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None) -> list:
 
 
 class AxisCalibrator:
+    """Class to calibrate the camera axis to the star tracker axis."""
+
     axis_rot: scipy.spatial.transform.Rotation
     error_rad: float
 
@@ -147,12 +149,15 @@ class AxisCalibrator:
             self.axis_rot = scipy.spatial.transform.Rotation.identity()
 
     def put(self, quat: np.ndarray) -> None:
+        """Add a quaternion to the calibration set."""
         self._calibration_rots.append(quat)
 
     def reset(self) -> None:
+        """Clear the calibration set."""
         self._calibration_rots.clear()
 
     def calibrate(self) -> float:
+        """Perform calibration using the current set of quaternions."""
         if len(self._calibration_rots) < 2:
             raise ValueError("Not enough data to calibrate")
 
@@ -170,6 +175,7 @@ class AxisCalibrator:
         return error_std
 
     def count(self) -> int:
+        """Return the number of calibration images."""
         return len(self._calibration_rots)
 
 
@@ -214,6 +220,7 @@ class AttitudeEstimation:
 
     @property
     def config(self) -> attitude_estimation.AttitudeEstimatorConfig:
+        """Return the attitude estimator configuration."""
         return self._attitude_est.config
 
     @config.setter
@@ -221,6 +228,7 @@ class AttitudeEstimation:
         self._attitude_est.config = value
 
     def process(self, image: npt.NDArray[np.uint8]) -> tuple[dict, npt.NDArray[np.uint8]]:
+        """Process the image and return the attitude estimation result."""
         with util.TimeMeasurer() as tm1:
             kernel = np.ones((7, 7), np.uint8)
             processed_image = cv2.morphologyEx(image, cv2.MORPH_TOPHAT, kernel)
@@ -311,6 +319,7 @@ class AttitudeEstimation:
         self._camera_frame = to_rounded_list(points.T, 2)
 
     def save_database(self) -> None:
+        """Save the fine calibration database to the filesystem."""
         if len(self._image_database) == 0:
             return
         data = {
@@ -406,10 +415,12 @@ class App(webutil.QueueAbstractionClass):
 
     @webutil.QueueAbstractionClass.queue_abstract
     def get_state(self) -> dict:
+        """Geturn the application state."""
         return self._get_state()
 
     @webutil.QueueAbstractionClass.queue_abstract
     def set_settings(self, params: dict[str, float | int | bool]) -> dict:
+        """Set camera settings from a config dictionary."""
         if self._cam is None:
             raise ValueError("Camera is not initialized")
 
@@ -439,6 +450,7 @@ class App(webutil.QueueAbstractionClass):
 
     @webutil.QueueAbstractionClass.queue_abstract
     def capture(self, mode: CaptureMode) -> dict:
+        """Capture an image in the given mode."""
         mode = CaptureMode(mode)
         self._logger.info(f"Capture {mode.value}")
         self._camera_job = mode.value
@@ -446,6 +458,20 @@ class App(webutil.QueueAbstractionClass):
 
     @webutil.QueueAbstractionClass.queue_abstract
     def axis_calibration(self, command: str) -> dict:
+        """Execute a camera to axis alignment calibration.
+
+        Images should be made from a different angle.
+
+        - put: Add the current image to the set of calibration images
+        - reset: Clear the calibration image set
+        - calibrate: Perform calibration using the recorded set
+
+        Args:
+            command: command to execute
+
+        Returns:
+            Axis calibration state dictionary
+        """
         if self._axis_calibrator is None or self._attitude_est is None:
             return {}
         if command == "put":
@@ -463,6 +489,18 @@ class App(webutil.QueueAbstractionClass):
 
     @webutil.QueueAbstractionClass.queue_abstract
     def camera_calibration(self, command: str) -> dict:
+        """Execute a camera calibration command.
+
+        - put: Add the current image to the set of calibration images
+        - reset: Clear the calibration image set
+        - calibrate: Perform calibration using the recorded set
+
+        Args:
+            command: command to execute
+
+        Returns:
+            State dictionary
+        """
         if command == "put":
             image = self._image_cache
             if image is not None:
@@ -478,6 +516,7 @@ class App(webutil.QueueAbstractionClass):
 
     @webutil.QueueAbstractionClass.queue_abstract
     def calibration_pattern(self) -> str:
+        """Return SVG image of the calibration pattern."""
         with tempfile.TemporaryDirectory() as td:
             file = pathlib.Path(td) / "pattern.svg"
             self._intrinsic_calibrator.pattern.export_svg(file)
@@ -487,6 +526,7 @@ class App(webutil.QueueAbstractionClass):
 
     @webutil.QueueAbstractionClass.queue_abstract
     def calibration_result(self) -> bytes:
+        """Return PNG image of the calibration result."""
         with io.BytesIO() as buffer:
             self._intrinsic_calibrator.plot_cal_png(buffer)
             buffer.seek(0)
@@ -503,6 +543,7 @@ class App(webutil.QueueAbstractionClass):
             self._attitude_est.save_database()
 
     def run(self) -> None:
+        """Run the backend application."""
         if self._cam is None:
             raise RuntimeError("Camera hasn't been initialized")
         self._logger.info("Starting camera")
@@ -579,6 +620,7 @@ class WebApp:
         return send_from_directory("../web", filename)
 
     def run(self) -> None:
+        """Start the web application."""
         app_thread = threading.Thread(target=self._run_app)
         try:
             app_thread.start()
@@ -658,6 +700,7 @@ class WebApp:
 
 
 def main() -> None:
+    """Web application main entry point."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

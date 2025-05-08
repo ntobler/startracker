@@ -12,6 +12,7 @@ from startracker import camera
 
 
 def main():
+    """Utility CLI to record images to the file system."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

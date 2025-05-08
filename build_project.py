@@ -14,6 +14,7 @@ output_file = project_path / "web/vue.esm-browser.prod.min.js"
 
 
 def download_vue() -> None:
+    """Download the `vue.js` library from a CDN to use host locally."""
     print(f"Downloading Vue.js from {vue_url}...")
     try:
         urllib.request.urlretrieve(vue_url, output_file)  # noqa: S310

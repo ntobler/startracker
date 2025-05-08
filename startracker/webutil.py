@@ -20,6 +20,12 @@ class QueueAbstractionClass:
 
     @staticmethod
     def queue_abstract(fun):
+        """Function wrapper to abstract a call through a queue.
+
+        The wrapped function will only be handles by invoking the
+        `_process_pending_calls` method.
+        """
+
         @functools.wraps(fun)
         def inner(*args, **kwargs):
             return_queue = queue.Queue(maxsize=1)
@@ -35,7 +41,7 @@ class QueueAbstractionClass:
         return inner
 
     def _process_pending_calls(self) -> None:
-        """Process all pending function calls to functions wrapped with queue_abstract."""
+        """Process all pending function calls to functions wrapped with `queue_abstract`."""
         try:
             while True:
                 method, args, kwargs, return_queue = self._calls_queue.get(block=False)
@@ -54,17 +60,21 @@ T = TypeVar("T")
 
 
 class DataDispatcher(Generic[T]):
+    """Thread save one-to-many distributor of objects."""
+
     def __init__(self) -> None:
         self._data = None
         self._data_lock = threading.Lock()
         self._data_changed = threading.Condition(lock=self._data_lock)
 
     def put(self, data: T) -> None:
+        """Put an object to be consumed by all listeners."""
         self._data = data
         with self._data_lock:
             self._data_changed.notify_all()
 
     def get_blocking(self) -> T:
+        """Get the next put object in blocking mode."""
         with self._data_lock:
             self._data_changed.wait()
         assert self._data is not None
