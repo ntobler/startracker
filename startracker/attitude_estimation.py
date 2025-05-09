@@ -268,6 +268,7 @@ class ImageAcquisitioner:
         self.positions = None
         self._attitude_filter = attitude_filter
         self._thread = None
+        self._terminate = False
 
         self._cam_settings = camera.CameraSettings(
             exposure_ms=250,
@@ -292,17 +293,23 @@ class ImageAcquisitioner:
         except OSError:
             self._dark_frame = None
 
-    def start_thread(self):
+    def __enter__(self) -> Self:
         """Start the image acquisition thread."""
         if self._thread is not None:
             raise RuntimeError("Thread already started")
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self._terminate = True
+        print("Waiting for thread to finish")
+        self._thread.join()
 
     def _run(self):
         cam = camera.RpiCamera(self._cam_settings)
         with cam:
-            while True:
+            while not self._terminate:
                 if self.mode == AttitudeEstimationModeEnum.RUNNING:
                     if self._attitude_estimator is None:
                         self.mode = AttitudeEstimationModeEnum.FAULT

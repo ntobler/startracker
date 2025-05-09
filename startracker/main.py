@@ -9,7 +9,7 @@ from typing import Optional, Type
 
 import numpy as np
 import serial
-from typing_extensions import Never, override
+from typing_extensions import Never, Self, override
 
 from startracker import attitude_estimation, communication, config, trajectory
 
@@ -270,22 +270,27 @@ class App:
         )
         tc = trajectory.TrajectoryCalculator(s.trajectory.max_seconds, s.trajectory.max_dist, ms)
         af = attitude_estimation.AttitudeFilter()
-        ia = attitude_estimation.ImageAcquisitioner(af)
+        self._ia = attitude_estimation.ImageAcquisitioner(af)
 
         # All available commands
         self._commands = [
-            GetStatus(af, tc, ia),
+            GetStatus(af, tc, self._ia),
             SetSettings(),
             CalcTrajectory(af, tc),
             Shutdown(enable_shutdown=enable_shutdown, shutdown_delay=s.shutdown_delay),
-            SetAttitudeEstimationMode(ia),
-            GetStars(ia),
+            SetAttitudeEstimationMode(self._ia),
+            GetStars(self._ia),
         ]
 
         # Run communication handler to process incoming commands.
         self._ser = serial.Serial(config.settings.serial_port) if ser is None else ser
 
-        ia.start_thread()
+    def __enter__(self) -> Self:
+        self._ia.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self._ia.__exit__(exc_type, exc_value, traceback)
 
     def __call__(self) -> int:
         """Run main loop of the command handler."""
@@ -316,7 +321,8 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        return App(enable_shutdown=args.enable_shutdown)()
+        with App(enable_shutdown=args.enable_shutdown) as app:
+            return app()
     except Exception:
         logging.critical("Unhandled exception", exc_info=sys.exc_info())
         return -1

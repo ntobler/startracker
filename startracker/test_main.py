@@ -4,7 +4,7 @@ import queue
 import threading
 
 import serial
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from startracker import attitude_estimation, communication, config, main, testing_utils
 
@@ -61,8 +61,15 @@ class MasterEmulator:
     ):
         self.ser = ser
 
-        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread = threading.Thread(target=self._run, daemon=False)
+
+    def __enter__(self) -> Self:
         self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.thread.join()
+        print("Thread joined")
 
     def _run(self):
         test_data_table = [
@@ -152,10 +159,8 @@ def test_main():
     device_serial = MockSerial()
     master_serial = MockSerialMaster(device_serial)
     packet_handler = communication.PacketHandler(master_serial)
-    MasterEmulator(packet_handler)
-
-    m = main.App(ser=device_serial)
-    returncode = m()
+    with MasterEmulator(packet_handler), main.App(ser=device_serial) as app:
+        returncode = app()
 
     assert returncode == 5
 
