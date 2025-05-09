@@ -1,0 +1,117 @@
+[tool.poetry]
+name = "startracker"
+version = "0.1.0"
+description = "Open-source Travel Photography Star Tracker"
+authors = ["Nicolas Tobler <nitobler@gmail.com>"]
+readme = "README.md"
+
+include = [
+    { path = "startracker/default_config.yml", format = ["sdist", "wheel"] }
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^1.24.2"
+opencv-python-headless = ">=4.9.0,<4.10.0"
+scipy = "^1.12.0"
+flask = "^3.0.2"
+flask-sock = "^0.7.0"
+pyserial = "^3.5"
+dynaconf = "^3.2.4"
+pycairo = "^1.26.0"
+ruststartracker = { git = "https://github.com/ntobler/ruststartracker.git" }
+typing-extensions = "^4.12.2"
+
+[tool.poetry.group.dev.dependencies]
+viztracer = "^0.16.2"
+pre-commit = "^3.8.0"
+pytest = "^8.0.2"
+matplotlib = "^3.8.3"
+flake8 = "^7.0.0"
+flake8-pyproject = "^1.2.3"
+pytest-xdist = "^3.6.1"
+pytest-cov = "^5.0.0"
+ruff = "^0.8.2"
+scipy-stubs = "^1.14.1.5"
+
+[tool.poetry.group.experimental.dependencies]
+jax = {extras = ["cpu"], version = "^0.4.25"}
+
+[tool.poetry.scripts]
+startracker = "startracker.main:main"
+startracker-camera-recorder = "startracker.camera_recorder:main"
+startracker-web-gui = "startracker.web_gui:main"
+startracker-starcamcal = "startracker.starcamcal:cli"
+
+[tool.poetry.build]
+script = "build_project.py"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+addopts = "--cov=startracker --cov-report xml"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # pydocstring
+    "D",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+    # boolean trap
+    "FBT001",
+    # Built in shadowing
+    "A001",
+    "C416",
+    "NPY",
+    "PERF",
+    "W",
+    # Pep8 naming
+    "N",
+    "UP",
+    "S",
+    "C4",
+    "DTZ",
+    "T10",
+    "EXE",
+    "ISC",
+    "ICN",
+    "LOG",
+    "PIE",
+    "Q",
+    "RET",
+    "SLF001",
+    "TID",
+    "TCH",
+    "ARG",
+    "PTH",
+]
+ignore = [
+    "D105",
+    "D107",
+    "D101",
+    # "D102",
+    "S101", # Use of `assert` detected
+    "S104", # Possible binding to all interfaces
+    "S301", # Pickle
+    "ISC001", # conflict with formatter
+    "RET504", # Reduces readability in my opinion
+]
+pydocstyle.convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"{test,stm32,startracker/scripts}*" = ["D100", "D103", "SLF001", "ANN", "S101"]

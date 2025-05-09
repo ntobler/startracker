@@ -1,0 +1,23 @@
+# Service to run startracker upon startup
+# install guide:
+# sudo cp startracker.service /etc/systemd/system/startracker.service
+# sudo systemctl daemon-reload
+# sudo systemctl start startracker.service
+# sudo systemctl status startracker.service
+# sudo systemctl enable startracker.service
+
+[Unit]
+Description=Startracker Application Service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/
+ExecStart=/home/pi/venv/bin/startracker-web-gui
+TimeoutStopSec=15
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

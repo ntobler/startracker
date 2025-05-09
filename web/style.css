@@ -1,0 +1,102 @@
+body {
+    position: fixed;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    font-family: Consolas, monospace;
+    background-color: #111;
+    font-size: 0.8em;
+}
+
+#footerBar {
+    position: fixed;
+    width: 100%;
+    left: 0;
+    bottom: 0;
+    color: red;
+    background-color: #00000080;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+#footerBar div {
+    line-height: 2em;
+    margin: 0 1em;
+}
+
+#footerBar div {
+    line-height: 2em;
+    margin: 0 1em;
+}
+
+input[type=number] {
+    width: 3em;
+    font-family: Consolas, monospace;
+    border: 2px solid red;
+    background-color: #0000;
+    color: red;
+}
+
+button[type=button] {
+    font-family: Consolas, monospace;
+    border: 2px solid red;
+    border-radius: 4px;
+    background-color: #0000;
+    color: red;
+    margin: 0 0.25em
+}
+
+button[type=button]:hover {
+    border-color: white;
+    color: white;
+}
+
+button[type=button]:active {
+    border-color: rgb(182, 182, 182);
+    color: rgb(201, 201, 201);
+}
+
+button[type=button].active {
+    background-color: red;
+    color: black;
+}
+
+input.error {
+    background: repeating-linear-gradient(-45deg,
+            transparent,
+            transparent 0.1em,
+            #f004 0.1em,
+            #f004 0.2em);
+}
+
+select {
+    width: 3em;
+    font-family: Consolas, monospace;
+    border: 2px solid red;
+    background-color: #0000;
+    color: red;
+    border-color: red;
+}
+
+#view {
+    position: fixed;
+    top: 1em;
+    right: 1em;
+}
+
+#view a {
+    display: inline-block;
+    text-decoration: none;
+    color: red;
+    padding: 1em;
+    text-align: center;
+    border: 2px solid red;
+    border-radius: 5px;
+    background-color: black;
+}
+
+#view a:hover {
+    color: white;
+    border-color: white;
+}
