@@ -54,32 +54,45 @@
         <canvas id="canvas" width="100" height="100"></canvas>
         <div id="view"><a href="./axisAlign.html">Axis Align View</a></div>
         <div id="footerBar">
-            <div>Exposure <input type="number" step="1" v-model.number="camera_settings.exposure_ms"
-                    @change="setSettings" style="width: 4em" /> ms</div>
-            <div>Gain <input type="number" v-model.number="camera_settings.analog_gain" @change="setSettings" /></div>
-            <div>Digital gain
-                <select v-model.number="camera_settings.digital_gain" @change="setSettings">
+            <div title="Camera exposure and resolution settings">
+                Exposure
+                <input type="number" step="1" v-model.number="camera_settings.exposure_ms"
+                    @change="setSettings" style="width: 4em" title="Exposure setting of the camera in milliseconds"  /> ms
+                Gain
+                <input type="number" v-model.number="camera_settings.analog_gain" @change="setSettings" title="Analog gain setting of the camera" />
+                Digital gain
+                <select v-model.number="camera_settings.digital_gain" @change="setSettings" title="Digital gain setting of the camera">
                     <option>1</option>
                     <option>2</option>
                     <option>4</option>
                 </select>
-            </div>
-            <div>Binning
-                <select v-model.number="camera_settings.binning" @change="setSettings">
+                Binning
+                <select v-model.number="camera_settings.binning" @change="setSettings" title="Binning (combination of pixels)">
                     <option>1</option>
                     <option>2</option>
                     <option>4</option>
                     <option>8</option>
                 </select>
+                <div class="help">
+                    <b>Camera settings</b><br>
+                    Set camera exposure, gain, and binning settings to optimize the image quality.
+                </div>
             </div>
-            <div>
+            <div title="Camera aquisition controls">
                 Capture
-                <button type="button" @click="capture('single')">Single</button>
-                <button type="button" @click="capture('continuous')">Continuous</button>
-                <button type="button" @click="capture('stop')">Stop</button>
-                <button type="button" @click="capture('darkframe')">Darkframe</button>
+                <button type="button" @click="capture('single')" title="Capture a single image">Single</button>
+                <button type="button" @click="capture('continuous')" title="Capture continuously">Continuous</button>
+                <button type="button" @click="capture('stop')" title="Halt continuous capture">Stop</button>
+                <button type="button" @click="capture('darkframe')" title="Record a darkframe for noise compensation">Darkframe</button>
+                <div class="help">
+                    <b>Camera aquisition controls</b><br>
+                    Capture a single image, start continuous capture, stop continuous capture, or record a darkframe for noise compensation.
+                    The darkframe is used to remove the static noise from the image due to imperfections of the sensor.
+                    Attach the camera lid to record a darkframe.
+                    Use continuous capture mode for normal operation.
+                </div>
             </div>
-            <div>
+            <div title="Pattern generation for camera calibration">
                 Pattern
                 <input type="number" value="13" v-model.number="intrinsic_calibrator.pattern_width"
                     @change="setSettings" size="0" /> x
@@ -89,8 +102,14 @@
                     size="1" /> mm
                 <button type="button"
                     onclick="window.open('api/calibration_pattern', '_blank'); return false;">Open</button>
+                <div class="help">
+                    <b>Pattern generation for camera calibration</b><br>
+                    Before the algorithm can be used, the camera needs to be calibrated.
+                    Generate a calibration pattern with the desired size and open it in a browser displayed on a big screen, such as a TV.
+                    The bigger the pattern, the better the calibration result, as the camera should be focused to infinity.
+                </div>
             </div>
-            <div>
+            <div title="Camera calibration controls">
                 Calibration
                 <button type="button" @click="putCalibrationImage">Put {{ intrinsic_calibrator.index > 0 ?
                     intrinsic_calibrator.index : ""}}</button>
@@ -98,20 +117,48 @@
                 <button type="button" @click="calibrate">Calibrate</button>
                 <button type="button"
                     onclick="window.open('api/calibration_result', '_blank'); return false;">Result</button>
+                <div class="help">
+                    <b>Camera calibration</b><br>
+                    Capture the calibration pattern displayed on a big screen with the camera and click "Put" to add the image to the calibration set.
+                    The calibration pattern should be somewhat in focus (given that the focus is at infinity to see stars) and the camera should be moved around to capture the pattern from different angles.
+                    After approx 10 images have been recorded, click "Calibrate" to start the calibration process.
+                    This might take several tens seconds, as the Raspberry Pi is not the fastest computer.
+                    After the calibration is finished, the result can be viewed by clicking "Result".
+                    Repeat if the result is not satisfactory.
+                </div>
             </div>
-            <div>
+            <div title="Display controls for camera image">
                 Display
                 <button type="button" @click="toggleBrightness()">Brightness {{ brightness }}x</button>
                 <button type="button" @click="toggleOverlay()" id="overlay">Attitude</button>
+                <div class="help">
+                    <b>Display settings</b><br>
+                    The UI brightness of the image can be adjusted, and the star detection overlay can be toggled on and off.
+                </div>
             </div>
-            <div v_if="attitude != {}">Min matches <input type="number" value="40" v-model.number="attitude.min_matches"
-                    @change="setSettings" size="1" /></div>
-            <div v_if="attitude != {}">Pixel tolerance <input type="number" value="40"
-                    v-model.number="attitude.pixel_tolerance" @change="setSettings" size="1" /></div>
-            <div v_if="attitude != {}">Timeout (s) <input type="number" value="40"
-                    v-model.number="attitude.timeout_secs" @change="setSettings" size="1" /></div>
-            <div v_if="attitude != {}">
-                Tracked: {{stream.n_matches}} Times: {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms {{stream.post_processing_time}}ms
+            <div v_if="attitude != {}" title="Attitude estimation settings">
+                Min matches <input type="number" value="40" v-model.number="attitude.min_matches"
+                        @change="setSettings" size="1" />
+                Pixel tolerance <input type="number" value="40"
+                        v-model.number="attitude.pixel_tolerance" @change="setSettings" size="1" />
+                Timeout (s) <input type="number" value="40"
+                        v-model.number="attitude.timeout_secs" @change="setSettings" size="1" />
+                <div class="help">
+                    <b>Attitude estimation algorithm settings</b><br>
+                    The minimum number of stars needed to calculate the attitude, the pixel tolerance for matching stars,
+                    and the timeout for the algorithm can be set here.
+                </div>
+            </div>
+            <div v_if="stream != {}" title="Attitude estimation results">
+                Tracked: {{stream.n_matches}}
+                Times: {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms, {{stream.post_processing_time}}ms
+                <div class="help">
+                    <b>Attitude estimation results</b><br>
+                    The number of stars detected (encircled in red), and the time taken for each processing step (image processing, attitude estimation, post processing).
+                </div>
+            </div>
+            <div style="margin-left: auto;">
+                <button type="button" @click="showHelp">?</button>
             </div>
         </div>
     </div>

@@ -62,3 +62,48 @@ export function api(url, payload=null, onSuccess=null, onFailure=null) {
         console.error('Error:', error);
     });
 }
+
+export class HelpDisplay {
+    constructor(container) {
+        this.container = container;
+        this.helpDivs = Array.from(container.querySelectorAll('.help'));
+        this.helpActive = false;
+        this.currentIndex = 0;
+
+        this.helpDivs.forEach((div, index) => {
+            div.onclick = () => this.handleDivClick(index);
+        });
+    }
+
+    handleDivClick(index) {
+        const currentDiv = this.helpDivs[index];
+        currentDiv.style.display = 'none';
+        currentDiv.parentNode.classList.remove("sine-blinking");
+
+        if (index < this.helpDivs.length - 1) {
+            const nextDiv = this.helpDivs[index + 1];
+            nextDiv.style.display = 'block';
+            nextDiv.parentNode.classList.add("sine-blinking");
+            this.currentIndex = index + 1;
+        } else {
+            this.currentIndex = 0;
+            this.helpActive = false;
+        }
+    }
+
+    toggleHelp() {
+        if (this.helpDivs.length === 0) return;
+
+        const currentDiv = this.helpDivs[this.currentIndex];
+        if (!this.helpActive) {
+            this.helpActive = true;
+            currentDiv.style.display = 'block';
+            currentDiv.parentNode.classList.add("sine-blinking");
+        } else {
+            this.helpActive = false;
+            currentDiv.style.display = 'none';
+            currentDiv.parentNode.classList.remove("sine-blinking");
+            this.currentIndex = 0;
+        }
+    }
+}
