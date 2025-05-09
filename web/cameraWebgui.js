@@ -51,6 +51,7 @@ export default {
         onmessage(response) {
             this.stream = JSON.parse(response.data)
             this.redraw()
+            document.getElementById('footerBar').style.display = "flex"
         },
         connectStreamWebSocket() {
             let url = 'ws://' + window.location.host + "/api/stream";

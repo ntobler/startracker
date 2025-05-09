@@ -53,33 +53,35 @@
         <img id="image" src="" alt="Image">
         <canvas id="canvas" width="100" height="100"></canvas>
         <div id="view"><a href="./axisAlign.html">Axis Align View</a></div>
-        <div id="footerBar">
-            <div>Exposure <input type="number" step="1" v-model.number="camera_settings.exposure_ms"
-                    @change="setSettings" style="width: 4em" /> ms</div>
-            <div>Gain <input type="number" v-model.number="camera_settings.analog_gain" @change="setSettings" /></div>
-            <div>Digital gain
-                <select v-model.number="camera_settings.digital_gain" @change="setSettings">
+        <div id="footerBar" style="display: none;">
+            <div title="Camera exposure and resolution settings">
+                Exposure
+                <input type="number" step="1" v-model.number="camera_settings.exposure_ms"
+                    @change="setSettings" style="width: 4em" title="Exposure setting of the camera in milliseconds"  /> ms
+                Gain
+                <input type="number" v-model.number="camera_settings.analog_gain" @change="setSettings" title="Analog gain setting of the camera" />
+                Digital gain
+                <select v-model.number="camera_settings.digital_gain" @change="setSettings" title="Digital gain setting of the camera">
                     <option>1</option>
                     <option>2</option>
                     <option>4</option>
                 </select>
-            </div>
-            <div>Binning
-                <select v-model.number="camera_settings.binning" @change="setSettings">
+                Binning
+                <select v-model.number="camera_settings.binning" @change="setSettings" title="Binning (combination of pixels)">
                     <option>1</option>
                     <option>2</option>
                     <option>4</option>
                     <option>8</option>
                 </select>
             </div>
-            <div>
+            <div title="Camera recording controls">
                 Capture
-                <button type="button" @click="capture('single')">Single</button>
-                <button type="button" @click="capture('continuous')">Continuous</button>
-                <button type="button" @click="capture('stop')">Stop</button>
-                <button type="button" @click="capture('darkframe')">Darkframe</button>
+                <button type="button" @click="capture('single')" title="Capture a single image">Single</button>
+                <button type="button" @click="capture('continuous')" title="Capture continuously">Continuous</button>
+                <button type="button" @click="capture('stop')" title="Halt continusous capture">Stop</button>
+                <button type="button" @click="capture('darkframe')" title="Record a darkframe for noise compensation">Darkframe</button>
             </div>
-            <div>
+            <div title="Pattern generation for camera calibration">
                 Pattern
                 <input type="number" value="13" v-model.number="intrinsic_calibrator.pattern_width"
                     @change="setSettings" size="0" /> x
@@ -90,7 +92,7 @@
                 <button type="button"
                     onclick="window.open('api/calibration_pattern', '_blank'); return false;">Open</button>
             </div>
-            <div>
+            <div title="Camera calibration controls">
                 Calibration
                 <button type="button" @click="putCalibrationImage">Put {{ intrinsic_calibrator.index > 0 ?
                     intrinsic_calibrator.index : ""}}</button>
@@ -99,19 +101,22 @@
                 <button type="button"
                     onclick="window.open('api/calibration_result', '_blank'); return false;">Result</button>
             </div>
-            <div>
+            <div title="Display controls for camera image">
                 Display
                 <button type="button" @click="toggleBrightness()">Brightness {{ brightness }}x</button>
                 <button type="button" @click="toggleOverlay()" id="overlay">Attitude</button>
             </div>
-            <div v_if="attitude != {}">Min matches <input type="number" value="40" v-model.number="attitude.min_matches"
-                    @change="setSettings" size="1" /></div>
-            <div v_if="attitude != {}">Pixel tolerance <input type="number" value="40"
-                    v-model.number="attitude.pixel_tolerance" @change="setSettings" size="1" /></div>
-            <div v_if="attitude != {}">Timeout (s) <input type="number" value="40"
-                    v-model.number="attitude.timeout_secs" @change="setSettings" size="1" /></div>
-            <div v_if="attitude != {}">
-                Tracked: {{stream.n_matches}} Times: {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms {{stream.post_processing_time}}ms
+            <div v_if="attitude != {}" title="Attitude estimation settings">
+                Min matches <input type="number" value="40" v-model.number="attitude.min_matches"
+                        @change="setSettings" size="1" />
+                Pixel tolerance <input type="number" value="40"
+                        v-model.number="attitude.pixel_tolerance" @change="setSettings" size="1" />
+                Timeout (s) <input type="number" value="40"
+                        v-model.number="attitude.timeout_secs" @change="setSettings" size="1" />
+            </div>
+            <div v_if="stream != {}" title="Attitude estimation results">
+                Tracked: {{stream.n_matches}}
+                Times: {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms, {{stream.post_processing_time}}ms
             </div>
         </div>
     </div>

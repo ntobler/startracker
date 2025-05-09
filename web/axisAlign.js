@@ -33,6 +33,7 @@ export default {
                 })
             if (this.history.length > 20) this.history.shift();
             this.redraw()
+            document.getElementById('footerBar').style.display = "flex"
         },
         connectWebSocket() {
             let url = 'ws://' + window.location.host + "/api/stream";
@@ -219,7 +220,6 @@ function drawStars(ctx, state, ui_zoom) {
     for (let i of [0, 1]) {
         let pos = state.north_south[i]
         let name = ["north", "south"][i]
-        let color = ["red", "blue"][i]
 
         let x = pos[0]
         let y = pos[1]
@@ -227,9 +227,6 @@ function drawStars(ctx, state, ui_zoom) {
         if (x * x + y * y > 90 * 90) continue;
 
         ctx.save()
-
-        ctx.strokeStyle = color
-        ctx.fillStyle = color
 
         ctx.translate(x * ui_zoom, y * ui_zoom)
         ctx.beginPath()

@@ -22,14 +22,17 @@
     <div id="app">
         <canvas id="canvas" width="100" height="100"></canvas>
         <div id="view"><a href="./cameraWebgui.html">Camera View</a></div>
-        <div id="footerBar">
-            <div>Stars:</div>
-            <div>Tracked: {{stream.n_matches}}</div>
-            <div>Alignment error: {{stream.alignment_error.toFixed(3)}}°</div>
-            <div>Times: {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms {{stream.post_processing_time}}ms
+        <div id="footerBar" style="display: none;">
+            <div v_if="stream != {}" title="Attitude estimation results">
+                Stars:
+                Tracked {{stream.n_matches}}
+                Alignment error {{stream.alignment_error.toFixed(3)}}°
+                Times {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms {{stream.post_processing_time}}ms
             </div>
-            <div>Packet size: {{packet_size}}</div>
-            <div>
+            <div title="Packet size of the data stream">
+                Packet size {{packet_size}}
+            </div>
+            <div title="Camera-axis aligment calibration settings">
                 Calibration:
                 <button type="button" @click="addToCalibration">
                     Add {{calibration_orientations > 0 ? `(${calibration_orientations})` : "" }}
