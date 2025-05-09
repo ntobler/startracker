@@ -6,6 +6,7 @@ body {
     font-family: Consolas, monospace;
     background-color: #111;
     font-size: 0.8em;
+    color: red;
 }
 
 #footerBar {
@@ -13,11 +14,14 @@ body {
     width: 100%;
     left: 0;
     bottom: 0;
-    color: red;
     background-color: #00000080;
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
+}
+
+#footerBar::after:hover {
+    color: white;
 }
 
 #footerBar div {
@@ -33,17 +37,17 @@ body {
 input[type=number] {
     width: 3em;
     font-family: Consolas, monospace;
-    border: 2px solid red;
+    color: inherit;
+    border: 2px solid currentColor;
     background-color: #0000;
-    color: red;
 }
 
 button[type=button] {
     font-family: Consolas, monospace;
-    border: 2px solid red;
+    color: inherit;
+    border: 2px solid currentColor;
     border-radius: 4px;
     background-color: #0000;
-    color: red;
     margin: 0 0.25em
 }
 
@@ -73,10 +77,9 @@ input.error {
 select {
     width: 3em;
     font-family: Consolas, monospace;
-    border: 2px solid red;
+    color: inherit;
+    border: 2px solid currentColor;
     background-color: #0000;
-    color: red;
-    border-color: red;
 }
 
 #view {
@@ -88,10 +91,10 @@ select {
 #view a {
     display: inline-block;
     text-decoration: none;
-    color: red;
+    color: inherit;
     padding: 1em;
     text-align: center;
-    border: 2px solid red;
+    border: 2px solid currentColor;
     border-radius: 5px;
     background-color: black;
 }
@@ -99,4 +102,33 @@ select {
 #view a:hover {
     color: white;
     border-color: white;
+}
+
+.help {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    border: 2px solid currentColor;
+    padding: 1em;
+    display: none;
+    background-color: #000000e0;
+    color: red
+}
+
+.help::before {
+    content: "Help (click to go to next page)";
+    display: block;
+    font-weight: bold;
+    margin-bottom: 0.5em;
+    text-align: center;
+}
+
+.sine-blinking {
+    animation: blinker 1s linear infinite;
+}
+@keyframes blinker {
+    50% {
+        color: white;
+    }
 }

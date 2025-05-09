@@ -1,5 +1,5 @@
 
-import { api } from './util.js';
+import { api, HelpDisplay } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
 
 export default {
@@ -35,6 +35,7 @@ export default {
             }),
             brightness: ref(1),
             calibrating: false,
+            helpDisplay: null,
         }
     },
     methods: {
@@ -181,6 +182,10 @@ export default {
             }
             ctx.restore()
         },
+        showHelp() {
+            if (this.helpDisplay === null) return
+            this.helpDisplay.toggleHelp()
+        },
     },
     mounted() {
         this.connectImageWebSocket();
@@ -190,5 +195,6 @@ export default {
 
         window.onresize = this.resize
         this.resize()
+        this.helpDisplay = new HelpDisplay(document.getElementById('footerBar'))
     }
 }

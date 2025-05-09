@@ -1,5 +1,5 @@
 
-import { ZoomHandler, api } from './util.js';
+import { ZoomHandler, api, HelpDisplay } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
 
 export default {
@@ -21,6 +21,7 @@ export default {
             calibrating: false,
             calibration_orientations: 0,
             history: [],
+            helpDisplay: null,
         }
     },
     methods: {
@@ -107,7 +108,10 @@ export default {
                 error => { self.calibrating = true; },
             );
         },
-
+        showHelp() {
+            if (this.helpDisplay === null) return
+            this.helpDisplay.toggleHelp()
+        },
     },
     mounted() {
         this.connectWebSocket();
@@ -120,6 +124,7 @@ export default {
             this.redraw()
         });
         zoomHandler.attachEventListeners(document.getElementById('canvas'))
+        this.helpDisplay = new HelpDisplay(document.getElementById('footerBar'))
     }
 }
 
