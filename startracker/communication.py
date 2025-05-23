@@ -253,7 +253,7 @@ class Message:
         return cls(*values)
 
     def to_bytes(self) -> bytes:
-        """Encode Mesage to bytes."""
+        """Encode Message to bytes."""
         values = [f.format(v) for f, v in zip(self._fields.values(), self.__dict__.values())]
         return struct.pack(self._data_format, *values)
 
@@ -429,7 +429,7 @@ class CommandHandler:
         self._default_message = default_message
 
     def run_indefinitely(self):
-        """Handle incomming commands indefinitely."""
+        """Handle incoming commands indefinitely."""
         while True:
             with contextlib.suppress(CommunicationTimeoutError):
                 cmd_id, payload = self.serial.read_cmd()

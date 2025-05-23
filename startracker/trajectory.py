@@ -165,7 +165,7 @@ class MotorSolver:
                 ax.plot(x, y, z, color="orange", label="shaft")
 
             x, y, z = np.stack((np.zeros(3), translation), axis=1)
-            ax.plot(x, y, z, label="tranlation")
+            ax.plot(x, y, z, label="translation")
 
             plt.axis("equal")
             plt.show()

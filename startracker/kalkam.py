@@ -529,7 +529,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
         for pix in self.image_points_batch:
             ax.plot(pix[:, 0], pix[:, 1], "+", color="white")
 
-        ax.set_title("Estimated euclidian error distance in pixels")
+        ax.set_title("Estimated Euclidean error distance in pixels")
 
         if save is not None:
             fig.savefig(save)
@@ -804,7 +804,7 @@ def look_at_extrinsic(
 def intrinsic_from_camera_param(
     focal_length_mm: float, sensor_diagonal_mm: float, width: int, height: int
 ) -> np.ndarray:
-    """Create an intrinsic matrix from camaera parameteres."""
+    """Create an intrinsic matrix from camaera parameters."""
     diagonal_pix = np.sqrt(width**2 + height**2)
     factor = sensor_diagonal_mm / diagonal_pix
     width_mm = width * factor
@@ -825,13 +825,13 @@ def intrinsic_from_camera_param(
 
 
 class PointUndistorter:
-    """Transform points between undistored image coordiantes and distorted image coordinates."""
+    """Transform points between undistored image coordinates and distorted image coordinates."""
 
     def __init__(self, cal):
         self.cal = cal
 
     def undisort(self, xy, axis=-1):
-        """Transform points from distorted image coordiantes to undistorted image coordinates."""
+        """Transform points from distorted image coordinates to undistorted image coordinates."""
         xy = np.asarray(xy, dtype=np.float32)
         xy = np.swapaxes(xy, axis, -1)
         shape = xy.shape
@@ -846,7 +846,7 @@ class PointUndistorter:
         return xy_undist
 
     def distort(self, xy, axis=-1):
-        """Transform points from undistorted image coordiantes to distorted image coordinates."""
+        """Transform points from undistorted image coordinates to distorted image coordinates."""
         xy = np.asarray(xy, dtype=np.float32)
         xy = np.swapaxes(xy, axis, -1)
         shape = xy.shape
@@ -917,7 +917,7 @@ class PointProjector:
     def pix2obj(
         self, xy: ArrayLike, obj_z: Union[ArrayLike, float] = 0.0, axis: int = -1
     ) -> np.ndarray:
-        """Convert pixel coordiantes to object coordinates.
+        """Convert pixel coordinates to object coordinates.
 
         Args:
             xy: pixel coordinates, shape=[2, n]

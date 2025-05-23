@@ -38,7 +38,7 @@ def _get_intrinsic(
 def _project_function(
     obj: jnp.ndarray, intrinsic: jnp.ndarray, dist_coef: jnp.ndarray
 ) -> jnp.ndarray:
-    """Project object coordinates to image coordiantes, given a camera matrix and distortion."""
+    """Project object coordinates to image coordinates, given a camera matrix and distortion."""
     t = intrinsic[:2, 2]
     f = jnp.diagonal(intrinsic)[:2]
     k1, k2, p1, p2, k3 = dist_coef
@@ -71,7 +71,7 @@ def _objective_function(
 
     Available levels of fidelity (parameter space):
         0 only one focal length, locked translation
-        1 two focal lenths, locked translation
+        1 two focal lengths, locked translation
         2 no_shear
         3 full intrinsic
         4 full intrinsic, x**2

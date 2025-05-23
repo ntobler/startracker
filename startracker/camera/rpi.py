@@ -59,7 +59,7 @@ class RpiCamera(camera.Camera):
             self._logger.info("Start camera")
             self._picam2.start()
 
-            self._logger.info("Set inital exposure and gain")
+            self._logger.info("Set initial exposure and gain")
 
         self._apply_settings()
 

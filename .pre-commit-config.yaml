@@ -13,3 +13,10 @@ repos:
     -   id: ruff
         args: [ --fix ]
     -   id: ruff-format
+-   repo: https://github.com/codespell-project/codespell
+    rev: v2.2.5
+    hooks:
+    -   id: codespell
+        args: ["--toml=pyproject.toml"]
+        exclude: ^(stm32|hardware)/
+        additional_dependencies: [tomli]

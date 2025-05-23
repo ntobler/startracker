@@ -124,7 +124,7 @@ def project_radial(xyz: np.ndarray) -> np.ndarray:
 def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None) -> list:
     """Convert numpy array in a list of rounded floats.
 
-    JSON serialization is able to correcty truncate floats to the desired length.
+    JSON serialization is able to correctly truncate floats to the desired length.
     """
     x = np.array(x, dtype=np.float64, copy=False)
     if decimals is not None:

@@ -15,7 +15,7 @@ from startracker import util
 @dataclasses.dataclass
 class CameraSettings(util.PickleDataclass):
     exposure_ms: float = 100
-    """Exposure value in miliseconds."""
+    """Exposure value in milliseconds."""
     digital_gain: int = 1
     """Digital gain factor 1, 2 or 4."""
     analog_gain: int = 1

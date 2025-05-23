@@ -1,4 +1,4 @@
-"""Applicaiton configuration."""
+"""Application configuration."""
 
 from dynaconf import Dynaconf, ValidationError, Validator
 

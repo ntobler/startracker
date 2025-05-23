@@ -13,9 +13,9 @@ Features:
 ## Alignment tool
 
 Currently there is no working prototoype of the product.
-However, a working automatic alignment tool has been engineered to facilitate the aligment of simple static rotation axis star trackers.
+However, a working automatic alignment tool has been engineered to facilitate the alignment of simple static rotation axis star trackers.
 
-The aligment tool consists of a low-noise IMX462 camera module together with a Raspberry Pi Zero 2 W and is able to estimate the aligment error of the rotation axis to the Earth's pole.
+The alignment tool consists of a low-noise IMX462 camera module together with a Raspberry Pi Zero 2 W and is able to estimate the alignment error of the rotation axis to the Earth's pole.
 Following picture shows the hardware mounted on a custom star tracker, where the camera is aligned with the rotational axis:
 
 ![Star Tracker Hardware](docs/images/tracker.jpg)

@@ -243,7 +243,7 @@ class CameraTester:
         step: Optional[float] = None,
         dtype: type[float | int] = int,
     ):
-        """Add slider for a numerial attribute of the camera."""
+        """Add slider for a numerical attribute of the camera."""
         init = (min + max) / 2 if init is None else init
         step = (max - min) / 100 if step is None else step
         self.sliders.append(self.Slider(name, min, max, init, step, dtype))
@@ -404,7 +404,7 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
     epsilon: float
     """Roll component about the camera axis."""
     phi: float
-    """Star angle, rotation about the north sourth axis."""
+    """Star angle, rotation about the north south axis."""
 
     def __init__(self, camera_settings: camera.CameraSettings):
         super().__init__(camera_settings)

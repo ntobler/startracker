@@ -51,7 +51,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-addopts = "--cov=startracker --cov-report xml"
+addopts = "--cov=startracker --cov-report xml --cov-report term"
 
 [tool.ruff]
 line-length = 100
@@ -115,3 +115,6 @@ pydocstyle.convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "{test,stm32,startracker/scripts}*" = ["D100", "D103", "SLF001", "ANN", "S101"]
+
+[tool.codespell]
+ignore-words-list = "ser"

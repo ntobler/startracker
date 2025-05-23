@@ -11,7 +11,7 @@ import cv2
 from startracker import camera
 
 
-def main():
+def main():  # pragma no cover
     """Utility CLI to record images to the file system."""
     logging.basicConfig(
         level=logging.INFO,

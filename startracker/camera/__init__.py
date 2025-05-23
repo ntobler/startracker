@@ -1,6 +1,6 @@
 """Camera abstraction.
 
-Incudes raspberry pi camera and a mock implementation that runs in a development environment.
+Includes raspberry pi camera and a mock implementation that runs in a development environment.
 """
 
 from startracker.camera.camera import Camera, CameraSettings

@@ -21,7 +21,7 @@ def azel2nwu(az_el: np.ndarray, axis=-1, *, degrees: bool = False) -> np.ndarray
 
 
 def nwu2azel(nwu: np.ndarray, axis=-1, *, degrees: bool = False):
-    """Convert north west up coordiantes to azimuth, elevation."""
+    """Convert north west up coordinates to azimuth, elevation."""
     nwu = np.moveaxis(nwu, axis, 0)
     x, y, z = nwu
     az = np.arctan2(-y, x)
@@ -66,8 +66,8 @@ def find_common_rotation_axis(quats: np.ndarray) -> tuple[np.ndarray, float]:
     # is close to 90 degrees. 0 and 180 degrees get weight = 0
     weights = np.abs(np.sin(norm))
 
-    # Make sure all axes have a positive z compoenent
-    # This will make sure the axis points in the general direciton
+    # Make sure all axes have a positive z component
+    # This will make sure the axis points in the general direction
     # of the camera
     axis_vecs = np.where(
         np.sum(axis_vecs * axis_vecs[:1], axis=-1, keepdims=True) > 0,

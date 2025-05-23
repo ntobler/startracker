@@ -49,7 +49,7 @@ class AttitudeEstimatorConfig(util.PickleDataclass):
     max_star_area: int = 100
     """Maximum area in pixels for a star to be detected"""
     n_match: int = 7
-    """Number of required star matches for a sucessful attitude estimation."""
+    """Number of required star matches for a successful attitude estimation."""
     star_match_pixel_tol: float = 2.0
     """Tolerance in pixels for a star to be recognized as match."""
     timeout_secs: float = 0.2

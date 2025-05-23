@@ -26,19 +26,19 @@ def test_data_dispatcher():
         t.start()
         threads.append(t)
 
-    datas = [1, "sdf", 4.5, b"sdfasd"]
+    data = [1, "sdf", 4.5, b"sdfasd"]
 
-    for d in datas[:-1]:
+    for d in data[:-1]:
         image_data.put(d)
         time.sleep(0.1)
     terminate = True
-    image_data.put(datas[-1])
+    image_data.put(data[-1])
 
     for t in threads:
         t.join()
 
     for rec in received:
-        assert rec == datas
+        assert rec == data
 
 
 if __name__ == "__main__":
