@@ -1,7 +1,5 @@
 """Coordinate transformations."""
 
-from typing import Tuple
-
 import numpy as np
 import scipy.optimize
 import scipy.spatial.transform
@@ -35,7 +33,7 @@ def nwu2azel(nwu: np.ndarray, axis=-1, *, degrees: bool = False):
     return az_el
 
 
-def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
+def find_common_rotation_axis(quats: np.ndarray) -> tuple[np.ndarray, float]:
     """Find the common rotation axis of a set of rotations.
 
     Find solution by averaging solutions between pairs of quaternions.
@@ -44,7 +42,7 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
         quats: array of input rotation quaterions, shape=[n, 4]
 
     Returns:
-        Tuple[np.ndarray, float]:
+        tuple[np.ndarray, float]:
             - Common rotation axis
             - Angular standard deviation estimate in rads, can be NaN
     """
@@ -94,7 +92,7 @@ def find_common_rotation_axis(quats: np.ndarray) -> Tuple[np.ndarray, float]:
 
 def find_common_rotation_axis_alt(
     quats: np.ndarray,
-) -> Tuple[np.ndarray, float]:
+) -> tuple[np.ndarray, float]:
     """Find the common rotation axis of a set of rotations.
 
     Find solution by solving minimization problem.
@@ -103,7 +101,7 @@ def find_common_rotation_axis_alt(
         quats: array of input rotation quaterions, shape=[n, 4]
 
     Returns:
-        Tuple[np.ndarray, float]:
+        tuple[np.ndarray, float]:
             - Common rotation axis
             - Angular standard deviation in rads
     """

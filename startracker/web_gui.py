@@ -11,7 +11,8 @@ import pathlib
 import pickle
 import tempfile
 import threading
-from typing import Any, BinaryIO, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any, BinaryIO, Optional
 
 import cv2
 import numpy as np
@@ -63,7 +64,7 @@ class IntrinsicCalibrator:
         """Clear all images used for the calibration."""
         self.index = 0
 
-    def get_images(self) -> List[pathlib.Path]:
+    def get_images(self) -> list[pathlib.Path]:
         """Get all calibration images."""
         return sorted(self._dir.glob("*.png"))
 
@@ -165,7 +166,7 @@ class AxisCalibrator:
 
         # Make sure vector points in general direction of camera
         axis_vec = axis_vec if axis_vec[2] > 0 else -axis_vec
-        # Create camea rotation to axis, such that camera is horizontal
+        # Create camera rotation to axis, such that camera is horizontal
         axis_rotm = kalkam.look_at_extrinsic(axis_vec, [0, 0, 0], [0, -1, 0])[:3, :3]
         self.axis_rot = scipy.spatial.transform.Rotation.from_matrix(axis_rotm)
 
@@ -181,6 +182,7 @@ class AxisCalibrator:
 
 class AttitudeEstimation:
     overlay: bool
+    quat: np.ndarray
 
     def __init__(
         self,
@@ -205,7 +207,7 @@ class AttitudeEstimation:
         self._cat_mags = self._attitude_est.cat_mag[bright]
 
         self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
-        self._calibration_rots: List[npt.NDArray[np.floating]] = []
+        self._calibration_rots: list[npt.NDArray[np.floating]] = []
         self._camera_frame = []
 
         self.overlay = False
@@ -237,7 +239,6 @@ class AttitudeEstimation:
         with util.TimeMeasurer() as tm2:
             att_res = self._attitude_est(processed_image)
 
-        inverse_rotation = scipy.spatial.transform.Rotation.from_quat(att_res.quat)
         obs_xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz)
         cat_xy = self._attitude_est.image_xyz_to_xy(att_res.cat_xyz)
         image_size = (image.shape[1], image.shape[0])

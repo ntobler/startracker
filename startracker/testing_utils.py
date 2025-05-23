@@ -4,7 +4,7 @@ import abc
 import dataclasses
 import pathlib
 import time
-from typing import Final, List, Optional, Tuple
+from typing import Final, Optional
 
 import cv2
 import numpy as np
@@ -93,7 +93,7 @@ class StarImageGenerator:
         up_vector: npt.ArrayLike,
         *,
         grid: bool = False,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Create image of stars.
 
         Args:
@@ -104,7 +104,7 @@ class StarImageGenerator:
             grid: Display longitude and latitude overlay
 
         Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            tuple[np.ndarray, np.ndarray, np.ndarray]:
                 - Grayscale uint8 star image
                 - Painted star coordinates in pixels shape = [n, 2 (x, y)]
                 - Painted star magnitudes
@@ -120,13 +120,13 @@ class StarImageGenerator:
 
     def image_from_quaternion(
         self, quat: np.ndarray, *, grid: bool = False
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Create image of stars from a quaternion."""
         rot = scipy.spatial.transform.Rotation.from_quat(quat)
         extrinsic = np.concatenate((rot.as_matrix().T, np.zeros((3, 1))), axis=-1)
         return self.image_from_extrinsic(extrinsic, grid=grid)
 
-    def stars_from_extrinsic(self, extrinsic: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def stars_from_extrinsic(self, extrinsic: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Get star magnitudes and pixel positions from extrinsic matrix."""
         # Take z image vector of the inverted extrinsic
         target_vector = extrinsic[2, :3]
@@ -228,7 +228,7 @@ class CameraTester:
         step: float
         dtype: type[float | int]
 
-    sliders: List[Slider]
+    sliders: list[Slider]
 
     def __init__(self, cam: camera.Camera):
         self._cam = cam

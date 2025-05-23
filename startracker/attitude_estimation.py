@@ -6,7 +6,7 @@ import logging
 import math
 import threading
 import time
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import ruststartracker
@@ -234,7 +234,7 @@ class AttitudeFilter:
         _ = time
         self.attitude_quat = quat
 
-    def get_azimuth_elevation(self) -> Optional[Tuple[float, float]]:
+    def get_azimuth_elevation(self) -> Optional[tuple[float, float]]:
         """Return current azimuth and elevation estimate.
 
         Returns:
@@ -302,8 +302,9 @@ class ImageAcquisitioner:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
+        if self._thread is None:
+            raise RuntimeError("Thread already stopped")
         self._terminate = True
-        print("Waiting for thread to finish")
         self._thread.join()
 
     def _run(self):

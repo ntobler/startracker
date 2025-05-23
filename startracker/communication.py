@@ -7,7 +7,8 @@ import enum
 import logging
 import pathlib
 import struct
-from typing import Any, Dict, Optional, Sequence, Tuple, Type, TypeVar, Union
+from collections.abc import Sequence
+from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
 import serial
@@ -54,14 +55,14 @@ class PacketHandler(serial.Serial):
     def __init__(self, ser: serial.Serial) -> None:
         self._ser = ser
 
-    def read_cmd(self) -> Tuple[int, bytes]:
+    def read_cmd(self) -> tuple[int, bytes]:
         """Read serial command from the input buffer.
 
         Raises:
             CommunicationTimeoutException if timeouts happen.
 
         Returns:
-            Tuple[int, bytes]:
+            tuple[int, bytes]:
                 - Command id
                 - Payload bytes
         """
@@ -156,7 +157,7 @@ class EnumField(Field):
     """Message field for enums."""
 
     def __init__(
-        self, enum_type: Type[enum.Enum], dtype="uint8", desc: Optional[str] = None
+        self, enum_type: type[enum.Enum], dtype="uint8", desc: Optional[str] = None
     ) -> None:
         super().__init__(dtype, desc=desc)
         self.default = enum_type(0)
@@ -192,7 +193,7 @@ class EnumField(Field):
 class StructField(Field):
     """Message field for custom datatypes."""
 
-    def __init__(self, dtype: Type["Message"], desc: Optional[str] = None) -> None:
+    def __init__(self, dtype: type["Message"], desc: Optional[str] = None) -> None:
         self.dtype = dtype
         self.struct_char = f"{dtype.byte_size}s"
         self.python_type = dtype
@@ -242,7 +243,7 @@ class ArrayField(Field):
 class Message:
     byte_size: int
     _data_format: str
-    _fields: Dict[str, Field]
+    _fields: dict[str, Field]
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> Self:
@@ -298,7 +299,7 @@ def dataclass_eq(dc1: Any, dc2: Any) -> bool:
 
 def make_message(cls: type) -> type[Message]:
     """Compose a message dataclass."""
-    fields: Dict[str, Field] = {}
+    fields: dict[str, Field] = {}
     for attr_name in cls.__dict__:
         if not attr_name.startswith("_"):
             attr = getattr(cls, attr_name)
@@ -330,7 +331,7 @@ def make_message(cls: type) -> type[Message]:
 
 
 def gen_code_with_dependencies(
-    messages: Sequence[Type[Message]],
+    messages: Sequence[type[Message]],
     h_file: Union[pathlib.Path, str],
     indent: int = 4,
     *,
@@ -394,8 +395,8 @@ class Command(abc.ABC):
     """Base class for communication commands."""
 
     cmd: int
-    request_type: Type[Message] = Message
-    response_type: Type[Message] = Message
+    request_type: type[Message] = Message
+    response_type: type[Message] = Message
 
     @abc.abstractmethod
     def execute(self, payload: Message) -> Message:

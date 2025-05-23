@@ -42,7 +42,7 @@ def test_messages():
     ) == Foo.from_bytes(b"1234" + np.array(5.0, dtype=np.float32).tobytes() + b"111111" + b"\x02")
     assert Foo.from_bytes(b"12345678123456\x02").to_bytes() == b"12345678123456\x02"
 
-    assert type(Foo().test_enum) == MyEnum
+    assert isinstance(Foo().test_enum, MyEnum)
 
     print(Foo().attitude_estimation_timeout_ms)
     print(Foo.print_help())

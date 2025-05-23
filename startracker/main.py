@@ -5,7 +5,7 @@ import enum
 import logging
 import sys
 import time
-from typing import Optional, Type
+from typing import Optional
 
 import numpy as np
 import serial
@@ -96,8 +96,8 @@ class GetStatus(communication.Command):
     """Get the application status."""
 
     cmd: int = 1
-    request_type: Type[communication.Message] = EmptyMessage
-    response_type: Type[communication.Message] = Status
+    request_type: type[communication.Message] = EmptyMessage
+    response_type: type[communication.Message] = Status
 
     def __init__(
         self,
@@ -129,8 +129,8 @@ class SetSettings(communication.Command):
     """Set star tracker settings."""
 
     cmd: int = 2
-    request_type: Type[communication.Message] = Settings
-    response_type: Type[communication.Message] = Acknowledge
+    request_type: type[communication.Message] = Settings
+    response_type: type[communication.Message] = Acknowledge
 
     @override
     def execute(self, request: Settings) -> Acknowledge:
@@ -144,8 +144,8 @@ class CalcTrajectory(communication.Command):
     """Calculate trajectory using current attitude."""
 
     cmd: int = 3
-    request_type: Type[communication.Message] = EmptyMessage
-    response_type: Type[communication.Message] = Trajectory
+    request_type: type[communication.Message] = EmptyMessage
+    response_type: type[communication.Message] = Trajectory
 
     def __init__(
         self,
@@ -180,8 +180,8 @@ class ShutdownInterruptError(Exception):
 
 class Shutdown(communication.Command):
     cmd: int = 4
-    request_type: Type[communication.Message] = EmptyMessage
-    response_type: Type[communication.Message] = Acknowledge
+    request_type: type[communication.Message] = EmptyMessage
+    response_type: type[communication.Message] = Acknowledge
 
     def __init__(self, *, enable_shutdown: bool, shutdown_delay: float):
         """Quit the application.
@@ -206,8 +206,8 @@ class SetAttitudeEstimationMode(communication.Command):
     """Set the attitude estimation mode."""
 
     cmd: int = 5
-    request_type: Type[communication.Message] = AttitudeEstimationMode
-    response_type: Type[communication.Message] = Acknowledge
+    request_type: type[communication.Message] = AttitudeEstimationMode
+    response_type: type[communication.Message] = Acknowledge
 
     def __init__(
         self,
@@ -225,8 +225,8 @@ class GetStars(communication.Command):
     """Get list of recognized star positions."""
 
     cmd: int = 6
-    request_type: Type[communication.Message] = EmptyMessage
-    response_type: Type[communication.Message] = Stars
+    request_type: type[communication.Message] = EmptyMessage
+    response_type: type[communication.Message] = Stars
 
     def __init__(
         self,

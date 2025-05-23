@@ -69,7 +69,6 @@ class MasterEmulator:
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         self.thread.join()
-        print("Thread joined")
 
     def _run(self):
         test_data_table = [

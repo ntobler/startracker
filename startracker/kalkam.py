@@ -5,7 +5,8 @@ import dataclasses
 import json
 import pathlib
 import time
-from typing import BinaryIO, Iterable, List, Optional, Sequence, Tuple, Union
+from collections.abc import Iterable, Sequence
+from typing import BinaryIO, Optional, Union
 
 import cairo
 import cv2
@@ -30,7 +31,7 @@ class CalibrationPattern(abc.ABC):
     """Number of squares in the vertical y direction."""
     square_size: float
     """Size of a square in millimeters."""
-    overall_size: Tuple[float, float]
+    overall_size: tuple[float, float]
     """Dimensions (x, y) of the whole pattern in millimeters."""
     object_points: np.ndarray
     """3D object coordinates of all markers, shape=[n_markers, 3]."""
@@ -82,7 +83,7 @@ class CalibrationPattern(abc.ABC):
     @abc.abstractmethod
     def find_in_image(
         self, image: np.ndarray, *, plot: bool = False
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Find the pattern in the given image.
 
         Args:
@@ -93,7 +94,7 @@ class CalibrationPattern(abc.ABC):
             ValueError: if pattern is not found
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]:
+            tuple[np.ndarray, np.ndarray]:
                 - 2D pixel coordinates, shape=[n_detected_points, 2]
                 - 3D object coordinates, shape=[n_detected_points, 3]
         """
@@ -296,7 +297,7 @@ class ChArUcoPattern(CalibrationPattern):
     @override
     def find_in_image(
         self, image: np.ndarray, *, plot: bool = False
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         if image.ndim == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -443,7 +444,7 @@ class IntrinsicCalibration:
     """3x3 intrinsic matrix."""
     dist_coeffs: Optional[np.ndarray]
     """Opencv distortion coefficients"""
-    image_size: Tuple[int, int]
+    image_size: tuple[int, int]
     """Width and height in pixels."""
 
     def cos_phi(self, angle_margin_factor: float = 1) -> float:
@@ -494,9 +495,9 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
     """Maximum calibration error in pixels"""
     timestamp: Optional[int]
     """Unix timestamp in milliseconds"""
-    image_points_batch: List[np.ndarray]
+    image_points_batch: list[np.ndarray]
     """List of images point arrays in pixels [x, y]."""
-    squared_error_distances: List[np.ndarray]
+    squared_error_distances: list[np.ndarray]
     """Squared reprojection error distance for all image points."""
 
     def plot(*, self, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
@@ -697,7 +698,7 @@ def calibration_from_images(
 def calibration_from_points(
     object_points_batch: Sequence[np.ndarray],
     image_points_batch: Sequence[np.ndarray],
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     fraction: float = 1.0,
     *,
     verbose: bool = False,
@@ -873,7 +874,7 @@ class PointUndistorter:
         return xy_dist
 
 
-def decompose_cammat(cammat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def decompose_cammat(cammat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Decompose a 3x4 camera matrix to a 3x3 intrinsic and 3x4 extrinsic matrix."""
     shape = cammat.shape[:-2]
     intrinsic = np.empty(shape + (3, 3), dtype=np.float64)
@@ -902,7 +903,7 @@ class PointProjector:
     def __init__(
         self,
         cal: IntrinsicCalibration,
-        extrinsic: Optional[np.ndarray] = None,
+        extrinsic: np.ndarray,
     ):
         self.camera_mat = cal.intrinsic[:3, :3] @ extrinsic[:3, :4]
         self.camera_mat_inverse = np.linalg.inv(self.camera_mat[:, :3])
