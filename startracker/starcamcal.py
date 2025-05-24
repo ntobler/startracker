@@ -1,4 +1,12 @@
-"""Calibrate camera given a history of observed stars."""
+"""Refine camera calibration given a history of observed stars.
+
+This script performs a camera calibration using a history of observed star positions and their
+3D coordinates taken from the star catalogue. This optimization problem is different from the
+normal camera calibration workflow, usually done with a chessboard and opencv.
+
+This script might not be suitable for a Raspberry Pi, as it requires a lot of memory and "jax" to
+run. It is recommended to run this script on a desktop computer.
+"""
 
 import argparse
 import pathlib
@@ -137,6 +145,7 @@ def calibrate(
     n_samples: int,
     image_size: tuple[int, int] = (960, 540),
     *,
+    percentile: int | None = None,
     plot: bool = False,
 ) -> None:
     """Calibrate camera using history of star observations contained in directory."""
@@ -150,22 +159,14 @@ def calibrate(
     images_list = []
     objects_list = []
 
+    print("Loading files...")
+
     for file in files:
         with file.open("rb") as f:
             contents = pickle.load(f)
 
         images_list.extend(contents["image"])
         objects_list.extend(contents["object"])
-
-    if plot:
-        fig, axs = plt.subplots(2)
-        for img in images_list:
-            axs[0].plot(img[..., 0], img[..., 1], "x")
-            axs[0].plot(img[..., 0], img[..., 1], "x")
-        for obj in objects_list:
-            axs[1].plot(obj[..., 0], obj[..., 1], "x")
-        plt.show()
-        plt.close(fig)
 
     objects = np.concatenate(objects_list, axis=0)
     images = np.concatenate(images_list, axis=0)
@@ -178,18 +179,57 @@ def calibrate(
     objects = objects[indices]
     images = images[indices]
 
+    if plot:
+        print("Plotting...")
+        fig, axs = plt.subplots(2)
+        for img in images:
+            axs[0].plot(img[..., 0], img[..., 1], "x")
+            axs[0].plot(img[..., 0], img[..., 1], "x")
+        for obj in objects:
+            axs[1].plot(obj[..., 0], obj[..., 1], "x")
+        plt.show()
+        plt.close(fig)
+
+    print("Calibrating...")
     intrinsic, dist_coefs, reprojection = calibrate_camera(objects, images, image_size)
 
     squared_error_distances: np.ndarray = np.square(images - reprojection).sum(axis=-1)
     rms_error = float(np.sqrt(squared_error_distances.mean()))
     max_error = float(np.sqrt(squared_error_distances.max()))
 
-    print(f"RMS error: {rms_error:.2f}, max error {max_error:.2f}")
+    print(f"RMS error: {rms_error:.2f} pixels, max error {max_error:.2f} pixels")
+
+    if percentile is not None:
+        print(f"Performing second calibration iteration with {percentile}% of best samples...")
+        threshold = np.percentile(squared_error_distances, percentile)
+        indices = np.where(squared_error_distances < threshold)[0]
+        objects = objects[indices]
+        images = images[indices]
+
+        intrinsic, dist_coefs, reprojection = calibrate_camera(objects, images, image_size)
+
+        squared_error_distances: np.ndarray = np.square(images - reprojection).sum(axis=-1)
+        rms_error = float(np.sqrt(squared_error_distances.mean()))
+        max_error = float(np.sqrt(squared_error_distances.max()))
+
+        print(f"RMS error: {rms_error:.2f} pixels, max error {max_error:.2f} pixels")
 
     if plot:
-        fig, axs = plt.subplots(1)
-        axs.plot(images[..., 0], images[..., 1], "x")
-        axs.plot(reprojection[..., 0], reprojection[..., 1], ".")
+        print("Plotting...")
+        fig, axs = plt.subplots(2)
+        axs[0].plot(images[..., 0], images[..., 1], "x")
+        axs[0].plot(reprojection[..., 0], reprojection[..., 1], ".")
+        axs[0].set_title("Reprojection")
+        epsilon = 1e-8
+        bins = np.logspace(np.log10(1e-4), np.log10(10), 41)
+        bins[0] = min(squared_error_distances.min(), 1e-4) - epsilon
+        bins[-1] = max(squared_error_distances.max(), 10) + epsilon
+        axs[1].hist(squared_error_distances, bins=bins)
+        axs[1].set_xscale("log")
+        axs[1].set_xlim(1e-4, 10)
+        axs[1].set_title("Squared error distance histogram")
+        axs[1].set_xlabel("Squared error distance (pixels)")
+        axs[1].set_ylabel("Count")
         plt.show()
         plt.close(fig)
 
@@ -224,12 +264,43 @@ def cli(argv: list[str] | None = None) -> int:
         ),
         type=pathlib.Path,
     )
-    parser.add_argument("--n_samples", "-n", help="Number of samples", default=1000, type=int)
-    parser.add_argument("--plot", "-p", help="Show plots", action="store_true", default=False)
+    parser.add_argument(
+        "image_size",
+        help=("Comma-separated width and height of the camera image in pixels, " "e.g. 960,540"),
+        type=lambda s: tuple(map(int, s.split(","))),
+    )
+    parser.add_argument(
+        "--n_samples",
+        "-n",
+        help="Number of samples sampled from the observations",
+        default=1000,
+        type=int,
+    )
+    parser.add_argument(
+        "--plot",
+        "-p",
+        help="Show plots of calibration process and result",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--percentile",
+        "-c",
+        help=(
+            "Perform a second calibration iteration with a percentage of best-performing samples "
+            "e.g. 90%% of samples"
+        ),
+        type=int,
+        choices=range(1, 100),
+        default=None,
+        metavar="[1-99]",
+    )
 
     args = parser.parse_args(argv)
 
-    calibrate(args.directory, args.n_samples, plot=args.plot)
+    calibrate(
+        args.directory, args.n_samples, args.image_size, plot=args.plot, percentile=args.percentile
+    )
 
     return 0
 
