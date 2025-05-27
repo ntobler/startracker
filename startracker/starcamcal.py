@@ -91,7 +91,7 @@ def _objective_function(
     intrinsic = _get_intrinsic(
         state[:5], no_shear=level <= 2, single_f=level <= 0, fix_tx_ty=level <= 1
     )
-    dist_coef = state[5:] * 0.01
+    dist_coef = state[5:]
 
     level_masks = jnp.array(
         [
@@ -109,7 +109,63 @@ def _objective_function(
 
     dist_coef = dist_coef * level_masks
 
-    return jnp.square(image - _project_function(obj, intrinsic, dist_coef)).sum()
+    return image - _project_function(obj, intrinsic, dist_coef)
+
+
+def lm_solv(fun, x0, args=(), max_iter=10, tol=1e-4, rtol=1e-5, lambda_init=1e-3) -> jnp.ndarray:
+    """Levenberg-Marquardt solver for nonlinear least squares problems.
+
+    Args:
+        fun: Objective function to minimize, should return residuals.
+        x0: Initial guess for the parameters.
+        args: Additional arguments to pass to the objective function.
+        max_iter: Maximum number of iterations.
+        tol: Absolute tolerance for convergence.
+        rtol: Relative tolerance for convergence.
+        lambda_init: Initial value for the damping parameter.
+
+    Returns:
+        The optimized parameters.
+    """
+    x = x0
+    lamb = lambda_init
+    prev_cost = None
+    for _ in range(max_iter):
+        residuals = fun(x, *args).reshape(-1)
+        cost = jnp.sum(residuals**2)
+        j = jax.jacobian(lambda x_: fun(x_, *args).reshape(-1))(x)
+        jtj = j.T @ j
+        jtr = j.T @ residuals
+        # LM step
+        a = jtj + lamb * jnp.eye(jtj.shape[0], dtype=jtj.dtype)
+        try:
+            delta = jnp.linalg.solve(a, -jtr)
+        except Exception:
+            break
+        x_new = x + delta
+        new_residuals = fun(x_new, *args).reshape(-1)
+        new_cost = jnp.sum(new_residuals**2)
+        if new_cost < cost * 1.001:  # Epsilon to avoid numerical issues
+            # Accept step, decrease lambda
+            x = x_new
+            lamb = lamb / 10
+
+            # Check convergence absolute
+            norm = jnp.linalg.norm(delta)
+            if norm < tol:
+                break
+
+            # Check convergence relative
+            if prev_cost is not None:
+                rel_change = jnp.abs(prev_cost - new_cost) / (jnp.abs(prev_cost) + 1e-12)
+                if rel_change < rtol:
+                    break
+            prev_cost = new_cost
+        else:
+            # Reject step, increase lambda
+            lamb = lamb * 10
+
+    return x
 
 
 def calibrate_camera(
@@ -119,6 +175,7 @@ def calibrate_camera(
     *,
     intrinsic_guess: np.ndarray | None = None,
     dist_coefs_guess: np.ndarray | None = None,
+    level: int = 7,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Calibrate camera parameters given image points and 3d object camera frame vectors.
 
@@ -128,6 +185,7 @@ def calibrate_camera(
         image_size: Size of the camera image in pixels as (width, height).
         intrinsic_guess: Optional initial guess for the intrinsic camera parameters, shape=(3, 3).
         dist_coefs_guess: Optional initial guess for the distortion coefficients, shape=(5,).
+        level: Optimization level, see _objective_function
 
     Returns:
         A tuple containing:
@@ -156,19 +214,12 @@ def calibrate_camera(
     image_xy = jnp.array(image_points, jnp.float32)
     object_xyz = jnp.array(object_points, dtype=jnp.float32)
 
-    levels = [7] if intrinsic_guess is not None else [1, 2, 3, 4, 5, 6, 7]
+    x0 = lm_solv(_objective_function, x0, args=(image_xy, object_xyz, level))
 
-    for level in levels:
-        print(f"Solving camera parameters level {level} of 7")
-        res = jax.scipy.optimize.minimize(
-            _objective_function, x0, args=(image_xy, object_xyz, level), method="BFGS"
-        )
-        x0 = res.x
+    intrinsic = _get_intrinsic(x0[:5])
+    dist_coef = x0[5:]
 
-        intrinsic = _get_intrinsic(res.x[:5])
-        dist_coef = res.x[5:] * 0.01
-
-        reprojection = _project_function(object_xyz, intrinsic, dist_coef)
+    reprojection = _project_function(object_xyz, intrinsic, dist_coef)
 
     return (
         np.asarray(intrinsic),
@@ -221,9 +272,9 @@ def calibrate(
     if percentile is not None:
         print(f"Performing second calibration iteration with {percentile}% of best samples...")
         threshold = np.percentile(squared_error_distances, percentile)
-        indices = np.where(squared_error_distances < threshold)[0]
-        object_points = object_points[indices]
-        image_points = image_points[indices]
+        mask = squared_error_distances < threshold
+        object_points = object_points[mask]
+        image_points = image_points[mask]
 
         intrinsic, dist_coefs, reprojection = calibrate_camera(
             object_points,
