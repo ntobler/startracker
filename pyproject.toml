@@ -118,3 +118,8 @@ pydocstyle.convention = "google"
 
 [tool.codespell]
 ignore-words-list = "ser"
+
+[tool.coverage.report]
+exclude_lines = [
+    'if __name__ == "__main__":'
+]

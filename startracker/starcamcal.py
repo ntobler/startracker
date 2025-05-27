@@ -2,7 +2,7 @@
 
 This script performs a camera calibration using a history of observed star positions and their
 3D coordinates taken from the star catalogue. This optimization problem is different from the
-normal camera calibration workflow, usually done with a chessboard and opencv.
+normal camera calibration workflow, usually done with a chessboard and OpenCV.
 
 This script might not be suitable for a Raspberry Pi, as it requires a lot of memory and "jax" to
 run. It is recommended to run this script on a desktop computer.
@@ -13,6 +13,7 @@ import pathlib
 import pickle
 import time
 
+import jax
 import jax.numpy as jnp
 import jax.scipy.optimize
 import matplotlib.pyplot as plt
@@ -78,8 +79,8 @@ def _objective_function(
     """Objective function for calibration optimization problem.
 
     Available levels of fidelity (parameter space):
-        0 only one focal length, locked translation
-        1 two focal lengths, locked translation
+        0 only one focal length, locked translation, no_shear
+        1 locked translation, no_shear
         2 no_shear
         3 full intrinsic
         4 full intrinsic, x**2
@@ -92,36 +93,72 @@ def _objective_function(
     )
     dist_coef = state[5:] * 0.01
 
-    if level <= 3:
-        dist_coef = dist_coef * 0.0
-    elif level <= 4:
-        dist_coef = dist_coef * jnp.array([1, 0, 0, 0, 0], dtype=jnp.float32)
-    elif level <= 5:
-        dist_coef = dist_coef * jnp.array([1, 1, 0, 0, 0], dtype=jnp.float32)
-    elif level <= 6:
-        dist_coef = dist_coef * jnp.array([1, 1, 1, 1, 0], dtype=jnp.float32)
+    level_masks = jnp.array(
+        [
+            [0, 0, 0, 0, 0],  # level=0 only one focal length, locked translation, no_shear
+            [0, 0, 0, 0, 0],  # level=1 locked translation, no_shear
+            [0, 0, 0, 0, 0],  # level=2 no_shear
+            [0, 0, 0, 0, 0],  # level=3 full intrinsic
+            [1, 0, 0, 0, 0],  # level=4 full intrinsic, x**2
+            [1, 1, 0, 0, 0],  # level=5 full intrinsic, x**4
+            [1, 1, 1, 1, 0],  # level=6 full intrinsic, x**4 tangential
+            [1, 1, 1, 1, 1],  # level=7 full intrinsic, x**6
+        ],
+        dtype=jnp.float32,
+    )[jnp.minimum(level, 6)]
+
+    dist_coef = dist_coef * level_masks
 
     return jnp.square(image - _project_function(obj, intrinsic, dist_coef)).sum()
 
 
 def calibrate_camera(
-    object_points: np.ndarray, image_points: np.ndarray, image_size: tuple[float, float]
+    object_points: np.ndarray,
+    image_points: np.ndarray,
+    image_size: tuple[float, float],
+    *,
+    intrinsic_guess: np.ndarray | None = None,
+    dist_coefs_guess: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Calibrate camera parameters given image points and 3d object camera frame vectors."""
-    width, height = image_size
+    """Calibrate camera parameters given image points and 3d object camera frame vectors.
 
-    object_points = object_points / np.linalg.norm(object_points, axis=-1, keepdims=True)
+    Args:
+        object_points: 2D array of object points in camera frame coordinates, shape=(n, 3).
+        image_points: 2D array of image points in pixel coordinates, shape=(n, 2).
+        image_size: Size of the camera image in pixels as (width, height).
+        intrinsic_guess: Optional initial guess for the intrinsic camera parameters, shape=(3, 3).
+        dist_coefs_guess: Optional initial guess for the distortion coefficients, shape=(5,).
 
-    focal_length = np.hypot(width, height) / np.tan(np.arccos(object_points[..., 2]).max()) / 2
+    Returns:
+        A tuple containing:
+            - intrinsic: The intrinsic camera parameters as a 3x3 matrix.
+            - dist_coef: The distortion coefficients as a 1D array of length 5.
+            - reprojection: The reprojected image points as a 2D array of shape=(n, 2).
+    """
+    if intrinsic_guess is None:
+        width, height = image_size
+        object_points = object_points / np.linalg.norm(object_points, axis=-1, keepdims=True)
+        focal_length = np.hypot(width, height) / np.tan(np.arccos(object_points[..., 2]).max()) / 2
+        intrinsic_flattened = jnp.array(
+            [focal_length, 0, width / 2, focal_length, height / 2], jnp.float32
+        )
+    else:
+        intrinsic_flattened = np.concatenate(
+            (intrinsic_guess[0, :], intrinsic_guess[1, 1:]), axis=0
+        )
+
+    dist_coeffs_flattened = [0, 0, 0, 0, 0] if dist_coefs_guess is None else dist_coefs_guess
 
     x0 = jnp.array(
-        [focal_length, 0, width / 2, focal_length, height / 2, 0, 0, 0, 0, 0], jnp.float32
+        np.concatenate((intrinsic_flattened, dist_coeffs_flattened), axis=0), jnp.float32
     )
 
     image_xy = jnp.array(image_points, jnp.float32)
     object_xyz = jnp.array(object_points, dtype=jnp.float32)
 
-    for level in [1, 2, 3, 4, 5, 6, 7]:
+    levels = [7] if intrinsic_guess is not None else [1, 2, 3, 4, 5, 6, 7]
+
+    for level in levels:
         print(f"Solving camera parameters level {level} of 7")
         res = jax.scipy.optimize.minimize(
             _objective_function, x0, args=(image_xy, object_xyz, level), method="BFGS"
@@ -141,6 +178,103 @@ def calibrate_camera(
 
 
 def calibrate(
+    image_points: np.ndarray,
+    object_points: np.ndarray,
+    image_size: tuple[int, int] = (960, 540),
+    *,
+    percentile: int | None = None,
+    plot: bool = False,
+) -> kalkam.IntrinsicCalibrationWithData:
+    """Calibrate camera using a pair of image points and object points at infinite distance.
+
+    Args:
+        image_points: 2D array of image points in pixel coordinates, shape (n, 2).
+        object_points: 2D array of object points in camera frame coordinates, shape (n, 3).
+        image_size: Size of the camera image in pixels as (width, height).
+        percentile: If not None, perform a second calibration iteration with the given percentage
+            of best samples.
+        plot: If True, plot the calibration process and results.
+
+    Returns:
+        The calibrated camera parameters and with calibration performance data.
+    """
+    if plot:
+        print("Plotting...")
+        fig, axs = plt.subplots(2)
+        for img in image_points:
+            axs[0].plot(img[..., 0], img[..., 1], "x")
+            axs[0].plot(img[..., 0], img[..., 1], "x")
+        for obj in object_points:
+            axs[1].plot(obj[..., 0], obj[..., 1], "x")
+        plt.show()
+        plt.close(fig)
+
+    print("Calibrating...")
+    intrinsic, dist_coefs, reprojection = calibrate_camera(object_points, image_points, image_size)
+
+    squared_error_distances: np.ndarray = np.square(image_points - reprojection).sum(axis=-1)
+    rms_error = float(np.sqrt(squared_error_distances.mean()))
+    max_error = float(np.sqrt(squared_error_distances.max()))
+
+    print(f"RMS error: {rms_error:.2f} pixels, max error {max_error:.2f} pixels")
+
+    if percentile is not None:
+        print(f"Performing second calibration iteration with {percentile}% of best samples...")
+        threshold = np.percentile(squared_error_distances, percentile)
+        indices = np.where(squared_error_distances < threshold)[0]
+        object_points = object_points[indices]
+        image_points = image_points[indices]
+
+        intrinsic, dist_coefs, reprojection = calibrate_camera(
+            object_points,
+            image_points,
+            image_size,
+            intrinsic_guess=intrinsic,
+            dist_coefs_guess=dist_coefs,
+        )
+
+        squared_error_distances: np.ndarray = np.square(image_points - reprojection).sum(axis=-1)
+        rms_error = float(np.sqrt(squared_error_distances.mean()))
+        max_error = float(np.sqrt(squared_error_distances.max()))
+
+        print(f"RMS error: {rms_error:.2f} pixels, max error {max_error:.2f} pixels")
+
+    if plot:
+        print("Plotting...")
+        fig, axs = plt.subplots(2)
+        axs[0].plot(image_points[..., 0], image_points[..., 1], "x")
+        axs[0].plot(reprojection[..., 0], reprojection[..., 1], ".")
+        axs[0].set_title("Reprojection")
+        epsilon = 1e-8
+        bins = np.logspace(np.log10(1e-4), np.log10(10), 41)
+        bins[0] = min(squared_error_distances.min(), 1e-4) - epsilon
+        bins[-1] = max(squared_error_distances.max(), 10) + epsilon
+        axs[1].hist(squared_error_distances, bins=bins)
+        axs[1].set_xscale("log")
+        axs[1].set_xlim(1e-4, 10)
+        axs[1].set_title("Squared error distance histogram")
+        axs[1].set_xlabel("Squared error distance (pixels)")
+        axs[1].set_ylabel("Count")
+        plt.show()
+        plt.close(fig)
+
+    timestamp = int(time.time() * 1000)
+
+    calibration = kalkam.IntrinsicCalibrationWithData(
+        intrinsic,
+        dist_coefs,
+        image_size,
+        rms_error,
+        max_error,
+        timestamp,
+        [image_points],
+        [squared_error_distances],
+    )
+
+    return calibration
+
+
+def calibrate_from_database(
     directory: pathlib.Path,
     n_samples: int,
     image_size: tuple[int, int] = (960, 540),
@@ -148,7 +282,16 @@ def calibrate(
     percentile: int | None = None,
     plot: bool = False,
 ) -> None:
-    """Calibrate camera using history of star observations contained in directory."""
+    """Calibrate camera using history of star observations contained in directory.
+
+    Args:
+        directory: Directory containing logged star observations as .pkl files.
+        n_samples: Number of samples to use for calibration.
+        image_size: Size of the camera image in pixels as (width, height).
+        percentile: If not None, perform a second calibration iteration with the given percentage
+            of best samples.
+        plot: If True, plot the calibration process and results.
+    """
     files = sorted(directory.glob("data_*.pkl"))
 
     print(f"Found {len(files)} files")
@@ -179,71 +322,8 @@ def calibrate(
     objects = objects[indices]
     images = images[indices]
 
-    if plot:
-        print("Plotting...")
-        fig, axs = plt.subplots(2)
-        for img in images:
-            axs[0].plot(img[..., 0], img[..., 1], "x")
-            axs[0].plot(img[..., 0], img[..., 1], "x")
-        for obj in objects:
-            axs[1].plot(obj[..., 0], obj[..., 1], "x")
-        plt.show()
-        plt.close(fig)
-
-    print("Calibrating...")
-    intrinsic, dist_coefs, reprojection = calibrate_camera(objects, images, image_size)
-
-    squared_error_distances: np.ndarray = np.square(images - reprojection).sum(axis=-1)
-    rms_error = float(np.sqrt(squared_error_distances.mean()))
-    max_error = float(np.sqrt(squared_error_distances.max()))
-
-    print(f"RMS error: {rms_error:.2f} pixels, max error {max_error:.2f} pixels")
-
-    if percentile is not None:
-        print(f"Performing second calibration iteration with {percentile}% of best samples...")
-        threshold = np.percentile(squared_error_distances, percentile)
-        indices = np.where(squared_error_distances < threshold)[0]
-        objects = objects[indices]
-        images = images[indices]
-
-        intrinsic, dist_coefs, reprojection = calibrate_camera(objects, images, image_size)
-
-        squared_error_distances: np.ndarray = np.square(images - reprojection).sum(axis=-1)
-        rms_error = float(np.sqrt(squared_error_distances.mean()))
-        max_error = float(np.sqrt(squared_error_distances.max()))
-
-        print(f"RMS error: {rms_error:.2f} pixels, max error {max_error:.2f} pixels")
-
-    if plot:
-        print("Plotting...")
-        fig, axs = plt.subplots(2)
-        axs[0].plot(images[..., 0], images[..., 1], "x")
-        axs[0].plot(reprojection[..., 0], reprojection[..., 1], ".")
-        axs[0].set_title("Reprojection")
-        epsilon = 1e-8
-        bins = np.logspace(np.log10(1e-4), np.log10(10), 41)
-        bins[0] = min(squared_error_distances.min(), 1e-4) - epsilon
-        bins[-1] = max(squared_error_distances.max(), 10) + epsilon
-        axs[1].hist(squared_error_distances, bins=bins)
-        axs[1].set_xscale("log")
-        axs[1].set_xlim(1e-4, 10)
-        axs[1].set_title("Squared error distance histogram")
-        axs[1].set_xlabel("Squared error distance (pixels)")
-        axs[1].set_ylabel("Count")
-        plt.show()
-        plt.close(fig)
-
-    timestamp = int(time.time() * 1000)
-
-    calibration = kalkam.IntrinsicCalibrationWithData(
-        intrinsic,
-        dist_coefs,
-        image_size,
-        rms_error,
-        max_error,
-        timestamp,
-        [images],
-        [squared_error_distances],
+    calibration = calibrate(
+        images, objects, image_size=image_size, percentile=percentile, plot=plot
     )
 
     output_file = directory / "cam_file.json"
@@ -298,7 +378,7 @@ def cli(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    calibrate(
+    calibrate_from_database(
         args.directory, args.n_samples, args.image_size, plot=args.plot, percentile=args.percentile
     )
 

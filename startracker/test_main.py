@@ -107,7 +107,7 @@ class MasterEmulator:
                 == attitude_estimation.AttitudeEstimationModeEnum.IDLE
             ):
                 break
-            else:
+            else:  # pragma: no cover
                 raise AssertionError()
 
         self.transceive(
