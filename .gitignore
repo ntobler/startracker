@@ -7,8 +7,11 @@ Project Logs*/
 
 test_images*
 build
+target
 startracker.egg-info
 poetry.lock
+Cargo.lock
 
 .coverage
 coverage.xml
+result.json

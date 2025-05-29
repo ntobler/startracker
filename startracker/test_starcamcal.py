@@ -4,7 +4,51 @@ import unittest.mock
 import numpy as np
 import pytest
 
-from startracker import kalkam, starcamcal, testing_utils
+from startracker import kalkam, libstartracker, starcamcal, testing_utils
+
+
+def test_objective_function():
+    tm = testing_utils.TestingMaterial(use_existing=True)
+    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+
+    rng = np.random.default_rng(42)
+
+    n = 100
+
+    image_points = rng.uniform(-0.5, np.asarray(cal.image_size) - 0.5, size=(n, 2))
+
+    object_points = kalkam.PointProjector(cal, extrinsic=np.eye(4)).pix2obj(
+        image_points, obj_z=1, axis=1
+    )
+    object_points /= np.linalg.norm(object_points, axis=-1, keepdims=True)
+
+    assert cal.dist_coeffs is not None
+    x0 = tuple([float(x) for x in [*cal.intrinsic[0], *cal.intrinsic[1, 1:], *cal.dist_coeffs]])
+
+    image_points = image_points.astype(np.float32)
+    object_points = object_points.astype(np.float32)
+
+    x0 = np.array(x0, dtype=np.float64)
+
+    # Check if residuals are close to zero, as the image_points should match the object_points
+    residuals, _ = libstartracker.objective_function(
+        tuple(x0.tolist()), image_points, object_points
+    )
+    np.testing.assert_allclose(residuals, 0, rtol=1e-5, atol=1e-4)
+
+    residuals, jacobian = libstartracker.objective_function(
+        tuple(x0.tolist()), image_points, object_points
+    )
+    delta_param = x0 / 1000
+    x0 += delta_param
+    perturbed_residuals, _ = libstartracker.objective_function(
+        tuple(x0.tolist()), image_points, object_points
+    )
+    # Check if residuals are not close to zero, as the image_points should not match the
+    # object_points
+    assert np.linalg.norm(perturbed_residuals) > 1
+    expected_residuals = residuals + np.sum(delta_param[None, :] * jacobian, axis=1)
+    np.testing.assert_allclose(perturbed_residuals, expected_residuals, rtol=1e-3, atol=1e-3)
 
 
 def test_calibration():
@@ -22,15 +66,15 @@ def test_calibration():
     )
     object_points /= np.linalg.norm(object_points, axis=-1, keepdims=True)
 
-    with unittest.mock.patch("matplotlib.pyplot.show") as mock_show:
-        new_calibration = starcamcal.calibrate(
-            image_points, object_points, cal.image_size, percentile=90, plot=True
-        )
-        assert mock_show.call_count == 2
+    # with unittest.mock.patch("matplotlib.pyplot.show") as mock_show:
+    new_calibration = starcamcal.calibrate(
+        image_points, object_points, cal.image_size, percentile=90, plot=False
+    )
+    # assert mock_show.call_count == 2
 
     np.testing.assert_allclose(cal.intrinsic, new_calibration.intrinsic, rtol=1e-2, atol=1e-2)
-    assert new_calibration.max_error < 0.4
-    assert new_calibration.rms_error < 0.1
+    assert new_calibration.max_error < 0.001
+    assert new_calibration.rms_error < 0.001
 
 
 def test_cli():

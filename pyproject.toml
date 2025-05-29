@@ -33,9 +33,7 @@ pytest-xdist = "^3.6.1"
 pytest-cov = "^5.0.0"
 ruff = "^0.8.2"
 scipy-stubs = "^1.14.1.5"
-
-[tool.poetry.group.experimental.dependencies]
-jax = {extras = ["cpu"], version = "^0.4.25"}
+sympy = "^1.14.0"
 
 [tool.poetry.scripts]
 startracker = "startracker.main:main"
