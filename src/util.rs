@@ -30,8 +30,8 @@ mod tests {
     #[test]
     fn test_as_vec_of_arrays_empty_slice() {
         let data: &[f32] = &[];
-        let array_ref =
-            as_slice_of_arrays::<f32, 3>(data).expect("Expected valid array reference for empty slice");
+        let array_ref = as_slice_of_arrays::<f32, 3>(data)
+            .expect("Expected valid array reference for empty slice");
         assert_eq!(array_ref.len(), 0);
     }
 }

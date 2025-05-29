@@ -1,11 +1,12 @@
 use numpy::{self, PyArrayMethods, PyUntypedArrayMethods, ToPyArray};
+use pyo3::Python;
 use pyo3::{
     exceptions::PyRuntimeError, pyclass, pyfunction, pymethods, pymodule, types::PyModule,
     wrap_pyfunction, Bound, PyResult,
 };
 use std::usize;
-use pyo3::Python;
 
+mod poisson_disk;
 mod starcal;
 mod util;
 
@@ -13,6 +14,7 @@ mod util;
 fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calibrate, m)?)?;
     m.add_function(wrap_pyfunction!(objective_function, m)?)?;
+    m.add_function(wrap_pyfunction!(even_spaced_indices, m)?)?;
     m.add_class::<CalibrationResult>()?;
     Ok(())
 }
@@ -49,16 +51,25 @@ fn objective_function<'py>(
     params: [f64; 10],
     image_points: numpy::PyReadonlyArray2<'py, f32>,
     object_points: numpy::PyReadonlyArray2<'py, f32>,
-) -> (Bound<'py, numpy::PyArray1<f64>>, Bound<'py, numpy::PyArray2<f64>>) {
+) -> (
+    Bound<'py, numpy::PyArray1<f64>>,
+    Bound<'py, numpy::PyArray2<f64>>,
+) {
     let image_points_view = numpy_to_dynamic_slice(&image_points).unwrap();
     let object_points_view = numpy_to_dynamic_slice(&object_points).unwrap();
-    let mut problem: starcal::Problem<'_> = starcal::Problem::new(&params, image_points_view, object_points_view);
+    let mut problem: starcal::Problem<'_> =
+        starcal::Problem::new(&params, image_points_view, object_points_view);
     problem.calc_jaccobian();
     problem.calc_residuals();
 
     let residuals = problem.residuals.as_slice().to_pyarray_bound(py);
     let jacobian_flat = problem.jacobian_transposed.as_slice().to_pyarray_bound(py);
-    let jacobian = jacobian_flat.reshape((problem.jacobian_transposed.ncols(), problem.jacobian_transposed.nrows())).expect("Shape mismatch in jacobian reshape");
+    let jacobian = jacobian_flat
+        .reshape((
+            problem.jacobian_transposed.ncols(),
+            problem.jacobian_transposed.nrows(),
+        ))
+        .expect("Shape mismatch in jacobian reshape");
     (residuals, jacobian)
 }
 
@@ -120,6 +131,18 @@ fn calibrate<'py>(
     );
 
     Ok(CalibrationResult { inner: result })
+}
+
+#[pyfunction]
+fn even_spaced_indices<'py>(
+    py: Python<'py>,
+    points: numpy::PyReadonlyArray2<'py, f32>,
+    n_samples: usize,
+    rng_seed: u64,
+) -> Bound<'py, numpy::PyArray1<usize>> {
+    let points_view = numpy_to_dynamic_slice(&points).unwrap();
+    let accepted_indices = poisson_disk::even_spaced_indices(&points_view, n_samples, rng_seed);
+    accepted_indices.as_slice().to_pyarray_bound(py)
 }
 
 fn numpy_to_dynamic_slice<'py, T: numpy::Element + Copy, const L: usize>(

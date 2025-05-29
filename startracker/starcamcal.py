@@ -212,8 +212,7 @@ def calibrate_from_database(
 
     print(f"Found {len(objects)} logged star observations")
 
-    rng = np.random.default_rng(42)
-    indices = rng.permutation(len(images))[:n_samples]
+    indices = libstartracker.even_spaced_indices(images.astype(np.float32), n_samples, 42)
 
     objects = objects[indices]
     images = images[indices]

@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 
 class CalibrationResult:
     @property
@@ -7,15 +8,20 @@ class CalibrationResult:
     def rms_error(self) -> float: ...
 
 def calibrate(
-    image_points: np.ndarray,
-    object_points: np.ndarray,
+    image_points: npt.NDArray[np.float32],
+    object_points: npt.NDArray[np.float32],
     image_size: tuple[float, float],
     *,
-    intrinsic_guess: np.ndarray | None = None,
-    dist_coefs_guess: np.ndarray | None = None,
+    intrinsic_guess: npt.NDArray[np.float64] | None = None,
+    dist_coefs_guess: npt.NDArray[np.float64] | None = None,
 ) -> CalibrationResult: ...
 def objective_function(
     params: tuple[float, ...],
-    image_point: np.ndarray,
-    object_point: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]: ...
+    image_point: npt.NDArray[np.float32],
+    object_point: npt.NDArray[np.float32],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+def even_spaced_indices(
+    points: npt.NDArray[np.float32],
+    n_samples: int,
+    rng_seed: int,
+) -> npt.NDArray[np.uint64]: ...
