@@ -3,6 +3,7 @@ import unittest.mock
 
 import numpy as np
 import pytest
+import scipy.spatial
 
 from startracker import kalkam, libstartracker, starcamcal, testing_utils
 
@@ -23,7 +24,9 @@ def test_objective_function():
     object_points /= np.linalg.norm(object_points, axis=-1, keepdims=True)
 
     assert cal.dist_coeffs is not None
-    x0 = tuple([float(x) for x in [*cal.intrinsic[0], *cal.intrinsic[1, 1:], *cal.dist_coeffs]])
+    x0 = tuple(
+        [float(x) for x in [0, 0, 0, *cal.intrinsic[0], *cal.intrinsic[1, 1:], *cal.dist_coeffs]]
+    )
 
     image_points = image_points.astype(np.float32)
     object_points = object_points.astype(np.float32)
@@ -66,13 +69,20 @@ def test_calibration():
     )
     object_points /= np.linalg.norm(object_points, axis=-1, keepdims=True)
 
+    axis = rng.normal(size=(3,))
+    axis /= np.linalg.norm(axis)
+    r = scipy.spatial.transform.Rotation.from_rotvec(axis * 10, degrees=True)
+    extrinsic_gt = r.as_matrix()
+    object_points = r.apply(object_points)
+
     # with unittest.mock.patch("matplotlib.pyplot.show") as mock_show:
-    new_calibration = starcamcal.calibrate(
+    new_calibration, extrinsic = starcamcal.calibrate(
         image_points, object_points, cal.image_size, percentile=90, plot=False
     )
     # assert mock_show.call_count == 2
 
     np.testing.assert_allclose(cal.intrinsic, new_calibration.intrinsic, rtol=1e-2, atol=1e-2)
+    np.testing.assert_allclose(extrinsic_gt, extrinsic, rtol=1e-2, atol=1e-2)
     assert new_calibration.max_error < 0.001
     assert new_calibration.rms_error < 0.001
 

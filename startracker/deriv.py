@@ -5,10 +5,40 @@ Used to generate the optimized code in the starcal.rs file.
 
 import sympy as sp
 
+
+def mrp_rotate(v_input: sp.Matrix, p: sp.Matrix):
+    """Rotate a 3D vector using Modified Rodrigues Parameters (MRPs).
+
+    Args:
+        v_input: 3x1 sympy Matrix (the input 3D vector)
+        p: 3x1 sympy Matrix (Modified Rodrigues vector: p = u * tan(θ / 4))
+
+    Returns:
+        3x1 sympy Matrix (the rotated vector)
+    """
+    # Norm squared of p
+    p_norm2 = p.dot(p)
+
+    # Cross-product matrix [p]_x
+    p_cross = sp.Matrix([[0, -p[2], p[1]], [p[2], 0, -p[0]], [-p[1], p[0], 0]])
+
+    # Rotation matrix using MRPs
+    numerator = 8 * p_cross * p_cross - 4 * (1 - p_norm2) * p_cross
+    rotm = sp.eye(3) + numerator / (1 + p_norm2) ** 2
+
+    return rotm * v_input
+
+
 # Define all symbols
 # Intrinsic camera parameters
+mrp_0, mrp_1, mrp_2 = sp.symbols(
+    "mrp_0 mrp_1 mrp_2"
+)  # Rodrigues vector (axis-angle representation)
 fx, sh, tx, fy, ty = sp.symbols("fx sh tx fy ty")
 k1, k2, p1, p2, k3 = sp.symbols("k1 k2 p1 p2 k3")
+
+params = [mrp_0, mrp_1, mrp_2, fx, sh, tx, fy, ty, k1, k2, p1, p2, k3]
+
 
 # Object coordinates in the camera frame
 obj_x, obj_y, obj_z = sp.symbols("obj_x obj_y obj_z")
@@ -16,10 +46,13 @@ obj_x, obj_y, obj_z = sp.symbols("obj_x obj_y obj_z")
 img_x, img_y = sp.symbols("img_x img_y")
 
 intrinsic = sp.Matrix([[fx, sh, tx], [0, fy, ty], [0, 0, 1]])
+obj_xyz = sp.Matrix([obj_x, obj_y, obj_z])
+rot = sp.Matrix([mrp_0, mrp_1, mrp_2])
 
-xyz = sp.Matrix([obj_x, obj_y, obj_z])
+obj_xyz_rot = mrp_rotate(obj_xyz, rot)
 
-temp = intrinsic * xyz
+
+temp = intrinsic * obj_xyz_rot
 x = temp[0] / temp[2]
 y = temp[1] / temp[2]
 
@@ -41,21 +74,21 @@ y_dist = (y_dist * fy) + ty
 rx = img_x - x_dist
 ry = img_y - y_dist
 
-# Parameter list
-params = [fx, sh, tx, fy, ty, k1, k2, p1, p2, k3]
-
-# Jacobian
-jacobian = [rx, ry] + [sp.diff(rx, p) for p in params] + [sp.diff(ry, p) for p in params]
-jacobian = [x.simplify() for x in jacobian]
+values = [rx, ry] + [sp.diff(rx, p) for p in params] + [sp.diff(ry, p) for p in params]
+# values = [x.simplify() for x in values]
 
 # Use common subexpression elimination
-replacements, reduced_exprs = sp.cse(jacobian)
+replacements, reduced_exprs = sp.cse(values)
 
 # Output the reusable subexpressions and final simplified derivatives
 print("// Reusable subexpressions:")
 for lhs, rhs in replacements:
     print(f"let {lhs} = {rhs};")
 
-print("\n// Reduced expressions:")
-for i, expr in enumerate(reduced_exprs):
+print("\n// Jacobian:")
+for i, expr in enumerate(reduced_exprs[2:]):
+    print(f"J[{i}] = {expr}")
+
+print("\n// Residuals:")
+for i, expr in enumerate(reduced_exprs[:2]):
     print(f"J[{i}] = {expr}")

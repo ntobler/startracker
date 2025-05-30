@@ -15,6 +15,7 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.spatial.transform
 
 from startracker import kalkam, libstartracker
 
@@ -26,7 +27,7 @@ def calibrate_camera(
     *,
     intrinsic_guess: np.ndarray | None = None,
     dist_coefs_guess: np.ndarray | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Calibrate camera parameters given image points and 3d object camera frame vectors.
 
     Args:
@@ -41,6 +42,7 @@ def calibrate_camera(
         A tuple containing:
             - intrinsic: The intrinsic camera parameters as a 3x3 matrix.
             - dist_coef: The distortion coefficients as a 1D array of length 5.
+            - extrinsic: The extrinsic camera parameters as a 3x3 rotation matrix.
             - reprojection: The reprojected image points as a 2D array of shape=(n, 2).
     """
     res = libstartracker.calibrate(
@@ -53,11 +55,12 @@ def calibrate_camera(
         else None,
     )
     params = np.array(res.params, dtype=np.float64)
+    extrinsic = scipy.spatial.transform.Rotation.from_mrp(params[:3]).as_matrix()
     intrinsic = np.array(
-        [[params[0], params[1], params[2]], [0, params[3], params[4]], [0, 0, 1]],
+        [[params[3], params[4], params[5]], [0, params[6], params[7]], [0, 0, 1]],
         dtype=np.float64,
     )
-    dist_coef = np.array(params[5:])
+    dist_coef = np.array(params[8:])
 
     error = libstartracker.objective_function(
         tuple(params.tolist()),
@@ -67,7 +70,7 @@ def calibrate_camera(
     error = np.array(error, dtype=np.float32).reshape(-1, 2)
     reprojection = error + image_points
 
-    return (intrinsic, dist_coef, reprojection)
+    return (intrinsic, dist_coef, extrinsic, reprojection)
 
 
 def calibrate(
@@ -77,7 +80,7 @@ def calibrate(
     *,
     percentile: int | None = None,
     plot: bool = False,
-) -> kalkam.IntrinsicCalibrationWithData:
+) -> tuple[kalkam.IntrinsicCalibrationWithData, np.ndarray]:
     """Calibrate camera using a pair of image points and object points at infinite distance.
 
     Args:
@@ -89,7 +92,8 @@ def calibrate(
         plot: If True, plot the calibration process and results.
 
     Returns:
-        The calibrated camera parameters and with calibration performance data.
+        The calibrated camera parameters and with calibration performance data,
+        and the extrinsic camera parameters as a 3x3 rotation matrix.
     """
     if plot:
         print("Plotting...")
@@ -106,7 +110,9 @@ def calibrate(
         plt.close(fig)
 
     print(f"Calibrating using {len(object_points)} samples...")
-    intrinsic, dist_coefs, reprojection = calibrate_camera(object_points, image_points, image_size)
+    intrinsic, dist_coefs, extrinsic, reprojection = calibrate_camera(
+        object_points, image_points, image_size
+    )
 
     squared_error_distances: np.ndarray = np.square(image_points - reprojection).sum(axis=-1)
     rms_error = float(np.sqrt(squared_error_distances.mean()))
@@ -121,7 +127,7 @@ def calibrate(
         object_points = object_points[mask]
         image_points = image_points[mask]
 
-        intrinsic, dist_coefs, reprojection = calibrate_camera(
+        intrinsic, dist_coefs, extrinsic, reprojection = calibrate_camera(
             object_points,
             image_points,
             image_size,
@@ -167,7 +173,7 @@ def calibrate(
         [squared_error_distances],
     )
 
-    return calibration
+    return calibration, extrinsic
 
 
 def calibrate_from_database(
@@ -217,7 +223,7 @@ def calibrate_from_database(
     objects = objects[indices]
     images = images[indices]
 
-    calibration = calibrate(
+    calibration, _ = calibrate(
         images, objects, image_size=image_size, percentile=percentile, plot=plot
     )
 

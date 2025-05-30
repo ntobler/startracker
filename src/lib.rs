@@ -48,7 +48,7 @@ impl CalibrationResult {
 #[pyfunction]
 fn objective_function<'py>(
     py: Python<'py>,
-    params: [f64; 10],
+    params: [f64; starcal::PARAM_COUNT],
     image_points: numpy::PyReadonlyArray2<'py, f32>,
     object_points: numpy::PyReadonlyArray2<'py, f32>,
 ) -> (
