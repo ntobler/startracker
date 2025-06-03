@@ -25,7 +25,10 @@ def test_objective_function():
 
     assert cal.dist_coeffs is not None
     x0 = tuple(
-        [float(x) for x in [0, 0, 0, *cal.intrinsic[0], *cal.intrinsic[1, 1:], *cal.dist_coeffs]]
+        [
+            float(x)
+            for x in [0, 0, 0, *cal.intrinsic[0, ::2], *cal.intrinsic[1, 1:], *cal.dist_coeffs]
+        ]
     )
 
     image_points = image_points.astype(np.float32)
@@ -34,17 +37,17 @@ def test_objective_function():
     x0 = np.array(x0, dtype=np.float64)
 
     # Check if residuals are close to zero, as the image_points should match the object_points
-    residuals, _ = libstartracker.objective_function(
+    residuals, _ = libstartracker.starcal_objective_function(
         tuple(x0.tolist()), image_points, object_points
     )
     np.testing.assert_allclose(residuals, 0, rtol=1e-5, atol=1e-4)
 
-    residuals, jacobian = libstartracker.objective_function(
+    residuals, jacobian = libstartracker.starcal_objective_function(
         tuple(x0.tolist()), image_points, object_points
     )
     delta_param = x0 / 1000
     x0 += delta_param
-    perturbed_residuals, _ = libstartracker.objective_function(
+    perturbed_residuals, _ = libstartracker.starcal_objective_function(
         tuple(x0.tolist()), image_points, object_points
     )
     # Check if residuals are not close to zero, as the image_points should not match the

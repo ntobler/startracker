@@ -115,9 +115,12 @@ pydocstyle.convention = "google"
 "{test,stm32,startracker/scripts}*" = ["D100", "D103", "SLF001", "ANN", "S101"]
 
 [tool.codespell]
-ignore-words-list = "ser"
+ignore-words-list = "ser,crate"
 
 [tool.coverage.report]
 exclude_lines = [
-    'if __name__ == "__main__":'
+    'if __name__ == "__main__":',
+    'if plot:',
+    'if debug:',
+    'if verbose:',
 ]

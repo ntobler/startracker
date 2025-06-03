@@ -7,6 +7,8 @@ import numpy as np
 import numpy.typing as npt
 import scipy.spatial.transform
 
+from startracker import const
+
 
 def fermat_point(points: np.ndarray, *, plot: bool = False) -> np.ndarray:
     """Solves the fermat point problem.
@@ -248,12 +250,12 @@ T = TypeVar("T", float, npt.NDArray)
 
 def seconds_to_degrees(seconds: T) -> T:
     """Convert seconds to degrees Earth rotation."""
-    return seconds * (360 / (24 * 60 * 60))
+    return seconds * (360 / const.EARTH_CELESTIAL_DAY_SECONDS)
 
 
 def degrees_to_seconds(degrees: T) -> T:
     """Convert degrees Earth rotation to seconds."""
-    return degrees * ((24 * 60 * 60) / 360)
+    return degrees * (const.EARTH_CELESTIAL_DAY_SECONDS / 360)
 
 
 @dataclasses.dataclass

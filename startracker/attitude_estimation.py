@@ -6,7 +6,7 @@ import logging
 import math
 import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import ruststartracker
@@ -22,12 +22,16 @@ class AttitudeEstimationResult:
     """Quaternion [x, y, z, w], transforms from the camera frame to the star frame."""
     n_matches: int
     """Number of matched stars that are within tolerance."""
-    image_xyz: np.ndarray
+    image_xyz_cam: np.ndarray
     """Camera frame XYZ coordinates of the image coordinates of all matches."""
     cat_xyz: np.ndarray
     """Camera frame XYZ coordinates of the catalog coordinates of all matches."""
+    cat_xyz_cam: np.ndarray
+    """Camera frame XYZ coordinates of the catalog coordinates of all matches."""
     star_ids: np.ndarray
     """Catalog ids of all matched stars."""
+    obs_indices: np.ndarray
+    """Indices of observations that are matched."""
     mags: np.ndarray
     """Magnitudes of all matched stars."""
 
@@ -35,9 +39,11 @@ class AttitudeEstimationResult:
 ERROR_ATTITUDE_RESULT = AttitudeEstimationResult(
     quat=np.array((1, 0, 0, 0), dtype=np.float64),
     n_matches=0,
-    image_xyz=np.empty((0, 3), dtype=np.float64),
+    image_xyz_cam=np.empty((0, 3), dtype=np.float64),
     cat_xyz=np.empty((0, 3), dtype=np.float64),
+    cat_xyz_cam=np.empty((0, 3), dtype=np.float64),
     star_ids=np.empty((0,), dtype=np.int32),
+    obs_indices=np.empty((0,), dtype=np.int32),
     mags=np.empty((0,), dtype=np.float64),
 )
 
@@ -60,7 +66,13 @@ class AttitudeEstimatorConfig(util.PickleDataclass):
         return dataclasses.replace(self)
 
 
+FilterFunc = Callable[[np.ndarray, np.ndarray], np.ndarray]
+
+
 class AttitudeEstimator:
+    _cat_filter: Optional[FilterFunc] = None
+    """Filter function for star catalog (cat_xyz, cat_mag) -> boolean_mask."""
+
     def __init__(
         self,
         cal: kalkam.IntrinsicCalibration,
@@ -75,11 +87,14 @@ class AttitudeEstimator:
         if config is None:
             config = AttitudeEstimatorConfig()
 
-        self.cal = cal
+        self._cal = cal
 
         self._config = config
 
         catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
+        self.all_cat_xyz = catalog.normalized_positions(epoch=2024.7)
+        self.all_cat_mag = catalog.magnitude
+
         self.cat_xyz = catalog.normalized_positions(epoch=2024.7)
         self.cat_mag = catalog.magnitude
 
@@ -87,14 +102,23 @@ class AttitudeEstimator:
 
     def _initialize_backend(self) -> None:
         camera_params = ruststartracker.CameraParameters(
-            camera_matrix=self.cal.intrinsic,
-            cam_resolution=self.cal.image_size,
-            dist_coefs=self.cal.dist_coeffs,
+            camera_matrix=self._cal.intrinsic,
+            cam_resolution=self._cal.image_size,
+            dist_coefs=self._cal.dist_coeffs,
         )
 
         # Approximate angle tolerance from pixel tolerance
-        fx = float(self.cal.intrinsic[0, 0])
+        fx = float(self._cal.intrinsic[0, 0])
         isa_angle_tol = math.atan(self._config.star_match_pixel_tol / fx)
+
+        # Apply filter to catalog if present
+        if self._cat_filter is not None:
+            mask = self._cat_filter(self.all_cat_xyz, self.all_cat_mag)
+            self.cat_xyz = self.all_cat_xyz[mask]
+            self.cat_mag = self.all_cat_mag[mask]
+        else:
+            self.cat_xyz = self.all_cat_xyz
+            self.cat_mag = self.all_cat_mag
 
         self._backend = ruststartracker.StarTracker(
             self.cat_xyz,
@@ -103,6 +127,26 @@ class AttitudeEstimator:
             n_minimum_matches=self._config.n_match,
             timeout_secs=self._config.timeout_secs,
         )
+
+    @property
+    def cal(self) -> kalkam.IntrinsicCalibration:
+        """Return the camera calibration."""
+        return self._cal
+
+    @cal.setter
+    def cal(self, x: kalkam.IntrinsicCalibration):
+        self._cal = x
+        self._initialize_backend()
+
+    @property
+    def cat_filter(self) -> Optional[FilterFunc]:
+        """Return the catalog filter used."""
+        return self._cat_filter
+
+    @cat_filter.setter
+    def cat_filter(self, func: Optional[FilterFunc]):
+        self._cat_filter = func
+        self._initialize_backend()
 
     @property
     def config(self) -> AttitudeEstimatorConfig:
@@ -124,12 +168,38 @@ class AttitudeEstimator:
         else:
             self._config = config
 
-    def image_xyz_to_xy(self, image_xyz: np.ndarray) -> np.ndarray:
+    def image_xyz_to_xy(self, image_xyz_cam: np.ndarray) -> np.ndarray:
         """Convert camera frame XYZ coordinates to image pixel coordinates."""
-        image_xy = (self.cal.intrinsic @ image_xyz.T).T
+        image_xy = (self._cal.intrinsic @ image_xyz_cam.T).T
         image_xy = image_xy[..., :2] / image_xy[..., 2:]
-        image_xy = kalkam.PointUndistorter(self.cal).distort(image_xy)
+        image_xy = kalkam.PointUndistorter(self._cal).distort(image_xy)
         return image_xy
+
+    def get_star_positions(
+        self, image: np.ndarray, darkframe: Optional[np.ndarray] = None
+    ) -> np.ndarray:
+        """Get image positions of stars found in the given image."""
+        return self._backend.get_centroids(
+            image,
+            darkframe=darkframe,
+            min_star_area=self._config.min_star_area,
+            max_star_area=self._config.max_star_area,
+        )
+
+    def estimate_from_image_positions(self, image_xy: np.ndarray) -> AttitudeEstimationResult:
+        """Perform attitude estimation on a vector of star image positions .
+
+        Args:
+            image_xy: Star image positions, shape=[n, 2]
+
+        Returns:
+            AttitudeEstimationResult: attitude estimation result object.
+        """
+        try:
+            result = self._backend.process_image_coordiantes(image_xy)
+        except ruststartracker.StarTrackerError:
+            return ERROR_ATTITUDE_RESULT
+        return self._post_process_result(result)
 
     def __call__(
         self, image: np.ndarray, darkframe: Optional[np.ndarray] = None
@@ -152,7 +222,9 @@ class AttitudeEstimator:
             )
         except ruststartracker.StarTrackerError:
             return ERROR_ATTITUDE_RESULT
+        return self._post_process_result(result)
 
+    def _post_process_result(self, result: ruststartracker.StarTrackerResult):
         q_est = result.quat
         id_match = result.match_ids
         n_matches = result.n_matches
@@ -163,23 +235,32 @@ class AttitudeEstimator:
 
         # Convert vectors into camera frame
         rot = scipy.spatial.transform.Rotation.from_quat(q_est).inv()
-        cat_xyz = rot.apply(cat_xyz)
+        cat_xyz_cam = rot.apply(cat_xyz)
 
-        return AttitudeEstimationResult(q_est, n_matches, image_xyz, cat_xyz, id_match, star_mags)
+        return AttitudeEstimationResult(
+            q_est,
+            n_matches,
+            image_xyz,
+            cat_xyz,
+            cat_xyz_cam,
+            id_match,
+            result.obs_indices,
+            star_mags,
+        )
 
     def calculate_statistics(self, res: AttitudeEstimationResult):
-        """Calculate true potitive and false negative magnitudes."""
+        """Calculate true positive and false negative magnitudes."""
         rot = scipy.spatial.transform.Rotation.from_quat(res.quat)
         points = rot.inv().apply(self.cat_xyz)
 
         z = points[..., 2]
 
-        pp = kalkam.PointProjector(self.cal, np.eye(4))
-        width, height = self.cal.image_size
+        pp = kalkam.PointProjector(self._cal, np.eye(4))
+        width, height = self._cal.image_size
 
         x, y = pp.obj2pix(points, axis=-1).T
 
-        condition = (z > self.cal.cos_phi(1.1)) * (x < width) * (x >= 0) * (y < height) * (y >= 0)
+        condition = (z > self._cal.cos_phi(1.1)) * (x < width) * (x >= 0) * (y < height) * (y >= 0)
         in_frame_star_ids = set(np.where(condition)[0])
         detected_stars_ids = set(res.star_ids)
 
@@ -322,7 +403,7 @@ class ImageAcquisitioner:
                     confidence = self._confidence_function(att_res.n_matches)
                     self._attitude_filter.put_quat(att_res.quat, confidence, time.monotonic())
                     self.n_matches = att_res.n_matches
-                    image_xyz = att_res.image_xyz
+                    image_xyz = att_res.image_xyz_cam
 
                     self.positions = (
                         self._attitude_estimator.image_xyz_to_xy(image_xyz) / image.shape[1]

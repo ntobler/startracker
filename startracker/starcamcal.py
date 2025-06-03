@@ -3,9 +3,6 @@
 This script performs a camera calibration using a history of observed star positions and their
 3D coordinates taken from the star catalogue. This optimization problem is different from the
 normal camera calibration workflow, usually done with a chessboard and OpenCV.
-
-This script might not be suitable for a Raspberry Pi, as it requires a lot of memory and "jax" to
-run. It is recommended to run this script on a desktop computer.
 """
 
 import argparse
@@ -45,27 +42,37 @@ def calibrate_camera(
             - extrinsic: The extrinsic camera parameters as a 3x3 rotation matrix.
             - reprojection: The reprojected image points as a 2D array of shape=(n, 2).
     """
-    res = libstartracker.calibrate(
-        image_points.astype(np.float32),
-        object_points.astype(np.float32),
+    if len(image_points) < 13:
+        msg = (
+            "The optimization problem has 12 DoF. The number of passed image points only amount "
+            f"to {len(image_points)*2} equations which is less than double of the DoF and will "
+            f"result in a poor calibration. Please provide at least {len(image_points)} image "
+            "points."
+        )
+        raise ValueError(msg)
+    image_points = np.ascontiguousarray(image_points, dtype=np.float32)
+    object_points = np.ascontiguousarray(object_points, dtype=np.float32)
+    res = libstartracker.starcal_calibrate(
+        image_points,
+        object_points,
         image_size,
-        intrinsic_guess=intrinsic_guess.astype(np.float64) if intrinsic_guess is not None else None,
-        dist_coefs_guess=dist_coefs_guess.astype(np.float64)
+        intrinsic_guess=np.ascontiguousarray(intrinsic_guess, dtype=np.float64)
+        if intrinsic_guess is not None
+        else None,
+        dist_coefs_guess=np.ascontiguousarray(dist_coefs_guess, dtype=np.float64)
         if dist_coefs_guess is not None
         else None,
     )
     params = np.array(res.params, dtype=np.float64)
     extrinsic = scipy.spatial.transform.Rotation.from_mrp(params[:3]).as_matrix()
     intrinsic = np.array(
-        [[params[3], params[4], params[5]], [0, params[6], params[7]], [0, 0, 1]],
+        [[params[3], 0.0, params[4]], [0, params[5], params[6]], [0, 0, 1]],
         dtype=np.float64,
     )
-    dist_coef = np.array(params[8:])
+    dist_coef = np.array(params[7:])
 
-    error = libstartracker.objective_function(
-        tuple(params.tolist()),
-        image_points.astype(np.float32),
-        object_points.astype(np.float32),
+    error = libstartracker.starcal_objective_function(
+        tuple(params.tolist()), image_points, object_points
     )[0]
     error = np.array(error, dtype=np.float32).reshape(-1, 2)
     reprojection = error + image_points

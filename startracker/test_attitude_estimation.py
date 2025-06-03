@@ -69,12 +69,12 @@ def test_attutude_estimation():
         true_positive_mags.extend(tp)
         false_negative_mags.extend(fn)
 
-        image_xy = (sig.intrinsic @ att_res.image_xyz.T).T
+        image_xy = (sig.intrinsic @ att_res.image_xyz_cam.T).T
         image_xy = image_xy[..., :2] / image_xy[..., 2:]
         if sig.distorter is not None:
             image_xy = sig.distorter.distort(image_xy)
 
-        cat_xy = (sig.intrinsic @ att_res.cat_xyz.T).T
+        cat_xy = (sig.intrinsic @ att_res.cat_xyz_cam.T).T
         cat_xy = cat_xy[..., :2] / cat_xy[..., 2:]
         if sig.distorter is not None:
             cat_xy = sig.distorter.distort(cat_xy)

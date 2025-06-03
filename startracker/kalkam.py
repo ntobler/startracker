@@ -913,6 +913,8 @@ class PointProjector:
         self.dist_coeffs = cal.dist_coeffs
         if cal.dist_coeffs is not None:
             self._undistorter = PointUndistorter(cal)
+        else:
+            self._undistorter = None
 
     def pix2obj(
         self, xy: ArrayLike, obj_z: Union[ArrayLike, float] = 0.0, axis: int = -1

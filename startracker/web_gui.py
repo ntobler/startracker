@@ -239,15 +239,15 @@ class AttitudeEstimation:
         with util.TimeMeasurer() as tm2:
             att_res = self._attitude_est(processed_image)
 
-        obs_xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz)
-        cat_xy = self._attitude_est.image_xyz_to_xy(att_res.cat_xyz)
+        obs_xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz_cam)
+        cat_xy = self._attitude_est.image_xyz_to_xy(att_res.cat_xyz_cam)
         image_size = (image.shape[1], image.shape[0])
 
         if att_res is not attitude_estimation.ERROR_ATTITUDE_RESULT:
             self.quat = att_res.quat
 
             self._image_database.append(obs_xy)
-            self._object_database.append(att_res.cat_xyz)
+            self._object_database.append(att_res.cat_xyz_cam)
             if len(self._image_database) > 100:
                 self.save_database()
 
@@ -257,10 +257,10 @@ class AttitudeEstimation:
             # Rotate into camera coordinate frame
             cat_xyz = inverse_rotation.apply(self._cat_xyz)
             north_south = inverse_rotation.apply([[0, 0, 1], [0, 0, -1]])
-            star_coords = att_res.image_xyz
+            star_coords = att_res.image_xyz_cam
 
             # Merge catalog stars and detected stars (so both are displayed in the GUI)
-            cat_xyz = np.concatenate((cat_xyz, att_res.cat_xyz), axis=0)
+            cat_xyz = np.concatenate((cat_xyz, att_res.cat_xyz_cam), axis=0)
             cat_mags = np.concatenate((self._cat_mags, att_res.mags), axis=0)
 
             # Rotate into the axis coordinate frame if the axis has been calibrated
