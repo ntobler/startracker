@@ -16,7 +16,8 @@ def test_attutude_estimation_simple():
     )
     ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
 
-    sig = testing_utils.StarImageGenerator(cal, noise_sigma=0)
+    sig_conf = testing_utils.StarImageGeneratorConfig(noise_sigma=0)
+    sig = testing_utils.StarImageGenerator(cal, sig_conf)
 
     rng = np.random.default_rng(42)
     quat_gt = scipy.spatial.transform.Rotation.random(random_state=rng).as_quat(canonical=False)
@@ -36,7 +37,8 @@ def test_attutude_estimation_error():
     ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
 
     # Get very noisy image
-    sig = testing_utils.StarImageGenerator(cal, noise_sigma=200)
+    sig_conf = testing_utils.StarImageGeneratorConfig(noise_sigma=200)
+    sig = testing_utils.StarImageGenerator(cal, sig_conf)
 
     image, _, _ = sig([0, 0, 1], [0, 1, 0])
 

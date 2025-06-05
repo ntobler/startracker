@@ -28,7 +28,8 @@ def test_star_gradient_calibration(*, use_distortion: bool, plot: bool = False):
 
     # Get image projection of stars and one second later
     settings = camera.CameraSettings()
-    cam = testing_utils.StarCameraCalibrationTestCam(settings, cal=cal)
+    config = testing_utils.StarImageGeneratorConfig(exposure=200)
+    cam = testing_utils.StarCameraCalibrationTestCam(settings, cal=cal, config=config)
     cam.phi = phi
     cam.epsilon = epsilon
     cam.theta = theta
@@ -89,7 +90,8 @@ def test_star_gradient_calibration(*, use_distortion: bool, plot: bool = False):
 
 def test_movement_register():
     settings = camera.CameraSettings()
-    cam = testing_utils.StarCameraCalibrationTestCam(settings)
+    config = testing_utils.StarImageGeneratorConfig(exposure=200)
+    cam = testing_utils.StarCameraCalibrationTestCam(settings, config=config)
     cam.theta = 1.0
 
     # Setup dummy attitude estimator for star position detection
@@ -150,12 +152,13 @@ def test_movement_register():
 @pytest.mark.parametrize("theta", [-np.pi / 4, 0, np.pi / 4])
 def test_starcalibrator(theta: float):
     settings = camera.CameraSettings()
-    cam = testing_utils.StarCameraCalibrationTestCam(settings)
+    config = testing_utils.StarImageGeneratorConfig(exposure=200)
+    cam = testing_utils.StarCameraCalibrationTestCam(settings, config=config)
     cam.theta = theta
 
     ae_config = attitude_estimation.AttitudeEstimatorConfig(star_match_pixel_tol=10, n_match=8)
     star_cal_config = initial_starcal.StarCalibratorConfig(ae_config)
-    sc = initial_starcal.StarCalibrator(star_cal_config, 960, 540)
+    sc = initial_starcal.StarCalibrator(star_cal_config, (960, 540))
 
     for t in range(0, 60 * 20, 10):
         # Record images every 10 seconds for 5 minutes

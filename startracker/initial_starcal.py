@@ -6,17 +6,14 @@ from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
-import ruststartracker
 import scipy.spatial
 
 from startracker import (
     attitude_estimation,
-    camera,
     const,
     kalkam,
     libstartracker,
     starcamcal,
-    testing_utils,
 )
 
 
@@ -317,6 +314,8 @@ class StarCalibrator:
     region, as the algorithm favors fast moving stars.
     """
 
+    image_size: tuple[int, int]
+
     star_match_fraction: list[float]
     """Fraction of observations that match stars in the catalog."""
     rms_errors: list[float]
@@ -328,47 +327,47 @@ class StarCalibrator:
     times: list[float]
     """Times of given star capture samples."""
 
+    extrinsics: list[np.ndarray]
     intrinsics: list[np.ndarray]
     dist_coeffs: list[np.ndarray]
-    cal: kalkam.IntrinsicCalibration
 
-    _stars_xy: list[np.ndarray]
+    stars_xy: list[np.ndarray]
     """List of star observations"""
 
-    _first_estimate_acquired: bool
+    first_estimate_acquired: bool
 
-    def __init__(self, config: StarCalibratorConfig, width: int, height: int) -> None:
+    def __init__(self, config: StarCalibratorConfig, image_size: tuple[int, int]) -> None:
         self._config = config
-
-        catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
-        self._cat_xyz = catalog.normalized_positions(epoch=2024.7)
+        self.image_size = image_size
 
         self.times = []
         self.star_match_fraction = []
         self.rms_errors = []
         self.max_errors = []
         self.median_errors = []
+        self.extrinsics = []
         self.intrinsics = []
         self.dist_coeffs = []
 
-        self._stars_xy = []
+        self.stars_xy = []
 
         # These values will be recalculated if the calibration changes
-        self._image_xy_list = []
+        self.image_xy_list = []
         self._cat_xyz_list = []
         self._match_fractions = []
         self._quat_list = []
 
         # Initialize with dummy values
-        cal = kalkam.IntrinsicCalibration(np.eye(3), np.zeros(5), (width, height))
+        cal = kalkam.IntrinsicCalibration(np.eye(3), np.zeros(5), image_size)
         self.ae = attitude_estimation.AttitudeEstimator(
             cal, config=config.attitude_estimator_config
         )
 
         # Initialize movement Registerer for initial ultra coarse calibration
-        self._movement_registerer = MovementRegisterer()
+        self.movement_registerer = MovementRegisterer()
 
-        self._first_estimate_acquired = False
+        self.first_estimate_acquired = False
+        self.starbased_calibration_acquired = False
 
     def put_image(self, image: npt.NDArray[np.uint8], t: float) -> None:
         """Add an image to the calibration."""
@@ -379,7 +378,7 @@ class StarCalibrator:
 
         stars_xy = self.ae.get_star_positions(image)
 
-        self._stars_xy.append(stars_xy)
+        self.stars_xy.append(stars_xy)
         self.times.append(t)
         self.star_match_fraction.append(
             0 if not self.star_match_fraction else self.star_match_fraction[-1]
@@ -387,6 +386,11 @@ class StarCalibrator:
         self.rms_errors.append(np.nan if not self.rms_errors else self.rms_errors[-1])
         self.max_errors.append(np.nan if not self.max_errors else self.max_errors[-1])
         self.median_errors.append(np.nan if not self.median_errors else self.median_errors[-1])
+        self.extrinsics.append(
+            np.array(((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0)), dtype=np.float64)
+            if not self.extrinsics
+            else self.extrinsics[-1].copy()
+        )
         self.intrinsics.append(
             np.full((3, 3), np.nan) if not self.intrinsics else self.intrinsics[-1].copy()
         )
@@ -395,20 +399,20 @@ class StarCalibrator:
         )
 
         # Track movement for star gradient calibration
-        if not self._first_estimate_acquired:
-            self._movement_registerer(stars_xy, t)
+        if not self.starbased_calibration_acquired:
+            self.movement_registerer(stars_xy, t)
 
         # Only continue in regular intervals
         if len(self.times) % self._config.interval != 0:
             return
 
-        if not self._first_estimate_acquired:
+        if not self.starbased_calibration_acquired:
             # Initially, a basic calibration is needed to feed the star-based attitude estimator
             # with calibration parameters. These parameters are estimated from the movement of stars
             # across the sky.
 
             # Get star positions and their gradient in image coordinates.
-            stars_xy, stars_dxy, mses = self._movement_registerer.get_results()
+            stars_xy, stars_dxy, mses = self.movement_registerer.get_results(min_observations=4)
 
             # Check if there is enough points with good quality fits
             if (
@@ -419,11 +423,16 @@ class StarCalibrator:
 
             # Fit calibration to star movement
             height, width = image.shape
-            intrinsic, dist_coef, theta, _, error = star_gradient_calibration(
+            intrinsic, dist_coef, theta, epsilon, error = star_gradient_calibration(
                 stars_xy, stars_dxy, width, height
             )
 
+            r = scipy.spatial.transform.Rotation.from_euler(
+                "zxz", (epsilon, np.pi / 2 - theta, 0), degrees=False
+            )
+
             # Store parameters
+            self.extrinsics[-1][:3, :3] = r.as_matrix().T
             self.intrinsics[-1][:] = intrinsic
             self.dist_coeffs[-1][0] = dist_coef
             self.dist_coeffs[-1][1:] = 0.0
@@ -433,7 +442,7 @@ class StarCalibrator:
                 return
 
             # Mark initial calibration as successful
-            self._first_estimate_acquired = True
+            self.first_estimate_acquired = True
 
             cal = kalkam.IntrinsicCalibration(
                 intrinsic=intrinsic,
@@ -450,9 +459,11 @@ class StarCalibrator:
             )
 
             def filt(cat_xyz: np.ndarray, mag: np.ndarray) -> np.ndarray:
-                _ = mag
+                # Only consider stars in a latitudinal band around the theta angle
                 cat_theta = np.arcsin(cat_xyz[..., 2])
                 mask = np.abs(cat_theta - theta) < half_fov_rad
+                # Only consider bright stars
+                mask *= mag < 5.5
                 return mask
 
             # Calibration needs to be set before filter,
@@ -460,11 +471,11 @@ class StarCalibrator:
             self.ae.cal = cal
             self.ae.cat_filter = filt
 
-        if self._first_estimate_acquired:
+        if self.first_estimate_acquired:
             # Estimate rotations
             already_calculated = len(self._match_fractions)
             for xy, t in zip(
-                self._stars_xy[already_calculated:], self.times[already_calculated:], strict=True
+                self.stars_xy[already_calculated:], self.times[already_calculated:], strict=True
             ):
                 result = self.ae.estimate_from_image_positions(xy)
 
@@ -475,7 +486,7 @@ class StarCalibrator:
 
                 # Use image/object points pairs for calibration
                 matched_img_xy = xy[result.obs_indices]
-                self._image_xy_list.append(matched_img_xy)
+                self.image_xy_list.append(matched_img_xy)
                 rads = -t * const.EARTH_ANGULAR_VELOCITY
                 # Rotate the object points around the Earth's axis to compensate for the
                 # time shift
@@ -491,7 +502,7 @@ class StarCalibrator:
 
             self.star_match_fraction[-1] = mean_match_fraction
 
-            if len(self._image_xy_list) == 0:
+            if len(self.image_xy_list) == 0:
                 return
 
             # Filter outliers
@@ -513,7 +524,7 @@ class StarCalibrator:
                 [self._cat_xyz_list[i] for i in best_indices], axis=0, dtype=np.float32
             )
             image_xy = np.concatenate(
-                [self._image_xy_list[i] for i in best_indices], axis=0, dtype=np.float32
+                [self.image_xy_list[i] for i in best_indices], axis=0, dtype=np.float32
             )
 
             # Rotate catalog coordinates such they result in smaller rotation values in the
@@ -525,7 +536,7 @@ class StarCalibrator:
 
                 print("Plotting...")
                 fig, axs = plt.subplots(2)
-                s = np.concatenate(self._stars_xy, axis=0)
+                s = np.concatenate(self.stars_xy, axis=0)
                 axs[0].plot(s[..., 0], s[..., 1], ".", alpha=0.2)
                 axs[0].plot(image_xy[..., 0], image_xy[..., 1], "x")
                 axs[0].set_aspect("equal")
@@ -587,16 +598,19 @@ class StarCalibrator:
                 [squared_error_distances],
             )
 
+            # Don't use parameters if the error is very large
+            if rms_error > 2.0:
+                return
+
+            self.starbased_calibration_acquired = True
+
             # Store parameters
             self.rms_errors[-1] = float(rms_error)
             self.max_errors[-1] = float(max_error)
             self.median_errors[-1] = float(median_error)
+            self.extrinsics[-1][:3, :3] = r.inv().as_matrix()
             self.intrinsics[-1][:] = intrinsic
             self.dist_coeffs[-1][:] = dist_coeffs
-
-            # Don't use parameters if the error is very large
-            if rms_error > 2.0:
-                return
 
             # Use new calibration if it is better than the last one
             if (
@@ -605,7 +619,7 @@ class StarCalibrator:
             ) or not isinstance(self.ae.cal, kalkam.IntrinsicCalibrationWithData):
                 # Update the star tolerance with the estimated maximum error
                 ae_config = self.ae.config
-                ae_config.star_match_pixel_tol = rms_error * 2.0
+                ae_config.star_match_pixel_tol = rms_error * 3.0
                 self.ae.config = ae_config
 
                 # Set the updated calibration
@@ -616,7 +630,7 @@ class StarCalibrator:
                     self.ae.cat_filter = None
 
                 # Reset calculated values, so they will be recalculated
-                self._image_xy_list = []
+                self.image_xy_list = []
                 self._cat_xyz_list = []
                 self._match_fractions = []
                 self._quat_list = []
@@ -658,26 +672,3 @@ class StarCalibrator:
 
         plt.show()
         plt.close(fig)
-
-
-def example():
-    """Example script estimating camera calibration from artificial star data."""
-    settings = camera.CameraSettings()
-    cam = testing_utils.StarCameraCalibrationTestCam(settings)
-    cam.theta = 0.6
-
-    ae_config = attitude_estimation.AttitudeEstimatorConfig(star_match_pixel_tol=10, n_match=8)
-    star_cal_config = StarCalibratorConfig(ae_config)
-    sc = StarCalibrator(star_cal_config, 960, 540)
-
-    for t in range(0, 60 * 60, 10):
-        # Record images every 10 seconds for 5 minutes
-        cam.t = t
-        image = cam.capture()
-        sc.put_image(image, t)
-
-    sc.plot(gt_intrinsic=cam.cal.intrinsic, gt_dist_coeffs=cam.cal.dist_coeffs)
-
-
-if __name__ == "__main__":
-    example()

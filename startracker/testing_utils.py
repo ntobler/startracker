@@ -49,23 +49,38 @@ class TestingMaterial:
         persistent.Persistent.get_instance().cam_file = self.cam_file
 
 
+@dataclasses.dataclass
+class StarImageGeneratorConfig:
+    """Configuration parameters for the StarImageGenerator."""
+
+    exposure: float = 15.0
+    """Simulated exposure time in seconds. Higher exposure results in brighter image."""
+    blur: float = 0.7
+    """Blur post-processing standard deviation."""
+    noise_sigma: float = 1.0
+    """Added noise standard deviation."""
+    black_level: float = 4.5
+    """Black level of sensor."""
+    catalog_max_magnitude: float = 5.5
+    """Maximum star intensity included in the star catalog. Higher number is more faint."""
+
+
 class StarImageGenerator:
     def __init__(
-        self,
-        cal: kalkam.IntrinsicCalibration,
-        exposure: float = 15.0,
-        blur: float = 0.7,
-        noise_sigma: float = 1.0,
-        black_level: float = 4.5,
+        self, cal: kalkam.IntrinsicCalibration, config: Optional[StarImageGeneratorConfig] = None
     ):
+        """Initialize."""
+        if config is None:
+            config = StarImageGeneratorConfig()
+
         self._cal = cal
         self.width, self.height = cal.image_size
         self.intrinsic = cal.intrinsic
 
-        self.exposure = exposure
-        self.blur = blur
-        self.noise_sigma = noise_sigma
-        self.black_level = black_level
+        self.exposure = config.exposure
+        self.blur = config.blur
+        self.noise_sigma = config.noise_sigma
+        self.black_level = config.black_level
 
         self._cos_phi = self._cal.cos_phi(angle_margin_factor=1.2)
 
@@ -74,7 +89,7 @@ class StarImageGenerator:
         else:
             self.distorter = None
 
-        catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
+        catalog = ruststartracker.StarCatalog(max_magnitude=config.catalog_max_magnitude)
         self.stars_nwu = catalog.normalized_positions()
         self.stars_mags = catalog.magnitude
 
@@ -316,6 +331,7 @@ class ArtificialStarCam(camera.Camera):
         self,
         camera_settings: camera.CameraSettings,
         cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
     ):
         super().__init__(camera_settings)
         self._rng = np.random.default_rng(42)
@@ -324,7 +340,7 @@ class ArtificialStarCam(camera.Camera):
             self.cal = kalkam.IntrinsicCalibration.from_json(cam_file)
         else:
             self.cal = cal
-        self._sig = StarImageGenerator(self.cal, exposure=200)
+        self._sig = StarImageGenerator(self.cal, config)
 
     @override
     def capture_raw(self) -> npt.NDArray[np.uint16]:
@@ -373,8 +389,9 @@ class RandomStarCam(ArtificialStarCam):
         self,
         camera_settings: camera.CameraSettings,
         cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
     ):
-        super().__init__(camera_settings, cal=cal)
+        super().__init__(camera_settings, cal=cal, config=config)
         self._vector = self._rng.normal(size=(2, 3)) * 0.3
 
     @override
@@ -394,8 +411,9 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
         self,
         camera_settings: camera.CameraSettings,
         cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
     ):
-        super().__init__(camera_settings, cal=cal)
+        super().__init__(camera_settings, cal=cal, config=config)
         vectors = self._rng.normal(size=(2, 3))
         vectors /= np.linalg.norm(vectors, axis=-1, keepdims=True)
 
@@ -440,8 +458,9 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         self,
         camera_settings: camera.CameraSettings,
         cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
     ):
-        super().__init__(camera_settings, cal=cal)
+        super().__init__(camera_settings, cal=cal, config=config)
 
         self.theta = self._rng.uniform(-np.pi / 2, np.pi / 2)
         self.epsilon = self._rng.uniform(-np.pi / 2, np.pi / 2)

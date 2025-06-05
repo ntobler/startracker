@@ -60,6 +60,11 @@ class AttitudeEstimatorConfig(util.PickleDataclass):
     """Tolerance in pixels for a star to be recognized as match."""
     timeout_secs: float = 0.2
     """Timeout for computation in seconds."""
+    epoch: Optional[float] = None
+    """Astronomical epoch in years e.g. 2024.7 to calculate up-to-date star catalog.
+    If None, the current date is used. Set to a fixed value to ensure reproducibility."""
+    catalog_max_magnitude: float = 5.5
+    """Maximum star intensity included in the star catalog. Higher number is more faint."""
 
     def copy(self) -> Self:
         """Create a copy of this instance."""
@@ -91,12 +96,9 @@ class AttitudeEstimator:
 
         self._config = config
 
-        catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
-        self.all_cat_xyz = catalog.normalized_positions(epoch=2024.7)
+        catalog = ruststartracker.StarCatalog(max_magnitude=config.catalog_max_magnitude)
+        self.all_cat_xyz = catalog.normalized_positions(epoch=config.epoch)
         self.all_cat_mag = catalog.magnitude
-
-        self.cat_xyz = catalog.normalized_positions(epoch=2024.7)
-        self.cat_mag = catalog.magnitude
 
         self._initialize_backend()
 
