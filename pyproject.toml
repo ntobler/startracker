@@ -21,6 +21,7 @@ dynaconf = "^3.2.4"
 pycairo = "^1.26.0"
 ruststartracker = { git = "https://github.com/ntobler/ruststartracker.git" }
 typing-extensions = "^4.12.2"
+mypy = "^1.16.0"
 
 [tool.poetry.group.dev.dependencies]
 viztracer = "^0.16.2"
@@ -124,3 +125,10 @@ exclude_lines = [
     'if debug:',
     'if verbose:',
 ]
+
+[tool.mypy]
+# packages = ["startracker"] # At some point maybe
+modules = ["startracker.web_gui"]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true

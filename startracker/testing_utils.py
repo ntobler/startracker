@@ -325,6 +325,9 @@ class ArtificialStarCam(camera.Camera):
     """Display longitude and latitude grid overlay."""
     simulate_exposure_time: bool = False
     """Wait until exposure time has elapsed."""
+    default_config: StarImageGeneratorConfig = StarImageGeneratorConfig()
+    """Default configuration of the star image generator if None given.
+    Set this class variable to use config for newly instantiated objects."""
     _last_star_image_positions: Optional[npt.NDArray[np.float64]]
 
     def __init__(
@@ -340,6 +343,7 @@ class ArtificialStarCam(camera.Camera):
             self.cal = kalkam.IntrinsicCalibration.from_json(cam_file)
         else:
             self.cal = cal
+        config = config if config is not None else self.default_config
         self._sig = StarImageGenerator(self.cal, config)
 
     @override
@@ -350,10 +354,10 @@ class ArtificialStarCam(camera.Camera):
     def capture(self) -> npt.NDArray[np.uint8]:
         if self.simulate_exposure_time:
             with util.max_rate(1000 / self._sig.exposure):
-                image, self._last_star_image_positions = self._capture()
+                image, self._last_star_image_positions, self.capture_time = self._capture()
                 return image
         else:
-            image, self._last_star_image_positions = self._capture()
+            image, self._last_star_image_positions, self.capture_time = self._capture()
             return image
 
     def get_last_star_image_positions(self) -> npt.NDArray[np.float64]:
@@ -368,7 +372,7 @@ class ArtificialStarCam(camera.Camera):
         pass
 
     @abc.abstractmethod
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
         """Return captured image and star image positions."""
 
     @override
@@ -395,13 +399,13 @@ class RandomStarCam(ArtificialStarCam):
         self._vector = self._rng.normal(size=(2, 3)) * 0.3
 
     @override
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
         self._vector *= 0.9
         self._vector += 0.1 * self._rng.normal(size=(2, 3)) * 0.3
         vector = self._vector + [[0, 0, 5], [0, 10, 0]]
         vector /= np.linalg.norm(vector, axis=-1, keepdims=True)
         image, star_xy, _ = self._sig(vector[0], vector[1], grid=self.grid)
-        return image, star_xy
+        return image, star_xy, 0.0
 
 
 class AxisAlignCalibrationTestCam(ArtificialStarCam):
@@ -430,7 +434,7 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
         self.axis_angle = 0.0
 
     @override
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
         t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
 
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
@@ -441,7 +445,7 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
         quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat(canonical=False)
 
         image, star_xy, _ = self._sig.image_from_quaternion(quat, grid=self.grid)
-        return image, star_xy
+        return image, star_xy, t
 
 
 class StarCameraCalibrationTestCam(ArtificialStarCam):
@@ -466,13 +470,11 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         self.epsilon = self._rng.uniform(-np.pi / 2, np.pi / 2)
         self.phi = 0
 
-    def get_extrinsic(self) -> np.ndarray:
+    def _get_extrinsic(self, t: float) -> np.ndarray:
         """Get the current extrinsic matrix of the camera.
 
         Changes with time.
         """
-        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
-
         self.phi = (t * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
 
         r = scipy.spatial.transform.Rotation.from_euler(
@@ -484,10 +486,11 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         return extrinsic
 
     @override
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
-        extrinsic = self.get_extrinsic()
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
+        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
+        extrinsic = self._get_extrinsic(t)
         image, star_xy, _ = self._sig.image_from_extrinsic(extrinsic, grid=self.grid)
-        return image, star_xy
+        return image, star_xy, t
 
     def gui(self) -> None:
         """Play with this camera in a GUI."""

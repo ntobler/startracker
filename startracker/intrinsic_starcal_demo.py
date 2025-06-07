@@ -144,6 +144,7 @@ class Animation:
         latitudes = np.radians(np.arange(-90, 90.1, 5)), np.radians(np.arange(-90, 90.1, 1))
         longitudes = np.radians(np.arange(0, 360.1, 1)), np.radians(np.arange(0, 360.1, 5))
 
+        cos_phi = cal.cos_phi(angle_margin_factor=1.2)
         for lats, lons, flip in zip(latitudes, longitudes, [False, True]):
             lat, lon = np.meshgrid(lats, lons)
 
@@ -155,7 +156,7 @@ class Animation:
 
             # Get in-frame point
             target_vector = extrinsic[2, :3]
-            mask = np.inner(xyz_points, target_vector) < cal.cos_phi(angle_margin_factor=1.2)
+            mask = np.inner(xyz_points, target_vector) < cos_phi
             xy_points = pp.obj2pix(xyz_points, axis=-1)
 
             xy_points[mask] = np.nan

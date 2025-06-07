@@ -11,6 +11,7 @@ from typing import BinaryIO, Optional, Union
 import cairo
 import cv2
 import numpy as np
+import numpy.typing as npt
 from numpy.typing import ArrayLike
 from typing_extensions import override
 
@@ -546,7 +547,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
         *,
         show_points: bool = True,
         show_legend: bool = True,
-    ):
+    ) -> npt.NDArray[np.uint8]:
         """Plot calibration quality using OpenCV functions only."""
         w, h = self.image_size
 

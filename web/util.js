@@ -48,13 +48,13 @@ export class ZoomHandler {
 }
 
 
-export function api(url, payload=null, onSuccess=null, onFailure=null) {
+export function api(url, payload = null, onSuccess = null, onFailure = null) {
     let context = { method: 'POST' }
     if (payload !== null) {
         context.headers = { 'Content-Type': 'application/json' }
         context.body = JSON.stringify(payload)
     }
-    fetch(url, context ).then(response => response.json()).then((data) => {
+    fetch(url, context).then(response => response.json()).then((data) => {
         if (onSuccess !== null) onSuccess(data);
         console.log(data)
     }).catch(error => {
@@ -106,4 +106,43 @@ export class HelpDisplay {
             this.currentIndex = 0;
         }
     }
+}
+
+export function matmul3x3(a, b) {
+    const result = [];
+    for (let i = 0; i < 3; i++) {
+        result[i] = [];
+        for (let j = 0; j < 3; j++) {
+            let sum = 0;
+            for (let k = 0; k < 3; k++) {
+                sum += a[i][k] * b[k][j];
+            }
+            result[i][j] = sum;
+        }
+    }
+    return result;
+}
+
+export function matToLaTeX(m, digits = 2) {
+    let str = String.raw`\begin{bmatrix}`;
+    for (let line of m) {
+        let line_latex = [];
+        for (let num of line) {
+            line_latex.push(parseFloat(Number(num).toFixed(digits)));
+        }
+        str += line_latex.join("&") + "\\\\";
+    }
+    str += String.raw`\end{bmatrix}`;
+    return str;
+}
+
+export function vecToLaTeX(v, digits = 2) {
+    let str = String.raw`\begin{bmatrix}`;
+    let line_latex = [];
+    for (let num of v) {
+        line_latex.push(parseFloat(Number(num).toFixed(digits)));
+    }
+    str += line_latex.join("&");
+    str += String.raw`\end{bmatrix}`;
+    return str;
 }

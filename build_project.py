@@ -8,27 +8,29 @@ import subprocess
 import sys
 import urllib.request
 
-vue_url = "https://cdnjs.cloudflare.com/ajax/libs/vue/3.5.4/vue.esm-browser.prod.min.js"
-"""URL for the Vue.js production build"""
+urls = {
+    "vue.esm-browser.prod.min.js": "https://cdnjs.cloudflare.com/ajax/libs/vue/3.5.4/vue.esm-browser.prod.min.js",
+    "katex.mjs": "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.mjs",
+    "katex.min.css": "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css",
+}
+"""URL for JavaScript dependency production builds."""
 
 project_path = pathlib.Path(__file__).parent.expanduser().absolute()
 """Path pointing to the project root."""
 
-output_file = project_path / "web/vue.esm-browser.prod.min.js"
-"""Output file path"""
 
-
-def download_vue() -> None:
+def download_js_dependencies() -> None:
     """Download the `vue.js` library from a CDN to use host locally."""
-    print(f"Downloading Vue.js from {vue_url}...")
-    if output_file.is_file():
-        print("Vue.js has already been downloaded.")
-        return
-    try:
-        urllib.request.urlretrieve(vue_url, output_file)  # noqa: S310
-        print(f"Vue.js has been downloaded and saved as {output_file}")
-    except Exception as e:
-        print(f"Failed to download Vue.js. Error: {e}")
+    for name, url in urls.items():
+        output_file = project_path / "web" / name
+        if output_file.is_file():
+            print(f"{name} has already been downloaded.")
+            continue
+        try:
+            print(f"Downloading {name} from {url} to {output_file}")
+            urllib.request.urlretrieve(url, output_file)  # noqa: S310
+        except Exception as e:
+            print(f"Failed to download {name}. Error: {e}")
 
 
 def rust_build(*, debug: bool) -> None:
@@ -52,5 +54,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    download_vue()
+    download_js_dependencies()
     rust_build(debug=args.debug)

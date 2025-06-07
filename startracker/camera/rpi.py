@@ -75,6 +75,13 @@ class RpiCamera(camera.Camera):
         t0 = time.monotonic()
         with self._lock:
             raw = self._picam2.capture_array("raw")
+
+            # TODO use time from sensor metadata
+            # request = picam2.capture_request("raw")
+            # timestamp = request.get_metadata()["SensorTimestamp"]
+            # image = request.make_array("raw")
+
+            self.capture_time = time.monotonic() - (self._exposure_ms / 1000 / 2)
         self._logger.info(f"Capturing took:{time.monotonic() - t0:.2f}s")
         bayer = image_processing.decode_srggb10(raw)
         return bayer

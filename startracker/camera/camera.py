@@ -45,10 +45,14 @@ class CameraSettings(util.PickleDataclass):
 class Camera(abc.ABC):
     """Camera base class."""
 
+    capture_time: float
+    """Time of last capture in seconds. Arbitrarily based."""
+
     def __init__(self, camera_settings: CameraSettings) -> None:
         self._logger = logging.getLogger("Camera")
         self._settings = camera_settings
         self._context_manager_entered = False
+        self.capture_time = 0
 
     @property
     def settings(self) -> CameraSettings:
