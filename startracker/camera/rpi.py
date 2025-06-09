@@ -110,9 +110,8 @@ class RpiCamera(camera.Camera):
 
         if self.settings.digital_gain in [1, 2]:
             image //= 4 // self.settings.digital_gain
-        image = image.astype(np.uint8)
 
-        return image
+        return image.astype(np.uint8)
 
     @override
     def record_darkframe(self) -> None:

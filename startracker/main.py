@@ -20,52 +20,59 @@ class AcknowledgeEnum(enum.Enum):
 
 
 @communication.make_message
-class Acknowledge:
+class Acknowledge(communication.Message):
     ack = communication.EnumField(AcknowledgeEnum, "uint8", "1 if acknowledge okay else 0")
 
-
-@communication.make_message
-class Settings:
-    min_matches = communication.Field("uint8", "Min matches required in the attitude estimation")
-    attitude_estimation_timeout_ms = communication.Field("uint8")
-    exposure_ms = communication.Field("uint16")
-    gain = communication.Field("uint8")
+    def __init__(self, ack: AcknowledgeEnum):
+        self.ack = ack
 
 
 @communication.make_message
-class Trajectory:
+class Settings(communication.Message):
+    min_matches = communication.NumberField(
+        "uint8", "Min matches required in the attitude estimation"
+    )
+    attitude_estimation_timeout_ms = communication.NumberField("uint8")
+    exposure_ms = communication.NumberField("uint16")
+    gain = communication.NumberField("uint8")
+
+
+@communication.make_message
+class Trajectory(communication.Message):
     ack = communication.EnumField(
         AcknowledgeEnum,
         "uint8",
         "1 if the trajectory could be calculated successfully, otherwise 0",
     )
-    start = communication.Field("float32", "Start time in seconds")
-    stop = communication.Field("float32", "Stop time in seconds")
+    start = communication.NumberField("float32", "Start time in seconds")
+    stop = communication.NumberField("float32", "Stop time in seconds")
     coeffs = communication.ArrayField("float32", (3, 4), "Polynomial coefficients")
 
 
 @communication.make_message
-class Quaternion:
-    x = communication.Field("float32", "x part of the quaternion")
-    y = communication.Field("float32", "y part of the quaternion")
-    z = communication.Field("float32", "z part of the quaternion")
-    w = communication.Field("float32", "w part of the quaternion")
+class Quaternion(communication.Message):
+    x = communication.NumberField("float32", "x part of the quaternion")
+    y = communication.NumberField("float32", "y part of the quaternion")
+    z = communication.NumberField("float32", "z part of the quaternion")
+    w = communication.NumberField("float32", "w part of the quaternion")
 
 
 @communication.make_message
-class AttitudeEstimationMode:
+class AttitudeEstimationMode(communication.Message):
     mode = communication.EnumField(attitude_estimation.AttitudeEstimationModeEnum, "uint8")
 
 
 @communication.make_message
-class Status:
+class Status(communication.Message):
     attitude_estimation_mode = communication.EnumField(
         attitude_estimation.AttitudeEstimationModeEnum, "uint8"
     )
-    current_number_of_matches = communication.Field("uint16")
-    average_number_of_matches = communication.Field("uint16")
+    current_number_of_matches = communication.NumberField("uint16")
+    average_number_of_matches = communication.NumberField("uint16")
     quaternion = communication.StructField(Quaternion, "Current quaternion")
-    estimation_id = communication.Field("uint16", "Id of the current attitude estimation sample")
+    estimation_id = communication.NumberField(
+        "uint16", "Id of the current attitude estimation sample"
+    )
 
 
 MAX_STAR_COUNT = 32
@@ -73,8 +80,8 @@ MAX_STAR_COUNT = 32
 
 
 @communication.make_message
-class Stars:
-    count = communication.Field("uint8", "Number of recognized stars")
+class Stars(communication.Message):
+    count = communication.NumberField("uint8", "Number of recognized stars")
     positions = communication.ArrayField(
         "uint8",
         (MAX_STAR_COUNT, 2),
@@ -83,13 +90,13 @@ class Stars:
 
 
 @communication.make_message
-class EmptyMessage:
+class EmptyMessage(communication.Message):
     pass
 
 
 # Instantiate, as they are used frequently
-ACK = Acknowledge(AcknowledgeEnum.ACK)
-NACK = Acknowledge(AcknowledgeEnum.NACK)
+ACK = Acknowledge(ack=AcknowledgeEnum.ACK)
+NACK = Acknowledge(ack=AcknowledgeEnum.NACK)
 
 
 class GetStatus(communication.Command):
@@ -216,7 +223,7 @@ class SetAttitudeEstimationMode(communication.Command):
         self._image_acquisitioner = image_acquisitioner
 
     @override
-    def execute(self, request: AttitudeEstimationMode) -> Status:
+    def execute(self, request: AttitudeEstimationMode) -> Acknowledge:
         self._image_acquisitioner.mode = request.mode
         return ACK
 
@@ -235,7 +242,7 @@ class GetStars(communication.Command):
         self._image_acquisitioner = image_acquisitioner
 
     @override
-    def execute(self, request: EmptyMessage) -> Status:
+    def execute(self, request: EmptyMessage) -> Stars:
         _ = request
         positions = self._image_acquisitioner.positions
         fixed_size_positions = np.full((MAX_STAR_COUNT, 2), 255, np.uint8)
@@ -295,7 +302,7 @@ class App:
     def __call__(self) -> int:
         """Run main loop of the command handler."""
         s = communication.PacketHandler(self._ser)
-        com_handler = communication.CommandHandler(s, self._commands, Acknowledge(False))
+        com_handler = communication.CommandHandler(s, self._commands, NACK)
         logging.info("Running")
         try:
             com_handler.run_indefinitely()

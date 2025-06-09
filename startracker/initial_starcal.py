@@ -107,7 +107,7 @@ class MovementRegisterer:
         """Get Positions of stars and their movement direction.
 
         Args:
-            residual_threshold: Mean squard error threshold for polinomial fit to star trails.
+            residual_threshold: Mean squared error threshold for polynomial fit to star trails.
             min_observations: Minimum number of observations in a star trail for it to be
                 considered.
             plot: Plot results with matplotlib.
@@ -115,7 +115,7 @@ class MovementRegisterer:
         Returns:
             star image positions shape=[n, 2],
             star movement vector in pixels per second, shape=[n, 2],
-            mean squared error of the star trail polinomial fit
+            mean squared error of the star trail polynomial fit
         """
         if plot:
             import matplotlib.pyplot as plt
@@ -125,9 +125,9 @@ class MovementRegisterer:
 
         good_candidates = [c for c in self.candidates if len(c.positions) >= min_observations]
 
-        stars_xy = []
-        stars_dxy = []
-        mses = []
+        stars_xy_list = []
+        stars_dxy_list = []
+        mses_list = []
 
         for c in good_candidates:
             t = np.array(c.times, np.float64)
@@ -156,18 +156,18 @@ class MovementRegisterer:
 
                 x, y = xy
                 dx, dy = np.array(dx_dy) * t.max()
-                ax.arrow(x, y, dx, dy, color="black", lw=2)
+                ax.arrow(x, y, dx, dy, color="black", lw=2)  # type: ignore[arg-type]
 
-            stars_xy.append(xy)
-            stars_dxy.append(dx_dy)
-            mses.append(mse)
+            stars_xy_list.append(xy)
+            stars_dxy_list.append(dx_dy)
+            mses_list.append(mse)
 
         if plot:
             plt.show()
 
-        stars_xy = np.array(stars_xy)
-        stars_dxy = np.array(stars_dxy)
-        mses = np.array(mses)
+        stars_xy = np.array(stars_xy_list, dtype=np.float64)
+        stars_dxy = np.array(stars_dxy_list, dtype=np.float64)
+        mses = np.array(mses_list, dtype=np.float64)
 
         return stars_xy, stars_dxy, mses
 
@@ -206,27 +206,30 @@ def star_gradient_calibration(
     """
     if intrinsic0 is None:
         fxy = np.maximum(width, height)
-        intrinsic0s = [
+        intrinsic0s_list = [
             np.array(
                 (
                     (f, 0, width / 2),
                     (0, f, height / 2),
                     (0, 0, 1),
                 ),
-                dtype=np.float32,
+                dtype=np.float64,
             )
             for f in np.logspace(np.log10(0.5), np.log10(4), 4) * fxy
         ]
+        intrinsic0s = np.stack(intrinsic0s_list, axis=0)
     else:
-        intrinsic0s = [theta0]
+        intrinsic0s = intrinsic0.astype(np.float64)[np.newaxis]
 
-    intrinsic0s = np.array(intrinsic0s)
-
-    theta0s = [np.pi / 4, -np.pi / 4] if theta0 is None else np.array([theta0])
+    theta0s = (
+        np.array([np.pi / 4, -np.pi / 4], dtype=np.float64)
+        if theta0 is None
+        else np.array([theta0], dtype=np.float64)
+    )
     epsilon0s = (
-        [3 * np.pi / 4, np.pi / 4, -np.pi / 4, 3 * -np.pi / 4]
+        np.array([3 * np.pi / 4, np.pi / 4, -np.pi / 4, 3 * -np.pi / 4], dtype=np.float64)
         if epsilon0 is None
-        else np.array([epsilon0])
+        else np.array([epsilon0], dtype=np.float64)
     )
 
     # Build combinations of theta and epsilon starting conditions
@@ -240,24 +243,19 @@ def star_gradient_calibration(
     if verbose:
         print(f"Finding best initial states with {len(stars_xy_np)} stars")
 
-    prior_errors = []
+    stars_xy_f32 = stars_xy_np.astype(np.float32)
+    stars_dxy_f32 = (stars_dxy_np / const.EARTH_ANGULAR_VELOCITY).astype(np.float32)
+
+    prior_errors_list = []
     for theta0, epsilon0, intrinsic0 in zip(theta0s, epsilon0s, intrinsic0s, strict=True):
         # Build state vector
-        res = libstartracker.stargradcal_objective_function(
-            stars_xy_np.astype(np.float32),
-            (stars_dxy_np / const.EARTH_ANGULAR_VELOCITY).astype(np.float32),
-            intrinsic0.astype(np.float64),
-            0.0,
-            float(theta0),
-            float(epsilon0),
+        residuals, _ = libstartracker.stargradcal_objective_function(
+            stars_xy_f32, stars_dxy_f32, intrinsic0, 0.0, float(theta0), float(epsilon0)
         )
-        residuals, jac = res
         error = np.square(residuals * const.EARTH_ANGULAR_VELOCITY).mean().item()
 
-        prior_errors.append(error)
-    prior_errors = np.array(prior_errors)
-
-    best_index = np.argmin(prior_errors)
+        prior_errors_list.append(error)
+    best_index = np.argmin(prior_errors_list)
 
     if verbose:
         print("Starting optimization")
@@ -266,15 +264,8 @@ def star_gradient_calibration(
     epsilon0 = float(epsilon0s[best_index])
     intrinsic0 = intrinsic0s[best_index]
 
-    assert intrinsic0 is not None
-
     res = libstartracker.stargradcal_calibrate(
-        stars_xy_np.astype(np.float32),
-        (stars_dxy_np / const.EARTH_ANGULAR_VELOCITY).astype(np.float32),
-        intrinsic0.astype(np.float64),
-        0.0,
-        theta0,
-        epsilon0,
+        stars_xy_f32, stars_dxy_f32, intrinsic0, 0.0, theta0, epsilon0
     )
     intrinsic, dist_coef, theta, epsilon, residuals = res
     intrinsic = np.copy(intrinsic.T)
@@ -332,7 +323,9 @@ class StarCalibrator:
     dist_coeffs: list[np.ndarray]
 
     stars_xy: list[np.ndarray]
-    """List of star observations"""
+    """List of image positions of observed star candidates."""
+    image_xy_list: list[np.ndarray]
+    """List of image positions of matched stars."""
 
     first_estimate_acquired: bool
 
@@ -353,9 +346,9 @@ class StarCalibrator:
 
         # These values will be recalculated if the calibration changes
         self.image_xy_list = []
-        self._cat_xyz_list = []
-        self._match_fractions = []
-        self._quat_list = []
+        self._cat_xyz_list: list[np.ndarray] = []
+        self._match_fractions: list[float] = []
+        self._quat_list: list[np.ndarray] = []
 
         # Initialize with dummy values
         cal = kalkam.IntrinsicCalibration(np.eye(3), np.zeros(5), image_size)
@@ -461,7 +454,7 @@ class StarCalibrator:
             def filt(cat_xyz: np.ndarray, mag: np.ndarray) -> np.ndarray:
                 # Only consider stars in a latitudinal band around the theta angle
                 cat_theta = np.arcsin(cat_xyz[..., 2])
-                mask = np.abs(cat_theta - theta) < half_fov_rad
+                mask: npt.NDArray[np.bool_] = np.abs(cat_theta - theta) < half_fov_rad
                 # Only consider bright stars
                 mask *= mag < 5.5
                 return mask
@@ -511,10 +504,7 @@ class StarCalibrator:
             # to track down outliers
             # TODO find a way to more efficiently discard outliers
             rots = scipy.spatial.transform.Rotation.from_quat(self._quat_list)
-            mag_sums = []
-            for r in rots:
-                mags = (rots * r.inv()).magnitude()
-                mag_sums.append(np.sum(mags))
+            mag_sums = [np.sum((rots * r.inv()).magnitude()) for r in rots]  # type: ignore[attr-defined]
             r = rots[np.argmin(mag_sums)]
             mags = (rots * r.inv()).magnitude()
             best_indices = np.nonzero(mags < np.radians(2))[0]
@@ -529,7 +519,7 @@ class StarCalibrator:
 
             # Rotate catalog coordinates such they result in smaller rotation values in the
             # calibration problem
-            cat_xyz = r.inv().apply(cat_xyz)
+            cat_xyz = r.inv().apply(cat_xyz).astype(np.float32)
 
             if False:
                 import matplotlib.pyplot as plt
@@ -582,7 +572,7 @@ class StarCalibrator:
                 )
 
             # Build camera calibration parameters
-            squared_error_distances: np.ndarray = np.square(image_xy - reprojection).sum(axis=-1)
+            squared_error_distances = np.square(image_xy - reprojection).sum(axis=-1)
             rms_error = float(np.sqrt(squared_error_distances.mean()))
             max_error = float(np.sqrt(squared_error_distances.max()))
             median_error = float(np.sqrt(np.median(squared_error_distances)))
@@ -651,15 +641,15 @@ class StarCalibrator:
         axs[1].set_ylim(0, 1)
         axs[1].legend()
 
-        params = {"fx": (0, 0), "fy": (1, 1), "tx": (0, 2), "ty": (1, 2)}
+        intrinsic_params = {"fx": (0, 0), "fy": (1, 1), "tx": (0, 2), "ty": (1, 2)}
         axs[2].axhline(y=1, color="black")
-        for label, (i, j) in params.items():
+        for label, (i, j) in intrinsic_params.items():
             base = self.intrinsics[-1][i, j] if gt_intrinsic is None else gt_intrinsic[i, j]
             y = np.array([x[i, j] for x in self.intrinsics])
             y /= base
             axs[2].plot(self.times, y, label=label)
-        params = {"k1": 0, "p1": 2, "p2": 3}
-        for label, i in params.items():
+        dist_params = {"k1": 0, "p1": 2, "p2": 3}
+        for label, i in dist_params.items():
             base = self.dist_coeffs[-1][i] if gt_dist_coeffs is None else gt_dist_coeffs[i]
             y = np.array([x[i] for x in self.dist_coeffs])
             y /= base

@@ -172,7 +172,7 @@ def motor_orientation_test(theta_range, phi_range, roll_angle=1.875):
 
 
 low_res = 2
-theta_range = np.arange(45, 136, 5 * low_res)
+theta_range = np.arange(45, 136, 5.0 * low_res)
 phi_range = np.arange(10, 91, 10 * low_res)
 motor_orientation_test(theta_range, phi_range)
 

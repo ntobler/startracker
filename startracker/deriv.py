@@ -3,7 +3,7 @@
 Used to generate the optimized code in the starcal.rs and stargradcal.rs file.
 """
 
-import sympy as sp
+import sympy as sp  # type: ignore[import-untyped]
 
 
 def reformat_expr(expr):

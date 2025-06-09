@@ -8,7 +8,7 @@ import logging
 import pathlib
 import struct
 from collections.abc import Sequence
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, Generic, Literal, Optional, TypeAlias, TypeVar, Union
 
 import numpy as np
 import serial
@@ -110,67 +110,124 @@ class PacketHandler(serial.Serial):
         self._ser.reset_input_buffer()
 
 
-class Field:
+DataType: TypeAlias = Literal[
+    "uint8", "int8", "uint16", "int16", "uint32", "int32", "uint64", "int64", "float32", "float64"
+]
+
+
+_TYPE_DICT = {
+    "uint8": ("<B", int, "uint8_t", 1, np.uint8),
+    "int8": ("<b", int, "int8_t", 1, np.int8),
+    "uint16": ("<H", int, "uint16_t", 2, np.uint16),
+    "int16": ("<h", int, "int16_t", 2, np.int16),
+    "uint32": ("<I", int, "uint32_t", 2, np.uint32),
+    "int32": ("<i", int, "int32_t", 2, np.int32),
+    "uint64": ("<L", int, "uint64_t", 2, np.uint64),
+    "int64": ("<l", int, "int64_t", 2, np.int64),
+    "float32": ("<f", float, "float", 4, np.float32),
+    "float64": ("<d", float, "double", 8, np.float64),
+}
+
+T = TypeVar("T")
+
+
+class Field(abc.ABC, Generic[T]):
+    """Message field base class."""
+
+    dtype: DataType
+    """Underlying data type as string."""
+    desc: Optional[str]
+    """Description string of the field."""
+    struct_char: str
+    """Byte structure char sequence."""
+    byte_size: int
+    """Total size of this field in bytes."""
+    python_type: type[T]
+    """Type of field in Python after parsing."""
+
+    def __init__(
+        self,
+        dtype: DataType,
+        desc: Optional[str],
+        byte_size: int,
+        python_type: type[T],
+    ) -> None:
+        self.dtype = dtype
+        self.desc = desc
+        self.struct_char = f"{byte_size}s"
+        self.byte_size = byte_size
+        self.python_type = python_type
+
+    @abc.abstractmethod
+    def c_definition(self, name: str) -> str:
+        """Get definition in the C programming language."""
+
+    @abc.abstractmethod
+    def parse(self, value: bytes) -> T:
+        """Parse value from bytes to python type."""
+
+    @abc.abstractmethod
+    def format(self, value: Any) -> bytes:
+        """Format value from python type to bytes."""
+
+
+class NumberField(Field[T]):
     """Message field for base datatypes."""
 
-    def __init__(self, dtype: str, desc: Optional[str] = None) -> None:
-        self.dtype = dtype
-        (
-            self.struct_char,
-            self.python_type,
-            self.c_type,
-            self.byte_size,
-            self._numpy_dtype,
-        ) = {
-            "uint8": ("B", int, "uint8_t", 1, np.uint8),
-            "int8": ("b", int, "int8_t", 1, np.int8),
-            "uint16": ("H", int, "uint16_t", 2, np.uint16),
-            "int16": ("h", int, "int16_t", 2, np.int16),
-            "uint32": ("I", int, "uint32_t", 2, np.uint32),
-            "int32": ("i", int, "int32_t", 2, np.int32),
-            "uint64": ("L", int, "uint64_t", 2, np.uint64),
-            "int64": ("l", int, "int64_t", 2, np.int64),
-            "float32": ("f", float, "float", 4, np.float32),
-            "float64": ("d", float, "double", 8, np.float64),
-        }[dtype]
-        self.default = 0
-        self.desc = desc
+    def __init__(self, dtype: DataType, desc: Optional[str] = None) -> None:
+        (self._struct_char, python_type, self.c_type, byte_size, self._numpy_dtype) = _TYPE_DICT[
+            dtype
+        ]
+        super().__init__(dtype, desc, byte_size, python_type)
 
+    @override
     def c_definition(self, name: str) -> str:
-        """Return definition in the c programming language."""
         c_code = f"{self.c_type} {name};"
         if self.desc is not None:
             c_code += f" // {self.desc}"
         c_code += "\n"
         return c_code
 
-    def parse(self, value):
-        """Parse value from bytes to python type."""
-        return value
+    @override
+    def parse(self, value: bytes) -> T:
+        values = struct.unpack(self._struct_char, value)
+        return self.python_type(*values)
 
-    def format(self, value):
-        """Format value from python type to bytes."""
-        return value
+    @override
+    def format(self, value: T) -> bytes:
+        return struct.pack(self._struct_char, value)
 
 
-class EnumField(Field):
+EnumT = TypeVar("EnumT", bound=enum.Enum)
+
+
+class EnumField(Field, Generic[EnumT]):
     """Message field for enums."""
 
     def __init__(
-        self, enum_type: type[enum.Enum], dtype="uint8", desc: Optional[str] = None
+        self, enum_type: type[EnumT], dtype: DataType = "uint8", desc: Optional[str] = None
     ) -> None:
-        super().__init__(dtype, desc=desc)
-        self.default = enum_type(0)
         self._enum_type = enum_type
+        (self._struct_char, python_type, self.c_type, byte_size, self._numpy_dtype) = _TYPE_DICT[
+            dtype
+        ]
+        super().__init__(dtype, desc, byte_size, python_type)
 
     @override
-    def parse(self, value) -> enum.Enum:
-        return self._enum_type(value)
+    def parse(self, value: bytes) -> EnumT:
+        values = struct.unpack(self._struct_char, value)
+        try:
+            return self._enum_type(*values)
+        except ValueError as e:
+            msg = f"Failed to parse enum {self._enum_type} with number {values[0]}"
+            raise ValueError(msg) from e
 
     @override
-    def format(self, value) -> int:
-        assert isinstance(value, self._enum_type), f"{value} is not {self._enum_type}"
-        return int(value.value)
+    def format(self, value) -> bytes:
+        if not isinstance(value, self._enum_type):
+            msg = f"{value} is not {self._enum_type}"
+            raise ValueError(msg)
+        return struct.pack(self._struct_char, value.value)
 
     @override
     def c_definition(self, name: str) -> str:
@@ -193,34 +250,41 @@ class EnumField(Field):
 class StructField(Field):
     """Message field for custom datatypes."""
 
-    def __init__(self, dtype: type["Message"], desc: Optional[str] = None) -> None:
-        self.dtype = dtype
-        self.struct_char = f"{dtype.byte_size}s"
-        self.python_type = dtype
-        self.c_type = dtype.__name__
-        self.byte_size = dtype.byte_size
-        self.default = 0
-        self.desc = desc
+    def __init__(self, struct_type: type["Message"], desc: Optional[str] = None) -> None:
+        super().__init__("uint8", desc, struct_type.byte_size, struct_type)
+        self.struct_type = struct_type
+        self.c_type = struct_type.__name__
+        self.byte_size = struct_type.byte_size
 
     @override
     def parse(self, value: bytes) -> "Message":
-        return self.dtype.from_bytes(value)
+        return self.struct_type.from_bytes(value)
 
     @override
     def format(self, value: "Message") -> bytes:
-        assert isinstance(value, self.dtype), f"{value} is not of type {self.dtype}"
-        return value.to_bytes()
+        if not isinstance(value, self.python_type):
+            msg = f"{value} is not of type {self.dtype}"
+            raise ValueError(msg)
+        ret: bytes = value.to_bytes()
+        return ret
+
+    @override
+    def c_definition(self, name: str) -> str:
+        c_code = f"{self.c_type} {name};"
+        if self.desc is not None:
+            c_code += f" // {self.desc}"
+        c_code += "\n"
+        return c_code
 
 
 class ArrayField(Field):
     """Message field for multidimensional arrays of base datatypes."""
 
-    def __init__(self, dtype: str, shape: Sequence[int], desc: Optional[str] = None) -> None:
-        super().__init__(dtype, desc)
-        self.dtype = dtype
-        self.byte_size = self.byte_size * np.prod(shape).item()
-        self.struct_char = f"{self.byte_size}s"
+    def __init__(self, dtype: DataType, shape: Sequence[int], desc: Optional[str] = None) -> None:
+        (_, python_type, self.c_type, byte_size, self._numpy_dtype) = _TYPE_DICT[dtype]
+        byte_size = byte_size * np.prod(shape).item()
         self.shape = shape
+        super().__init__(dtype, desc, byte_size, python_type)
 
     @override
     def c_definition(self, name: str) -> str:
@@ -244,18 +308,22 @@ class Message:
     byte_size: int
     _data_format: str
     _fields: dict[str, Field]
+    _slices: tuple[slice]
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> Self:
         """Decode message from bytes."""
-        values = struct.unpack(cls._data_format, payload)
-        values = [f.parse(v) for f, v in zip(cls._fields.values(), values)]
-        return cls(*values)
+        args = [
+            f.parse(payload[slc]) for f, slc in zip(cls._fields.values(), cls._slices, strict=True)
+        ]
+        return cls(*args)
 
     def to_bytes(self) -> bytes:
         """Encode Message to bytes."""
-        values = [f.format(v) for f, v in zip(self._fields.values(), self.__dict__.values())]
-        return struct.pack(self._data_format, *values)
+        values = [
+            f.format(v) for f, v in zip(self._fields.values(), self.__dict__.values(), strict=True)
+        ]
+        return b"".join(values)
 
     @classmethod
     def print_help(cls) -> None:
@@ -274,10 +342,10 @@ class Message:
         return c_code
 
 
-T = TypeVar("T", np.ndarray, int, str, list, tuple, float)
+ArrayT = TypeVar("ArrayT", np.ndarray, int, str, list, tuple, float)
 
 
-def array_safe_eq(a: T, b: T) -> bool:
+def array_safe_eq(a: ArrayT, b: ArrayT) -> bool:
     """Check if a and b are equal, even if they are numpy arrays."""
     if a is b:
         return True
@@ -297,23 +365,28 @@ def dataclass_eq(dc1: Any, dc2: Any) -> bool:
     return all(array_safe_eq(a1, a2) for a1, a2 in zip(t1, t2))
 
 
-def make_message(cls: type) -> type[Message]:
+ClassT = TypeVar("ClassT", type, type)
+
+
+def make_message(cls: ClassT) -> ClassT:
     """Compose a message dataclass."""
-    fields: dict[str, Field] = {}
-    for attr_name in cls.__dict__:
-        if not attr_name.startswith("_"):
-            attr = getattr(cls, attr_name)
+    fields: dict[str, Field] = {
+        attr_name: attr
+        for attr_name, attr in cls.__dict__.items()
+        if not attr_name.startswith("_") and isinstance(attr, Field)
+    }
 
-            if not callable(attr):
-                fields[attr_name] = attr
-
-    data_format = "<" + "".join([cls.__dict__[k].struct_char for k, v in fields.items()])
-
+    data_format = "<" + "".join([f.struct_char for f in fields.values()])
     byte_size = sum([v.byte_size for v in fields.values()])
 
-    dataclass_fields = []
-    for k, v in fields.items():
-        dataclass_fields.append((k, v.python_type, dataclasses.field(default=v.default)))
+    dataclass_fields = [(name, f.python_type, dataclasses.field()) for name, f in fields.items()]
+
+    pos = 0
+    slices = []
+    for f in fields.values():
+        length = f.byte_size
+        slices.append(slice(pos, pos + length))
+        pos += length
 
     return dataclasses.make_dataclass(
         cls.__name__,
@@ -322,6 +395,7 @@ def make_message(cls: type) -> type[Message]:
             "byte_size": byte_size,
             "_data_format": data_format,
             "_fields": fields,
+            "_slices": slices,
             "__eq__": dataclass_eq,
             "__name__": cls.__name__,
         },
@@ -350,6 +424,8 @@ def gen_code_with_dependencies(
                 check_msg(v.dtype)
             elif isinstance(v, EnumField):
                 dependencies.append(v)
+            elif isinstance(v, StructField):
+                dependencies.append(v.struct_type)
 
     if include_dependencies:
         for m in messages:
@@ -359,8 +435,8 @@ def gen_code_with_dependencies(
 
     struct_args = "__attribute__((__packed__))"
 
-    code = [d.generate_c_code(struct_args, indent) for d in deps]
-    code = "\n\n".join(code)
+    code_list = [d.generate_c_code(struct_args, indent) for d in deps]
+    code_str = "\n\n".join(code_list)
 
     name = h_file.stem.upper()
 
@@ -375,7 +451,7 @@ def gen_code_with_dependencies(
         "\n"
         "#include <stdint.h>\n"
         "\n"
-        f"{code}"
+        f"{code_str}"
         "\n\n"
         "#ifdef __cplusplus\n"
         "}\n"
@@ -391,15 +467,19 @@ def gen_code_with_dependencies(
     return all_code
 
 
-class Command(abc.ABC):
+InMessageT = TypeVar("InMessageT", bound=Message)
+OutMessageT = TypeVar("OutMessageT", bound=Message)
+
+
+class Command(abc.ABC, Generic[InMessageT, OutMessageT]):
     """Base class for communication commands."""
 
     cmd: int
-    request_type: type[Message] = Message
-    response_type: type[Message] = Message
+    request_type: type[InMessageT]
+    response_type: type[OutMessageT]
 
     @abc.abstractmethod
-    def execute(self, payload: Message) -> Message:
+    def execute(self, payload: InMessageT) -> OutMessageT:
         """Execute command.
 
         Override this method to implement the command logic.
@@ -433,11 +513,12 @@ class CommandHandler:
         while True:
             with contextlib.suppress(CommunicationTimeoutError):
                 cmd_id, payload = self.serial.read_cmd()
-                command = self._commands.get(cmd_id)
+                command: Command | None = self._commands.get(cmd_id)
                 if command is None:
                     self.serial.write_cmd(cmd_id, self._default_message.to_bytes())
                 else:
-                    request = command.request_type().from_bytes(payload)
+                    request_type: type[Message] = command.request_type
+                    request = request_type.from_bytes(payload)
                     self._logger.info(f"RX: {request.__class__.__name__}")
-                    response = command.execute(request)
+                    response: Message = command.execute(request)
                     self.serial.write_cmd(cmd_id, response.to_bytes())

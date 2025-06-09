@@ -261,7 +261,7 @@ class WebpVideoCreator:
             raise ValueError("No frames to write to video.")
         height, width = self.frames[0].shape[:2]
         # OpenCV expects (width, height) for VideoWriter
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
         out = cv2.VideoWriter(str(file), fourcc, 5, (width, height))
         for frame in self.frames:
             # Ensure frame is 3-channel BGR and uint8 for VideoWriter

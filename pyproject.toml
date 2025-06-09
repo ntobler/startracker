@@ -17,6 +17,7 @@ scipy = "^1.12.0"
 flask = "^3.0.2"
 flask-sock = "^0.7.0"
 pyserial = "^3.5"
+types-pyserial = "^3.5.0.20250326"
 dynaconf = "^3.2.4"
 pycairo = "^1.26.0"
 ruststartracker = { git = "https://github.com/ntobler/ruststartracker.git" }
@@ -35,6 +36,7 @@ pytest-cov = "^5.0.0"
 ruff = "^0.8.2"
 scipy-stubs = "^1.14.1.5"
 sympy = "^1.14.0"
+pillow = "^11.2.1"
 
 [tool.poetry.scripts]
 startracker = "startracker.main:main"
@@ -127,8 +129,8 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-# packages = ["startracker"] # At some point maybe
-modules = ["startracker.web_gui"]
+packages = ["startracker"]
+exclude = "startracker/(main|kalkam)\\.py$" # There's still some issues here :(
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true

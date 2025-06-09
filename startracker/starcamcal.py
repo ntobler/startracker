@@ -71,10 +71,13 @@ def calibrate_camera(
     )
     dist_coef = np.array(params[7:])
 
-    error = libstartracker.starcal_objective_function(
-        tuple(params.tolist()), image_points, object_points
-    )[0]
-    error = np.array(error, dtype=np.float32).reshape(-1, 2)
+    error = (
+        libstartracker.starcal_objective_function(
+            tuple(params.tolist()), image_points, object_points
+        )[0]
+        .astype(np.float32)
+        .reshape(-1, 2)
+    )
     reprojection = error + image_points
 
     return (intrinsic, dist_coef, extrinsic, reprojection)
@@ -142,7 +145,7 @@ def calibrate(
             dist_coefs_guess=dist_coefs,
         )
 
-        squared_error_distances: np.ndarray = np.square(image_points - reprojection).sum(axis=-1)
+        squared_error_distances = np.square(image_points - reprojection).sum(axis=-1)
         rms_error = float(np.sqrt(squared_error_distances.mean()))
         max_error = float(np.sqrt(squared_error_distances.max()))
 

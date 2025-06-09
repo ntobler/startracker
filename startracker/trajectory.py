@@ -207,7 +207,7 @@ class MotorSolver:
         y = np.cross(z, x)
 
         # Construct rotation matrix
-        rot_matrix = np.stack((x, y, z), axis=-1)
+        rot_matrix: np.ndarray = np.stack((x, y, z), axis=-1)
 
         return rot_matrix
 

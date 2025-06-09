@@ -226,7 +226,9 @@ class AttitudeEstimator:
             return ERROR_ATTITUDE_RESULT
         return self._post_process_result(result)
 
-    def _post_process_result(self, result: ruststartracker.StarTrackerResult):
+    def _post_process_result(
+        self, result: ruststartracker.StarTrackerResult
+    ) -> AttitudeEstimationResult:
         q_est = result.quat
         id_match = result.match_ids
         n_matches = result.n_matches
@@ -350,7 +352,7 @@ class ImageAcquisitioner:
         self.n_matches = 0
         self.positions = None
         self._attitude_filter = attitude_filter
-        self._thread = None
+        self._thread: Optional[threading.Thread] = None
         self._terminate = False
 
         self._cam_settings = camera.CameraSettings(

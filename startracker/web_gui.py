@@ -19,7 +19,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.spatial
 from flask import Flask, Response, jsonify, request, send_from_directory
-from flask_sock import ConnectionClosed, Server, Sock  # type: ignore
+from flask_sock import ConnectionClosed, Server, Sock  # type: ignore[import-untyped]
 
 from startracker import (
     attitude_estimation,

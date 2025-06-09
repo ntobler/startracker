@@ -14,17 +14,24 @@ def decode_sbggr12_1x12(raw: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint16]:
     - byte 2: pixel 0 lower 4bit | pixel 1 lower 4bit
     """
     h, w = raw.shape
-    w = w // 3
-    raw16 = raw[:, : w * 3].reshape((h, w, 3)).astype(np.uint16)
-    a = raw16[..., 0]
-    c = raw16[..., 2]
-    a *= 0x10
-    a += np.bitwise_and(c, 0x0F)
-    c //= 16
-    b = raw16[..., 1]
-    b *= 16
-    b += c
-    return np.stack((a, b), axis=-1).reshape((h, w * 2))
+    raw = raw.reshape((h, w // 3, 3))
+    bayer = np.empty((h, w // 3, 2), np.uint16)
+
+    # Use views to prevent unnecessary array allocations
+    view = bayer.view(dtype=np.uint8)
+    lower_bytes = view[..., ::2]
+    higher_bytes = view[..., 1::2]
+
+    # Fill higher byte with base
+    higher_bytes[:] = raw[..., :2]
+    # Fill lower byte with 5th raw byte and distribute data
+    lower_bytes[:] = raw[..., 2:]
+    lower_bytes[..., 1] <<= 4  # ggggllll -> llll0000
+
+    # shift all bytes to the right, so lsb rubbish gets deleted
+    # hhhhhhhh llllgggg -> 0000hhhh hhhhllll
+    bayer >>= 4
+    return bayer.reshape((h, (w * 2) // 3))
 
 
 def decode_srggb10(raw: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint16]:
@@ -39,21 +46,25 @@ def decode_srggb10(raw: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint16]:
     """
     h, w = raw.shape
     raw = raw.reshape((h, w // 5, 5))
-    bayer = np.zeros((h, w // 5, 4), np.uint16)
-    bayer[..., :4] = raw[..., :4]
-    bayer *= 4
-    bayer[..., 0] += (raw[..., 4] & 0xC0) >> 6
-    bayer[..., 1] += (raw[..., 4] & 0x30) >> 4
-    bayer[..., 2] += (raw[..., 4] & 0x0C) >> 2
-    bayer[..., 3] += raw[..., 4] & 0x03
+    bayer = np.empty((h, w // 5, 4), np.uint16)
+
+    # Use views to prevent unnecessary array allocations
+    view = bayer.view(dtype=np.uint8)
+    lower_bytes = view[..., ::2]
+    higher_bytes = view[..., 1::2]
+
+    # Fill higher byte with base
+    higher_bytes[:] = raw[..., :4]
+    # Fill lower byte with 5th raw byte and distribute data
+    lower_bytes[:] = raw[..., 4:]
+    lower_bytes[..., 1] <<= 2  # ggllgggg -> llgggg00
+    lower_bytes[..., 2] <<= 4  # ggggllgg -> llgg0000
+    lower_bytes[..., 3] <<= 6  # ggggggll -> ll000000
+
+    # shift all bytes to the right, so lsb rubbish gets deleted
+    # hhhhhhhh llgggggg -> 000000hh hhhhhhll
+    bayer >>= 6
     return bayer.reshape((h, (w * 4) // 5))
-
-
-def extract_green(bayer: npt.NDArray[np.unsignedinteger]) -> npt.NDArray[np.unsignedinteger]:
-    """Extract green channels from a bayer matrix image."""
-    res = bayer[::2, 1::2] + bayer[1::2, ::2]
-    res //= 2
-    return res
 
 
 def binning(x: npt.NDArray, factor: int = 4) -> npt.NDArray:

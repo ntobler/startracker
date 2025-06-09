@@ -1,6 +1,6 @@
 """Application configuration."""
 
-from dynaconf import Dynaconf, ValidationError, Validator
+from dynaconf import Dynaconf, ValidationError, Validator  # type: ignore[import-untyped]
 
 from startracker import persistent
 

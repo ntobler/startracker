@@ -4,7 +4,7 @@ import abc
 import dataclasses
 import pathlib
 import time
-from typing import Final, Optional
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -66,6 +66,8 @@ class StarImageGeneratorConfig:
 
 
 class StarImageGenerator:
+    distorter: Optional[kalkam.PointUndistorter]
+
     def __init__(
         self, cal: kalkam.IntrinsicCalibration, config: Optional[StarImageGeneratorConfig] = None
     ):
@@ -158,7 +160,9 @@ class StarImageGenerator:
 
         return stars_mags, stars_xy
 
-    def image_from_extrinsic(self, extrinsic: np.ndarray, *, grid: bool = False):
+    def image_from_extrinsic(
+        self, extrinsic: np.ndarray, *, grid: bool = False
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Create image of stars from extrinsic matrix."""
         width, height = self.width, self.height
 
@@ -207,8 +211,8 @@ class StarImageGenerator:
             kernel_size = np.minimum(self.blur * 4, 25)
             # Round up to next odd integer
             kernel_size = int(np.ceil(kernel_size) // 2 * 2 + 1)
-            canvas = cv2.GaussianBlur(canvas, (kernel_size, kernel_size), self.blur)
-            canvas = np.asarray(canvas, dtype=np.float32)  # for typing
+            canvas_ = cv2.GaussianBlur(canvas, (kernel_size, kernel_size), self.blur)
+            canvas = np.asarray(canvas_, dtype=np.float32)  # for typing
         if self.noise_sigma is not None:
             noise = self._rng.standard_normal(size=canvas.shape, dtype=np.float32)
             noise *= self.noise_sigma
@@ -315,7 +319,7 @@ class CameraTester:
 class ArtificialStarCam(camera.Camera):
     """Camera to generate artificial images of the sky."""
 
-    cal: Final[kalkam.IntrinsicCalibration]
+    cal: kalkam.IntrinsicCalibration
     """Calibration used to create mock images"""
     t: Optional[float] = None
     """Capture time in seconds."""
