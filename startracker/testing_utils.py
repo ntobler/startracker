@@ -323,8 +323,10 @@ class ArtificialStarCam(camera.Camera):
     """Calibration used to create mock images"""
     t: Optional[float] = None
     """Capture time in seconds."""
+    time_interval: Optional[float] = None
+    """Time interval between capture times. Ignored if t is set."""
     time_warp_factor: float = 1.0
-    """If t is not given, accelerate time by this factor."""
+    """If t is not given, accelerate time by this factor. Ignored if time_interval is set."""
     grid: bool = False
     """Display longitude and latitude grid overlay."""
     simulate_exposure_time: bool = False
@@ -332,7 +334,6 @@ class ArtificialStarCam(camera.Camera):
     default_config: StarImageGeneratorConfig = StarImageGeneratorConfig()
     """Default configuration of the star image generator if None given.
     Set this class variable to use config for newly instantiated objects."""
-    _last_star_image_positions: Optional[npt.NDArray[np.float64]]
 
     def __init__(
         self,
@@ -349,6 +350,7 @@ class ArtificialStarCam(camera.Camera):
             self.cal = cal
         config = config if config is not None else self.default_config
         self._sig = StarImageGenerator(self.cal, config)
+        self._last_star_image_positions: Optional[npt.NDArray[np.float64]] = None
 
     @override
     def capture_raw(self) -> npt.NDArray[np.uint16]:
@@ -356,12 +358,19 @@ class ArtificialStarCam(camera.Camera):
 
     @override
     def capture(self) -> npt.NDArray[np.uint8]:
+        if self.t is not None:
+            self.capture_time = self.t
+        elif self.time_interval is not None:
+            self.capture_time += self.time_interval
+        else:
+            self.capture_time = time.monotonic() * self.time_warp_factor
+
         if self.simulate_exposure_time:
             with util.max_rate(1000 / self._sig.exposure):
-                image, self._last_star_image_positions, self.capture_time = self._capture()
+                image, self._last_star_image_positions = self._capture()
                 return image
         else:
-            image, self._last_star_image_positions, self.capture_time = self._capture()
+            image, self._last_star_image_positions = self._capture()
             return image
 
     def get_last_star_image_positions(self) -> npt.NDArray[np.float64]:
@@ -376,7 +385,7 @@ class ArtificialStarCam(camera.Camera):
         pass
 
     @abc.abstractmethod
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
         """Return captured image and star image positions."""
 
     @override
@@ -403,13 +412,13 @@ class RandomStarCam(ArtificialStarCam):
         self._vector = self._rng.normal(size=(2, 3)) * 0.3
 
     @override
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
         self._vector *= 0.9
         self._vector += 0.1 * self._rng.normal(size=(2, 3)) * 0.3
         vector = self._vector + [[0, 0, 5], [0, 10, 0]]
         vector /= np.linalg.norm(vector, axis=-1, keepdims=True)
         image, star_xy, _ = self._sig(vector[0], vector[1], grid=self.grid)
-        return image, star_xy, 0.0
+        return image, star_xy
 
 
 class AxisAlignCalibrationTestCam(ArtificialStarCam):
@@ -438,18 +447,16 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
         self.axis_angle = 0.0
 
     @override
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
-        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
-
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
-        self.axis_angle = (t * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
+        self.axis_angle = (self.capture_time * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
         rotvec = np.array([0, 0, 1.0]) * self.axis_angle
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvec, degrees=False)
 
         quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat(canonical=False)
 
         image, star_xy, _ = self._sig.image_from_quaternion(quat, grid=self.grid)
-        return image, star_xy, t
+        return image, star_xy
 
 
 class StarCameraCalibrationTestCam(ArtificialStarCam):
@@ -490,11 +497,10 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         return extrinsic
 
     @override
-    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64], float]:
-        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
-        extrinsic = self._get_extrinsic(t)
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+        extrinsic = self._get_extrinsic(self.capture_time)
         image, star_xy, _ = self._sig.image_from_extrinsic(extrinsic, grid=self.grid)
-        return image, star_xy, t
+        return image, star_xy
 
     def gui(self) -> None:
         """Play with this camera in a GUI."""

@@ -259,7 +259,7 @@ export default {
             }
 
             ctx.save()
-            ctx.strokeStyle = "darkred"
+            ctx.strokeStyle = "#333F"
             ctx.setLineDash([6, 6]);
             ctx.lineWidth = 1;
 

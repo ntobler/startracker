@@ -2,6 +2,8 @@
 
 import pathlib
 
+APPLICATION_USER_DIR = pathlib.Path("~/.startracker").expanduser().absolute()
+
 
 class Persistent:
     """Class to handle persistent file storage."""
@@ -17,7 +19,7 @@ class Persistent:
 
     def __init__(self):
         """Create the application directory `~/.startracker` if not already present."""
-        self.user_data_dir = pathlib.Path("~/.startracker").expanduser().absolute()
+        self.user_data_dir = APPLICATION_USER_DIR
         self.user_data_dir.mkdir(exist_ok=True)
 
         self.repo_dir = pathlib.Path(__file__).parent.absolute().parent

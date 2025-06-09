@@ -6,6 +6,7 @@ from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
+import ruststartracker
 import scipy.spatial
 
 from startracker import (
@@ -369,7 +370,11 @@ class StarCalibrator:
             # Not enough time passed for a new sample
             return
 
-        stars_xy = self.ae.get_star_positions(image)
+        try:
+            stars_xy = self.ae.get_star_positions(image)
+        except ruststartracker.StarTrackerError:
+            # No stars found in image
+            return
 
         self.stars_xy.append(stars_xy)
         self.times.append(t)

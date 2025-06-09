@@ -77,9 +77,10 @@ class DataDispatcher(Generic[T]):
         with self._data_lock:
             self._data_changed.notify_all()
 
-    def get_blocking(self) -> T:
+    def get_blocking(self, timeout: float | None = None) -> T:
         """Get the next put object in blocking mode."""
         with self._data_lock:
-            self._data_changed.wait()
+            if not self._data_changed.wait(timeout=timeout):
+                raise TimeoutError()
         assert self._data is not None
         return self._data

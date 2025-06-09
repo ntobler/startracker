@@ -319,6 +319,9 @@ class AutoCalibrator:
     """Calibrate intrinsic parameters recording stars over time."""
 
     active: bool
+    """Calibration is active."""
+    cal: Optional[kalkam.IntrinsicCalibration]
+    """Resulting intrinsic camera calibration."""
 
     def __init__(self) -> None:
         """Initialize."""
@@ -326,6 +329,7 @@ class AutoCalibrator:
         self._star_calibrator: Optional[initial_starcal.StarCalibrator] = None
         self._data: dict[str, Any] = {}
         self.active = False
+        self.cal = None
 
     def process(self, processed_image: npt.NDArray[np.uint8], t: float) -> dict:
         """Put image to calibration algorithm. Estimate will be improved continuously."""
@@ -335,6 +339,9 @@ class AutoCalibrator:
             self._t0 = t
         t = t - self._t0
         self._star_calibrator.put_image(processed_image, t=t)
+
+        if not self._star_calibrator.intrinsics:
+            return {}
 
         intrinsic = self._star_calibrator.intrinsics[-1]
         dist_coeffs = self._star_calibrator.dist_coeffs[-1]
@@ -348,6 +355,7 @@ class AutoCalibrator:
             state = "Acquiring points for refined calibration"
         else:
             state = "Improving calibration"
+            self.cal = self._star_calibrator.ae.cal
 
         self._data = {
             "image_size": self._star_calibrator.image_size,
@@ -380,6 +388,7 @@ class AutoCalibrator:
         self._star_calibrator = initial_starcal.StarCalibrator(sc_config, (width, height))
         self._t0 = None
         self.active = True
+        self.cal = None
 
     def stop(self) -> None:
         """Stop calibration procedure."""
@@ -449,15 +458,12 @@ class App(webutil.QueueAbstractionClass):
             self._cal.to_json(self._pers.cam_file)
 
     def _get_state(self) -> dict[str, Any]:
-        if self._cam is not None:
-            camera_settings = {
-                "exposure_ms": self._cam.settings.exposure_ms,
-                "analog_gain": self._cam.settings.analog_gain,
-                "digital_gain": self._cam.settings.digital_gain,
-                "binning": self._cam.settings.binning,
-            }
-        else:
-            camera_settings = {}
+        camera_settings = {
+            "exposure_ms": self._cam.settings.exposure_ms,
+            "analog_gain": self._cam.settings.analog_gain,
+            "digital_gain": self._cam.settings.digital_gain,
+            "binning": self._cam.settings.binning,
+        }
 
         if self._attitude_est is not None:
             attitude_est_config = self._attitude_est.config
@@ -499,9 +505,6 @@ class App(webutil.QueueAbstractionClass):
     @webutil.QueueAbstractionClass.queue_abstract
     def set_settings(self, params: dict[str, float | int | bool]) -> dict:
         """Set camera settings from a config dictionary."""
-        if self._cam is None:
-            raise ValueError("Camera is not initialized")
-
         settings = self._cam.settings
         settings.exposure_ms = float(params["exposure_ms"])
         settings.analog_gain = int(params["analog_gain"])
@@ -618,7 +621,7 @@ class App(webutil.QueueAbstractionClass):
             self._auto_calibrator.stop()
         elif command == "accept":
             self._auto_calibrator.stop()
-            self._cal = self._intrinsic_calibrator.cal
+            self._cal = self._auto_calibrator.cal
             self._save_calibration()
             self._init_attitude_estimator()
         else:
@@ -655,8 +658,6 @@ class App(webutil.QueueAbstractionClass):
 
     def run(self) -> None:
         """Run the backend application."""
-        if self._cam is None:
-            raise RuntimeError("Camera hasn't been initialized")
         self._logger.info("Starting camera")
         with self._cam, self._settings_saver():
             self._logger.info("Starting event processor")
@@ -666,9 +667,6 @@ class App(webutil.QueueAbstractionClass):
         self._logger.info("Terminating event processor")
 
     def _tick(self) -> None:
-        if self._cam is None:
-            raise RuntimeError("Camera hasn't been initialized")
-
         if self._camera_job == CaptureMode.DARKFRAME:
             self._logger.info("Record darkframe ...")
             self._cam.record_darkframe()

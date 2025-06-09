@@ -41,5 +41,11 @@ def test_data_dispatcher():
         assert rec == data
 
 
+def test_data_dispatcher_timeout():
+    stream = webutil.DataDispatcher()
+    with pytest.raises(TimeoutError):
+        stream.get_blocking(timeout=0.1)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -3,6 +3,7 @@
 import queue
 import threading
 
+import pytest
 import serial
 from typing_extensions import Self, override
 
@@ -165,4 +166,4 @@ def test_main():
 
 
 if __name__ == "__main__":
-    test_main()
+    pytest.main([__file__])
