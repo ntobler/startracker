@@ -4,13 +4,11 @@ import numpy as np
 import pytest
 import scipy.spatial.transform
 
-from startracker import attitude_estimation, kalkam, testing_utils
+from startracker import attitude_estimation, calibration, testing_utils
 
 
 def test_attutude_estimation_simple():
-    tm = testing_utils.TestingMaterial(use_existing=True)
-
-    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    cal = calibration.make_dummy()
     ae_conf = attitude_estimation.AttitudeEstimatorConfig(
         n_match=14, star_match_pixel_tol=1.0, timeout_secs=10
     )
@@ -30,9 +28,7 @@ def test_attutude_estimation_simple():
 
 
 def test_attutude_estimation_error():
-    tm = testing_utils.TestingMaterial(use_existing=True)
-
-    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    cal = calibration.make_dummy()
     ae_conf = attitude_estimation.AttitudeEstimatorConfig(n_match=12)
     ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
 
@@ -47,11 +43,9 @@ def test_attutude_estimation_error():
 
 
 def test_attutude_estimation():
-    tm = testing_utils.TestingMaterial(use_existing=True)
-
     rng = np.random.default_rng(42)
 
-    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    cal = calibration.make_dummy()
     ae_conf = attitude_estimation.AttitudeEstimatorConfig(n_match=12)
     ae = attitude_estimation.AttitudeEstimator(cal, config=ae_conf)
     sig = testing_utils.StarImageGenerator(cal)

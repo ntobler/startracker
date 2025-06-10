@@ -3,6 +3,7 @@
 import abc
 import dataclasses
 import pathlib
+import queue
 import time
 from typing import Optional
 
@@ -11,7 +12,8 @@ import numpy as np
 import numpy.typing as npt
 import ruststartracker
 import scipy.spatial.transform
-from typing_extensions import override
+import serial
+from typing_extensions import Buffer, override
 
 from startracker import (
     calibration,
@@ -26,27 +28,68 @@ from startracker import (
 UINT8_MAX = 255
 
 
-class TestingMaterial:
-    """Create a testing directory and calibration file for testing purposes."""
+def patch_persistent(path: pathlib.Path, *, cal: bool):
+    """Set persistent data directory with a new folder."""
+    path = pathlib.Path(path)
+    if not path.is_dir():
+        msg = f"Path {path} must be an existing directory"
+        raise ValueError(msg)
+    persistent.Persistent._instance = None
+    persistent.APPLICATION_USER_DIR = path
+    p = persistent.Persistent.get_instance()
+    if cal:
+        calibration.make_dummy().to_json(p.cam_file)
 
-    testing_dir: pathlib.Path
-    cam_file: pathlib.Path
 
-    def __init__(self, *, use_existing: bool = True):
-        user_data_dir = persistent.Persistent.get_instance().user_data_dir
+class MockSerial(serial.SerialBase):
+    def __init__(self):
+        super().__init__()
+        self.mosi_channel = queue.Queue()
+        self.miso_channel = queue.Queue()
 
-        self.testing_dir = user_data_dir / "testing"
-        self.testing_dir.mkdir(exist_ok=True)
+    @override
+    def read(self, size: int = -1, /) -> bytes:
+        ret = bytes(self.mosi_channel.get() for _ in range(size))
+        print(f"Device read: {ret!r}")
+        return ret
 
-        cal = calibration.make_dummy()
+    @override
+    def write(self, data: Buffer) -> int:
+        data = bytes(data)
+        print(f"Device wrote: {data!r}")
+        for x in data:
+            self.miso_channel.put(x)
+        return len(data)
 
-        self.cam_file = self.testing_dir / "calibration.json"
-        if (not self.cam_file.exists()) or (not use_existing):
-            cal.to_json(self.cam_file)
+    def reset_input_buffer(self) -> None:
+        """Clear the input buffer."""
+        while not self.mosi_channel.empty():
+            self.mosi_channel.get_nowait()
 
-    def patch_persistent(self):
-        """Patch the persistent instance to use the testing directory."""
-        persistent.Persistent.get_instance().cam_file = self.cam_file
+
+class MockSerialMaster(serial.SerialBase):
+    def __init__(self, test_serial: MockSerial):
+        super().__init__()
+        self.test_serial = test_serial
+
+    @override
+    def read(self, size: int = -1, /) -> bytes:
+        ret = bytes(self.test_serial.miso_channel.get() for _ in range(size))
+        print(f"Device read: {ret!r}")
+        return ret
+
+    @override
+    def write(self, data: Buffer) -> int:
+        data = bytes(data)
+        print(f"Master wrote: {data!r}")
+        for x in data:
+            self.test_serial.mosi_channel.put(x)
+        return len(data)
+
+    def reset_input_buffer(self):
+        """Clear the input buffer."""
+        while not self.test_serial.miso_channel.empty():
+            self.test_serial.miso_channel.get_nowait()
 
 
 @dataclasses.dataclass
@@ -343,11 +386,7 @@ class ArtificialStarCam(camera.Camera):
     ):
         super().__init__(camera_settings)
         self._rng = np.random.default_rng(42)
-        if cal is None:
-            cam_file = TestingMaterial(use_existing=True).cam_file
-            self.cal = kalkam.IntrinsicCalibration.from_json(cam_file)
-        else:
-            self.cal = cal
+        self.cal = calibration.make_dummy() if cal is None else cal
         config = config if config is not None else self.default_config
         self._sig = StarImageGenerator(self.cal, config)
         self._last_star_image_positions: Optional[npt.NDArray[np.float64]] = None

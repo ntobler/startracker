@@ -5,12 +5,11 @@ import numpy as np
 import pytest
 import scipy.spatial
 
-from startracker import kalkam, libstartracker, starcamcal, testing_utils
+from startracker import calibration, kalkam, libstartracker, starcamcal
 
 
 def test_objective_function():
-    tm = testing_utils.TestingMaterial(use_existing=True)
-    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    cal = calibration.make_dummy()
 
     rng = np.random.default_rng(42)
 
@@ -58,8 +57,7 @@ def test_objective_function():
 
 
 def test_calibration():
-    tm = testing_utils.TestingMaterial(use_existing=True)
-    cal = kalkam.IntrinsicCalibration.from_json(tm.cam_file)
+    cal = calibration.make_dummy()
 
     rng = np.random.default_rng(42)
 

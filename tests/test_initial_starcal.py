@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import ruststartracker
 
-from startracker import attitude_estimation, camera, initial_starcal, kalkam, testing_utils
+from startracker import attitude_estimation, calibration, camera, initial_starcal, testing_utils
 
 
 @pytest.mark.parametrize("use_distortion", [False, True])
@@ -16,8 +16,7 @@ def test_star_gradient_calibration(*, use_distortion: bool, plot: bool = False):
     epsilon = rng.uniform(-np.pi / 2, np.pi / 2)  # roll component
     phi = rng.uniform(-np.pi, np.pi)  # azimuthal coordinate (this is not captured by the algorithm)
 
-    cam_file = testing_utils.TestingMaterial(use_existing=True).cam_file
-    cal = kalkam.IntrinsicCalibration.from_json(cam_file)
+    cal = calibration.make_dummy()
     intrinsic = cal.intrinsic
     width, height = cal.image_size
 

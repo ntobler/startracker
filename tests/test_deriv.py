@@ -3,7 +3,7 @@ import pytest
 import scipy.spatial
 import sympy as sp
 
-from startracker import deriv, kalkam, testing_utils
+from startracker import calibration, deriv, kalkam
 
 
 def test_expand_pow_manual():
@@ -31,8 +31,7 @@ def test_mrp():
 
 
 def test_distortion():
-    cam_file = testing_utils.TestingMaterial(use_existing=True).cam_file
-    cal = kalkam.IntrinsicCalibration.from_json(cam_file)
+    cal = calibration.make_dummy()
     intrinsic = cal.intrinsic
     width, height = cal.image_size
     assert cal.dist_coeffs is not None

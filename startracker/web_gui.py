@@ -948,12 +948,12 @@ def main() -> None:
         from startracker import testing_utils
 
         logging.warning("Using debug data")
-        testing_utils.TestingMaterial(use_existing=True).patch_persistent()
+        p = persistent.Persistent.get_instance()
+        testing_utils.patch_persistent(p.user_data_dir / "testing", cal=False)
         cam: type[testing_utils.ArtificialStarCam]
         # cam = testing_utils.RandomStarCam
         cam = testing_utils.AxisAlignCalibrationTestCam
         cam = testing_utils.StarCameraCalibrationTestCam
-        # cam = testing_utils.RandomStarCam
         cam.time_warp_factor = 1000
         cam.simulate_exposure_time = True
         cam.default_config = testing_utils.StarImageGeneratorConfig(
