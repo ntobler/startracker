@@ -1,5 +1,5 @@
 
-import { api, HelpDisplay, matmul3x3, matToLaTeX, vecToLaTeX } from './util.js';
+import { api, HelpDisplay, matmul3x3, matToLaTeX, vecToLaTeX, parseSize } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
 
 let katexPromise;
@@ -50,8 +50,13 @@ export default {
                 },
                 auto_calibrator: {},
             }),
-            celestial_coordinate_frame_overlay: false,
+            packet_size: ref("??"),
+            image_size: ref("??"),
+            image_type: ref("raw"),
+            coordinate_frame: false,
+            image_quality: ref("??"),
             brightness: ref(1),
+            target_quality: ref("??"),
             helpDisplay: null,
         }
     },
@@ -60,14 +65,35 @@ export default {
             let url = 'ws://' + window.location.host + "/api/image"
             var ws = new WebSocket(url);
             var img = document.getElementById('image');
-            ws.onmessage = function (event) {
-                var blob = new Blob([event.data], { type: 'image/png' });
+            const self = this;
+            ws.onmessage = async function (response) {
+                //Find out mime type from the image header
+                const headerBlob = response.data.slice(0, 16);  // 16 bytes is enough for PNG and JPEG magic numbers
+                const headerBuffer = await headerBlob.arrayBuffer();
+                const headerBytes = new Uint8Array(headerBuffer);
+                let mimeType = '';
+                if (headerBytes[0] === 0x89 && headerBytes[1] === 0x50) {
+                    mimeType = 'image/png';
+                } else if (headerBytes[0] === 0xFF && headerBytes[1] === 0xD8) {
+                    mimeType = 'image/jpeg';
+                } else {
+                    console.error("Unknown image type");
+                    return;
+                }
+
+                self.image_size = parseSize(response.data.size);
+
+                // Display image
+                const blob = new Blob([response.data], { type: mimeType });
                 img.src = URL.createObjectURL(blob);
                 img.style.display = "block"
             };
         },
         onmessage(response) {
             this.stream = JSON.parse(response.data);
+            this.packet_size = parseSize(response.data.length);
+
+            this.image_quality = this.stream.image_quality
 
             this.redraw()
             document.getElementById('footer-bar').style.display = "flex"
@@ -89,6 +115,10 @@ export default {
                 min_matches: this.attitude.min_matches,
                 pixel_tolerance: this.attitude.pixel_tolerance,
                 timeout_secs: this.attitude.timeout_secs,
+                coordinate_frame: this.coordinate_frame,
+                image_type: this.image_type,
+                brightness: this.brightness,
+                target_quality: this.target_quality,
             }
             api('/api/set_settings', payload, this.updateState);
         },
@@ -96,6 +126,10 @@ export default {
             this.camera_settings = data.camera_settings
             this.intrinsic_calibrator = data.intrinsic_calibrator
             this.attitude = data.attitude
+            this.brightness = data.view_settings.brightness
+            this.coordinate_frame = data.view_settings.coordinate_frame
+            this.image_type = data.view_settings.image_type
+            this.target_quality = data.view_settings.target_quality
 
             const el = document.getElementById("toggle_cam");
             el.classList.remove("pending");
@@ -109,17 +143,29 @@ export default {
         },
         toggleCelestialCoordinateFrameOverlay() {
             let el = document.getElementById("overlay")
-            this.celestial_coordinate_frame_overlay = this.celestial_coordinate_frame_overlay ? false : true
-            el.classList = this.celestial_coordinate_frame_overlay ? ["active"] : []
+            this.coordinate_frame = this.coordinate_frame ? false : true
+            el.classList = this.coordinate_frame ? ["active"] : []
             this.setSettings()
         },
         toggleBrightness() {
-            let brightness = {
+            this.brightness = {
                 1: 2, 2: 4, 4: 1,
             }[Number(this.brightness)];
             let img = document.getElementById('image');
-            img.style.filter = `brightness(${brightness})`
-            this.brightness = brightness
+            img.style.filter = `brightness(${this.brightness})`
+            this.setSettings()
+        },
+        toggleImageType() {
+            this.image_type = {
+                "raw": "processed", "processed": "crop2x", "crop2x": "raw",
+            }[this.image_type];
+            this.setSettings()
+        },
+        toggleImageTargetQuality() {
+            this.target_quality = {
+                "20k": "50k", "50k": "100k", "100k": "200k", "200k": "500k", "500k": "PNG", "PNG": "20k"
+            }[this.target_quality];
+            this.setSettings()
         },
         capture(mode) {
             document.getElementById("toggle_cam").classList.add("pending");
@@ -183,14 +229,17 @@ export default {
             ctx.rect(-0.5, -0.5, width, height);
             ctx.clip();
 
-            this.drawStars(ctx, state)
+            if (this.image_type != "crop2x") {
 
-            this.showAutoCalibrationInfo(this.stream.auto_calibrator);
+                this.drawStars(ctx, state)
 
-            if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
-                this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
-            } else if (this.celestial_coordinate_frame_overlay && this.stream.attitude_estimation.n_matches > 0) {
-                this.drawCelestialCoordinateFrame(ctx, this.stream.attitude_estimation);
+                this.showAutoCalibrationInfo(this.stream.auto_calibrator);
+
+                if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
+                    this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
+                } else if (this.coordinate_frame && this.stream.attitude_estimation.n_matches > 0) {
+                    this.drawCelestialCoordinateFrame(ctx, this.stream.attitude_estimation);
+                }
             }
 
             ctx.restore()
@@ -378,7 +427,14 @@ export default {
         this.connectImageWebSocket();
         this.connectStreamWebSocket();
 
-        api('/api/get_state', null, this.updateState);
+        api('/api/get_state', null, (state) => {
+            this.updateState(state);
+
+            let el = document.getElementById("overlay")
+            el.classList = this.coordinate_frame ? ["active"] : []
+            let img = document.getElementById('image');
+            img.style.filter = `brightness(${this.brightness})`
+        });
 
         getKatex(() => { });
 

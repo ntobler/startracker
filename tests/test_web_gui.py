@@ -1,9 +1,32 @@
 import pathlib
 import threading
 
+import numpy as np
 import pytest
 
 from startracker import camera, persistent, testing_utils, web_gui
+
+
+def test_image_encoder():
+    rng = np.random.default_rng(42)
+    img = rng.integers(0, 20, size=(540, 960), dtype=np.uint8)
+
+    size_kb = 1024
+    ie = web_gui.ImageEncoder(max_kb=size_kb / 1024)
+
+    for size_kb in [40, 200, None, 100, 50, 150, 30]:
+        ie.max_kb = size_kb
+        for _ in range(15):
+            encoded = ie.encode(img)
+            assert encoded is not None
+            if size_kb is None:
+                if ie.quality_str == "PNG":
+                    break
+            else:
+                if np.abs(len(encoded) / 1024 - size_kb) < size_kb / 10:
+                    break
+        else:
+            raise AssertionError
 
 
 def test_app_capture(tmp_path: pathlib.Path):

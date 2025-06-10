@@ -146,3 +146,12 @@ export function vecToLaTeX(v, digits = 2) {
     str += String.raw`\end{bmatrix}`;
     return str;
 }
+
+export function parseSize(size) {
+    let unit
+    for (unit of ["B", "kB", "MB", "GB"]) {
+        if (size < 10) return size.toFixed(2) + unit
+        if (size < 100) return size.toFixed(1) + unit
+        size /= 1024
+    }
+}

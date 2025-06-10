@@ -500,7 +500,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
     squared_error_distances: list[np.ndarray]
     """Squared reprojection error distance for all image points."""
 
-    def plot(*, self, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
+    def plot(self, *, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
         """Plot calibration quality using matplotlib."""
         import matplotlib.pyplot as plt
         from scipy.interpolate import griddata
@@ -536,8 +536,8 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
 
         if show:
             fig.show()
-
-        plt.close(fig)
+        else:
+            plt.close(fig)
 
     def plot_opencv(
         self,

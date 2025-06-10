@@ -1,5 +1,5 @@
 
-import { ZoomHandler, api, HelpDisplay } from './util.js';
+import { ZoomHandler, api, HelpDisplay, parseSize } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
 
 export default {
@@ -264,15 +264,6 @@ function drawStars(ctx, state, ui_zoom) {
 
     ctx.restore()
     ctx.restore()
-}
-
-function parseSize(size) {
-    let unit
-    for (unit of ["B", "kB", "MB", "GB"]) {
-        if (size < 10) return size.toFixed(1) + unit
-        if (size < 100) return size.toFixed(0) + unit
-        size /= 1024
-    }
 }
 
 function drawPlot(ctx, history) {

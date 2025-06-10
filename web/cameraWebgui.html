@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>WebSocket Image Display</title>
+    <title>Starraker</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" type="text/css" href="style.css">
     <style>
@@ -162,6 +162,8 @@
                 Display
                 <button type="button" @click="toggleBrightness()">Brightness {{ brightness }}x</button>
                 <button type="button" @click="toggleCelestialCoordinateFrameOverlay()" id="overlay">Attitude</button>
+                <button type="button" @click="toggleImageType()">Image type: {{ image_type }}</button>
+                <button type="button" @click="toggleImageTargetQuality()">Image quality: {{ target_quality }}</button>
                 <div class="help">
                     <b>Display settings</b><br>
                     The UI brightness of the image can be adjusted, and the star detection overlay can be toggled on and
@@ -191,6 +193,9 @@
                     The number of stars detected (encircled in red), and the time taken for each processing step (image
                     processing, attitude estimation, post processing).
                 </div>
+            </div>
+            <div title="Packet size of data streams">
+                Packet size: data: {{packet_size}} image: {{image_size}} ({{image_quality}})
             </div>
             <div style="margin-left: auto;">
                 <button type="button" @click="showHelp">?</button>

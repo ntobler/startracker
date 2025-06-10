@@ -1,6 +1,7 @@
 """Flask web application to capture images using a smartphone browser or any other browser."""
 
 import contextlib
+import dataclasses
 import datetime
 import enum
 import io
@@ -182,12 +183,10 @@ class AttitudeEstimation:
         self._cal = cal
         self._axis_calibrator = axis_calibrator
 
-        if pers.attitude_estimation_config_file.exists():
-            config = attitude_estimation.AttitudeEstimatorConfig.load(
-                pers.attitude_estimation_config_file
-            )
-        else:
-            config = attitude_estimation.AttitudeEstimatorConfig()
+        config = attitude_estimation.AttitudeEstimatorConfig.load(
+            pers.attitude_estimation_config_file,
+            construct_default_if_missing=True,
+        )
         self._attitude_est = attitude_estimation.AttitudeEstimator(cal, config=config)
 
         # Get bright stars
@@ -397,6 +396,76 @@ class AutoCalibrator:
         self.active = False
 
 
+@dataclasses.dataclass
+class ViewSettings(util.JsonDataclass):
+    """Settings of displayed UI elements in the frontend."""
+
+    coordinate_frame: bool = False
+    """Overlay star coordinate frame."""
+    brightness: int = 1
+    """Brightness for the camera display"""
+    image_type: str = "raw"
+    """Image type to show. One of raw, processed, or crop2x"""
+    target_quality: str = "50k"
+
+
+class ImageEncoder:
+    """Adaptive image encoding to PNG or JPG depending on size."""
+
+    max_kb: Optional[float]
+    """Maximum allowed size of the encoded image. Resulting encoding might be larger, however,
+    subsequent encodings will be lower in quality. If None, no limit is used."""
+
+    def __init__(self, max_kb: Optional[float]) -> None:
+        """Initialize.
+
+        Args:
+            max_kb: Maximum allowed size of the encoded image. Resulting encoding might be larger,
+                however, subsequent encodings will be lower in quality. If None, no limit is used.
+        """
+        self.max_kb = max_kb
+        self._level = 0
+        self._file_type = ".png"
+        self._quality = 100.0
+
+    @property
+    def quality_str(self) -> str:
+        """Get string representing used quality."""
+        if self._file_type == ".png":
+            return "PNG"
+        return f"JPG q={int(self._quality)}"
+
+    def encode(self, image: npt.NDArray[np.uint8]) -> Optional[bytes]:
+        """Dynamically encode an image to a PNG or JPG bytes blob."""
+        success, encoded_array = cv2.imencode(
+            self._file_type, image, [int(cv2.IMWRITE_JPEG_QUALITY), int(self._quality)]
+        )
+        if not success:
+            return None
+        encoded_bytes = encoded_array.tobytes()
+
+        if self.max_kb is not None:
+            size_fraction = len(encoded_bytes) / 1024 / self.max_kb
+
+            if self._file_type == ".png" and size_fraction > 1:
+                self._file_type = ".jpg"
+                self._quality = 100
+            elif self._file_type == ".jpg":
+                if self._quality == 100 and size_fraction < 0.7:
+                    self._file_type = ".png"
+                else:
+                    # Jpeg quality vs size is highly non-linear. This is non-scientific way to
+                    # make the control loop more stable.
+                    gain = 20 - 19 * (self._quality - 50) / 50
+                    # Iterate control loop
+                    quality_estimate = self._quality - (size_fraction - 1) * gain
+                    self._quality = max(50, min(100, quality_estimate))
+        else:
+            self._file_type = ".png"
+
+        return encoded_bytes
+
+
 class App(webutil.QueueAbstractionClass):
     terminate: bool
     """Set True to terminate the application loop."""
@@ -430,10 +499,14 @@ class App(webutil.QueueAbstractionClass):
         self._auto_calibrator = AutoCalibrator()
 
         # Load camera settings if available
-        if self._pers.cam_settings_file.is_file():
-            settings = camera.CameraSettings.load(self._pers.cam_settings_file)
-        else:
-            settings = camera.CameraSettings()
+        settings = camera.CameraSettings.load(
+            self._pers.cam_settings_file, construct_default_if_missing=True
+        )
+
+        # Load camera settings if available
+        self._view_settings = ViewSettings.load(
+            self._pers.view_settings_file, construct_default_if_missing=True
+        )
 
         # Initialize camera
         self._cam = camera.RpiCamera(settings)
@@ -441,6 +514,10 @@ class App(webutil.QueueAbstractionClass):
 
         # Init Axis Calibrator
         self._axis_calibrator = AxisCalibrator(self._pers)
+
+        q = self._view_settings.target_quality
+        quality = None if q == "PNG" else float(q.rstrip("k"))
+        self._image_encoder = ImageEncoder(max_kb=quality)
 
         self._init_attitude_estimator()
 
@@ -494,6 +571,7 @@ class App(webutil.QueueAbstractionClass):
             "axis_calibration": axis_calibration,
             "camera_settings": camera_settings,
             "camera_mode": self._camera_job.value,
+            "view_settings": self._view_settings.to_dict(),
         }
         return state
 
@@ -518,6 +596,14 @@ class App(webutil.QueueAbstractionClass):
             int(params["pattern_height"]),
             float(params["pattern_size"]),
         )
+
+        self._view_settings.coordinate_frame = bool(params["coordinate_frame"])
+        self._view_settings.brightness = int(params["brightness"])
+        self._view_settings.image_type = str(params["image_type"])
+        self._view_settings.target_quality = str(params["target_quality"])
+
+        q = self._view_settings.target_quality
+        self._image_encoder.max_kb = None if q == "PNG" else float(q.rstrip("k"))
 
         if self._attitude_est is not None:
             config = self._attitude_est.config
@@ -652,6 +738,7 @@ class App(webutil.QueueAbstractionClass):
         yield
         self._logger.info("Safing camera settings")
         self._cam.settings.save(self._pers.cam_settings_file)
+        self._view_settings.save(self._pers.view_settings_file)
         if self._attitude_est is not None:
             self._attitude_est.config.save(self._pers.attitude_estimation_config_file)
             self._attitude_est.save_database()
@@ -680,8 +767,9 @@ class App(webutil.QueueAbstractionClass):
 
             with util.TimeMeasurer() as tm:
                 kernel = np.ones((7, 7), np.uint8)
-                processed_image = cv2.morphologyEx(image, cv2.MORPH_TOPHAT, kernel)
-                cv2.blur(processed_image, (3, 3), dst=processed_image)
+                processed_image_ = cv2.morphologyEx(image, cv2.MORPH_TOPHAT, kernel)
+                cv2.blur(processed_image_, (3, 3), dst=processed_image_)
+                processed_image = np.array(processed_image_, dtype=np.uint8, copy=False)
             data["pre_processing_time"] = int(tm.t * 1000)
 
             self._logger.info("Get attitude ...")
@@ -699,12 +787,23 @@ class App(webutil.QueueAbstractionClass):
                     if img is not None:
                         image = img
 
+            data["image_quality"] = self._image_encoder.quality_str
+
             self.stream.put(data)
 
-            success, encoded_array = cv2.imencode(".png", image)
-            if success:
-                image_data = encoded_array.tobytes()
-                self.image_container.put(image_data)
+            if self._view_settings.image_type == "raw":
+                display_image = image
+            elif self._view_settings.image_type == "processed":
+                display_image = processed_image
+            elif self._view_settings.image_type == "crop2x":
+                h, w = image.shape[:2]
+                display_image = processed_image[h // 4 : 3 * (h // 4), w // 4 : 3 * (w // 4)]
+            else:
+                display_image = image
+
+            bytes_encoded = self._image_encoder.encode(display_image)
+            if bytes_encoded is not None:
+                self.image_container.put(bytes_encoded)
 
             self._logger.info("Capture image done")
 

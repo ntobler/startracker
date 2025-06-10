@@ -237,6 +237,9 @@ def calibrate_from_database(
         images, objects, image_size=image_size, percentile=percentile, plot=plot
     )
 
+    if plot:
+        calibration.plot(show=True)
+
     output_file = directory / "cam_file.json"
 
     calibration.to_json(output_file)

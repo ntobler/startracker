@@ -263,7 +263,7 @@ fn even_spaced_indices<'py>(
 
 fn numpy_to_dynamic_slice<'py, T: numpy::Element + Copy, const L: usize>(
     vectors: &'py numpy::PyReadonlyArray2<'py, T>,
-) -> PyResult<&[[T; L]]> {
+) -> PyResult<&'py [[T; L]]> {
     if !vectors.is_c_contiguous() || vectors.ndim() != 2 || vectors.shape()[1] != L {
         return Err(PyRuntimeError::new_err(format!(
             "vectors must be a c_contiguous array with shape=[n, {}]",

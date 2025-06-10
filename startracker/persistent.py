@@ -42,3 +42,5 @@ class Persistent:
         self.axis_rot_quat_file = self.user_data_dir / "axis_rot_quat.npy"
 
         self.attitude_estimation_config_file = self.user_data_dir / "attitude_estimation_config.pkl"
+
+        self.view_settings_file = self.user_data_dir / "view_settings.json"
