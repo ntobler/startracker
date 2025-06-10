@@ -86,7 +86,7 @@ def calibrate_camera(
 def calibrate(
     image_points: np.ndarray,
     object_points: np.ndarray,
-    image_size: tuple[int, int] = (960, 540),
+    image_size: tuple[int, int],
     *,
     percentile: int | None = None,
     plot: bool = False,
@@ -189,7 +189,7 @@ def calibrate(
 def calibrate_from_database(
     directory: pathlib.Path,
     n_samples: int,
-    image_size: tuple[int, int] = (960, 540),
+    image_size: tuple[int, int],
     *,
     percentile: int | None = None,
     plot: bool = False,

@@ -48,17 +48,17 @@
 </head>
 
 <body>
-    <div id="app">
+    <div id="app" v-cloak>
         <div id="camera-overlay">No image captured</div>
-        <img id="image" src="" alt="Image">
+        <img id="image" src="" alt="Image" :style="{ filter: `brightness(${view_settings?.brightness || 1})` }">
         <canvas id="canvas" width="100" height="100"></canvas>
-        <div id="matrix"></div>
+        <div v-if="stream?.auto_calibrator?.active" id="matrix"></div>
         <div id="header-bar">
             <div><button type="button" id="toggle_cam" @click="capture('toggle_continuous')">Start</button></div>
             <div><a href="./axisAlign.html"><button type="button">Axis Align View</button></a></div>
         </div>
         <div id="footer-bar">
-            <div title="Camera exposure and resolution settings">
+            <div v-if="camera_settings" title="Camera exposure and resolution settings">
                 Exposure
                 <input type="number" step="1" v-model.number="camera_settings.exposure_ms" @change="setSettings"
                     style="width: 4em" title="Exposure setting of the camera in milliseconds" /> ms
@@ -85,7 +85,7 @@
                     Set camera exposure, gain, and binning settings to optimize the image quality.
                 </div>
             </div>
-            <div title="Camera acquisition controls">
+            <div v-if="camera_settings" title="Camera acquisition controls">
                 Capture
                 <button type="button" @click="capture('single')" title="Capture a single image">Single</button>
                 <button type="button" @click="capture('continuous')" title="Capture continuously">Continuous</button>
@@ -101,7 +101,7 @@
                     Use continuous capture mode for normal operation.
                 </div>
             </div>
-            <div title="Pattern generation for camera calibration">
+            <div v-if="intrinsic_calibrator" title="Pattern generation for camera calibration">
                 Pattern
                 <input type="number" value="13" v-model.number="intrinsic_calibrator.pattern_width"
                     @change="setSettings" size="0" /> x
@@ -120,7 +120,7 @@
                     infinity.
                 </div>
             </div>
-            <div title="Camera calibration controls">
+            <div v-if="intrinsic_calibrator" title="Camera calibration controls">
                 Calibration
                 <button type="button" @click="calibrationPut">Put {{ intrinsic_calibrator.index > 0 ?
                     intrinsic_calibrator.index : ""}}</button>
@@ -141,7 +141,7 @@
                     Repeat if the result is not satisfactory.
                 </div>
             </div>
-            <div title="Atuo camera calibration controls">
+            <div title="Auto camera calibration controls">
                 Auto calibration
                 <button type="button" @click="autoCalibration('restart')">Restart</button>
                 <button type="button" @click="autoCalibration('discard')">Discard</button>
@@ -158,19 +158,21 @@
                     Click "Accept" to use the calibrated parameters.
                 </div>
             </div>
-            <div title="Display controls for camera image">
+            <div v-if="view_settings" title="Display controls for camera image">
                 Display
-                <button type="button" @click="toggleBrightness()">Brightness {{ brightness }}x</button>
-                <button type="button" @click="toggleCelestialCoordinateFrameOverlay()" id="overlay">Attitude</button>
-                <button type="button" @click="toggleImageType()">Image type: {{ image_type }}</button>
-                <button type="button" @click="toggleImageTargetQuality()">Image quality: {{ target_quality }}</button>
+                <button type="button" @click="toggleBrightness()">Brightness {{ view_settings.brightness }}x</button>
+                <button type="button" @click="toggleCoordinateFrame()"
+                    :class="{ active: view_settings.coordinate_frame }">Attitude</button>
+                <button type="button" @click="toggleImageType()">Image type: {{ view_settings.image_type }}</button>
+                <button type="button" @click="toggleImageTargetQuality()">Image quality: {{ view_settings.target_quality
+                    }}</button>
                 <div class="help">
                     <b>Display settings</b><br>
                     The UI brightness of the image can be adjusted, and the star detection overlay can be toggled on and
                     off.
                 </div>
             </div>
-            <div v_if="attitude != {}" title="Attitude estimation settings">
+            <div v-if="attitude" title="Attitude estimation settings">
                 Min matches <input type="number" value="40" v-model.number="attitude.min_matches" @change="setSettings"
                     size="1" />
                 Pixel tolerance <input type="number" value="40" v-model.number="attitude.pixel_tolerance"
@@ -184,7 +186,7 @@
                     and the timeout for the algorithm can be set here.
                 </div>
             </div>
-            <div v_if="stream != {}" title="Attitude estimation results">
+            <div v-if="stream?.attitude_estimation" title="Attitude estimation results">
                 Tracked: {{stream.attitude_estimation.n_matches}}
                 Times: {{stream.pre_processing_time}}ms, {{stream.attitude_estimation.processing_time}}ms,
                 {{stream.attitude_estimation.post_processing_time}}ms
@@ -194,7 +196,7 @@
                     processing, attitude estimation, post processing).
                 </div>
             </div>
-            <div title="Packet size of data streams">
+            <div v-if="stream" title="Packet size of data streams">
                 Packet size: data: {{packet_size}} image: {{image_size}} ({{image_quality}})
             </div>
             <div style="margin-left: auto;">

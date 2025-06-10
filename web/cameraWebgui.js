@@ -16,47 +16,14 @@ function getKatex(callback) {
 export default {
     setup() {
         return {
-            camera_settings: ref({
-                exposure_ms: 1,
-                analog_gain: 2,
-                digital_gain: 3,
-                binning: 1,
-            }),
-            intrinsic_calibrator: ref({
-                index: 1,
-                pattern_width: 1,
-                pattern_height: 1,
-                pattern_size: 1,
-            }),
-            attitude: ref({
-                min_matches: 12,
-                pixel_tolerance: 3.0,
-                timeout_secs: 3.0,
-            }),
-            stream: ref({
-                pre_processing_time: 0,
-                attitude_estimation: {
-                    quat: [],
-                    rotm: [],
-                    obs_pix: [],
-                    cat_pix: [],
-                    n_matches: 0,
-                    processing_time: 0,
-                    post_processing_time: 0,
-                    image_size: [960, 540],
-                    extrinsic: [],
-                    intrinsic: [],
-                    dist_coeffs: [],
-                },
-                auto_calibrator: {},
-            }),
+            camera_settings: ref(undefined),
+            intrinsic_calibrator: ref(undefined),
+            attitude: ref(undefined),
+            stream: ref(undefined),
+            view_settings: ref(undefined),
             packet_size: ref("??"),
             image_size: ref("??"),
-            image_type: ref("raw"),
-            coordinate_frame: false,
             image_quality: ref("??"),
-            brightness: ref(1),
-            target_quality: ref("??"),
             helpDisplay: null,
         }
     },
@@ -115,10 +82,10 @@ export default {
                 min_matches: this.attitude.min_matches,
                 pixel_tolerance: this.attitude.pixel_tolerance,
                 timeout_secs: this.attitude.timeout_secs,
-                coordinate_frame: this.coordinate_frame,
-                image_type: this.image_type,
-                brightness: this.brightness,
-                target_quality: this.target_quality,
+                coordinate_frame: this.view_settings.coordinate_frame,
+                image_type: this.view_settings.image_type,
+                brightness: this.view_settings.brightness,
+                target_quality: this.view_settings.target_quality,
             }
             api('/api/set_settings', payload, this.updateState);
         },
@@ -126,11 +93,7 @@ export default {
             this.camera_settings = data.camera_settings
             this.intrinsic_calibrator = data.intrinsic_calibrator
             this.attitude = data.attitude
-            this.brightness = data.view_settings.brightness
-            this.coordinate_frame = data.view_settings.coordinate_frame
-            this.image_type = data.view_settings.image_type
-            this.target_quality = data.view_settings.target_quality
-
+            this.view_settings = data.view_settings
             const el = document.getElementById("toggle_cam");
             el.classList.remove("pending");
             if (data.camera_mode == "continuous") {
@@ -141,30 +104,28 @@ export default {
 
             this.redraw()
         },
-        toggleCelestialCoordinateFrameOverlay() {
-            let el = document.getElementById("overlay")
-            this.coordinate_frame = this.coordinate_frame ? false : true
-            el.classList = this.coordinate_frame ? ["active"] : []
+        toggleCoordinateFrame() {
+            this.view_settings.coordinate_frame = this.view_settings.coordinate_frame ? false : true
             this.setSettings()
         },
         toggleBrightness() {
-            this.brightness = {
+            this.view_settings.brightness = {
                 1: 2, 2: 4, 4: 1,
-            }[Number(this.brightness)];
+            }[Number(this.view_settings.brightness)];
             let img = document.getElementById('image');
-            img.style.filter = `brightness(${this.brightness})`
+            img.style.filter = `brightness(${this.view_settings.brightness})`
             this.setSettings()
         },
         toggleImageType() {
-            this.image_type = {
+            this.view_settings.image_type = {
                 "raw": "processed", "processed": "crop2x", "crop2x": "raw",
-            }[this.image_type];
+            }[this.view_settings.image_type];
             this.setSettings()
         },
         toggleImageTargetQuality() {
-            this.target_quality = {
+            this.view_settings.target_quality = {
                 "20k": "50k", "50k": "100k", "100k": "200k", "200k": "500k", "500k": "PNG", "PNG": "20k"
-            }[this.target_quality];
+            }[this.view_settings.target_quality];
             this.setSettings()
         },
         capture(mode) {
@@ -199,8 +160,11 @@ export default {
             this.redraw()
         },
         redraw() {
-            let state = this.stream.attitude_estimation
-            if (!state) return
+
+            if (!this.stream) return;
+
+            let width = this.stream.image_size[0]
+            let height = this.stream.image_size[1]
 
             let canvas = document.getElementById('canvas')
             let ctx = canvas.getContext("2d")
@@ -214,9 +178,6 @@ export default {
 
             ctx.translate(canvas.width / 2, canvas.height / 2)
 
-            let width = state.image_size[0]
-            let height = state.image_size[1]
-
             let s = Math.min(canvas.width / width, canvas.height / height)
             ctx.scale(s, s)
             ctx.translate(0.5 - width / 2, 0.5 - height / 2)
@@ -229,15 +190,17 @@ export default {
             ctx.rect(-0.5, -0.5, width, height);
             ctx.clip();
 
-            if (this.image_type != "crop2x") {
+            if (this.view_settings.image_type != "crop2x") {
 
-                this.drawStars(ctx, state)
+                if (this.stream.attitude_estimation) {
+                    this.drawStars(ctx, this.stream.attitude_estimation)
+                }
 
                 this.showAutoCalibrationInfo(this.stream.auto_calibrator);
 
                 if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
                     this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
-                } else if (this.coordinate_frame && this.stream.attitude_estimation.n_matches > 0) {
+                } else if (this.view_settings.coordinate_frame && this.stream.attitude_estimation?.n_matches > 0) {
                     this.drawCelestialCoordinateFrame(ctx, this.stream.attitude_estimation);
                 }
             }
@@ -273,13 +236,9 @@ export default {
             ctx.restore()
         },
         showAutoCalibrationInfo(state) {
-            const el = document.getElementById("matrix");
-            if (state == {} || !state.active) {
-                el.style.display = "none"
-                return;
-            }
-            el.style.display = "flex"
+            if (state == {} || !state.active) return;
 
+            const el = document.getElementById("matrix");
             getKatex((katex) => {
                 katex.render(String.raw`
                     \begin{aligned}
@@ -427,14 +386,7 @@ export default {
         this.connectImageWebSocket();
         this.connectStreamWebSocket();
 
-        api('/api/get_state', null, (state) => {
-            this.updateState(state);
-
-            let el = document.getElementById("overlay")
-            el.classList = this.coordinate_frame ? ["active"] : []
-            let img = document.getElementById('image');
-            img.style.filter = `brightness(${this.brightness})`
-        });
+        api('/api/get_state', null, this.updateState);
 
         getKatex(() => { });
 

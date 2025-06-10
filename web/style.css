@@ -9,6 +9,10 @@ body {
     color: red;
 }
 
+[v-cloak] {
+  display: none;
+}
+
 a {
     color: inherit;
 }

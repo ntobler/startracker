@@ -378,10 +378,10 @@ class AutoCalibrator:
             return cal.plot_opencv()
         return None
 
-    def restart(self) -> None:
+    def restart(self, image_size: tuple[int, int]) -> None:
         """Restart calibration procedure."""
         # TODO find a way to get image width and height
-        width, height = 960, 540
+        width, height = image_size
         ae_config = attitude_estimation.AttitudeEstimatorConfig(star_match_pixel_tol=10, n_match=8)
         sc_config = initial_starcal.StarCalibratorConfig(ae_config)
         self._star_calibrator = initial_starcal.StarCalibrator(sc_config, (width, height))
@@ -483,6 +483,7 @@ class App(webutil.QueueAbstractionClass):
         self.stream = webutil.DataDispatcher()
         self.image_container = webutil.DataDispatcher()
         self._image_cache: Optional[npt.NDArray[np.uint8]] = None
+        self._image_size: Optional[tuple[int, int]] = None
 
         self._pers = persistent.Persistent.get_instance()
 
@@ -701,8 +702,10 @@ class App(webutil.QueueAbstractionClass):
         Returns:
             State dictionary
         """
+        if self._image_size is None:
+            return {}
         if command == "restart":
-            self._auto_calibrator.restart()
+            self._auto_calibrator.restart(self._image_size)
         elif command == "discard":
             self._auto_calibrator.stop()
         elif command == "accept":
@@ -762,6 +765,7 @@ class App(webutil.QueueAbstractionClass):
             self._logger.info("Capture image ...")
             image = self._cam.capture()
             self._image_cache = image
+            self._image_size = (image.shape[1], image.shape[0])
 
             data: dict[str, Any] = {}
 
@@ -787,6 +791,7 @@ class App(webutil.QueueAbstractionClass):
                     if img is not None:
                         image = img
 
+            data["image_size"] = self._image_size
             data["image_quality"] = self._image_encoder.quality_str
 
             self.stream.put(data)

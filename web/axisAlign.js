@@ -5,19 +5,7 @@ import { ref } from './vue.esm-browser.prod.min.js';
 export default {
     setup() {
         return {
-            stream: ref({
-                pre_processing_time: 0,
-                attitude_estimation: {
-                    quat: [],
-                    obs_pix: [],
-                    n_matches: 0,
-                    processing_time: 0,
-                    post_processing_time: 0,
-                    alignment_error: 0,
-                    image_size: [960, 540],
-                    frame_points: [],
-                }
-            }),
+            stream: ref(undefined),
             packet_size: ref("??"),
             ui_zoom: 0.8,
             calibration_orientations: 0,
@@ -50,7 +38,7 @@ export default {
         updateState(data) {
             this.calibration_orientations = data.axis_calibration.calibration_orientations
 
-            let el = document.getElementById("toggle_cam");
+            const el = document.getElementById("toggle_cam");
             el.classList.remove("pending");
             if (data.camera_mode == "continuous") {
                 el.innerHTML = "Stop"
@@ -66,9 +54,6 @@ export default {
         },
         redraw() {
             const scale = 50
-
-            let state = this.stream.attitude_estimation
-            if (!state) return
 
             let ui_zoom = this.ui_zoom
             let canvas = document.getElementById('canvas')
@@ -90,11 +75,14 @@ export default {
             ctx.scale(s, s)
             ctx.lineWidth = 10 / scale
             ctx.font = "1px Consolas";
-            drawRings(ctx, ui_zoom)
-            drawCameraFrame(ctx, state, ui_zoom)
+            drawRings(ctx, ui_zoom);
 
-            ctx.lineWidth = 2 / scale
-            drawStars(ctx, state, ui_zoom)
+            if (this.stream?.attitude_estimation) {
+                drawCameraFrame(ctx, this.stream.attitude_estimation, ui_zoom)
+
+                ctx.lineWidth = 2 / scale
+                drawStars(ctx, this.stream.attitude_estimation, ui_zoom)
+            }
 
             ctx.restore()
 
