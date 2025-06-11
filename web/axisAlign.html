@@ -22,8 +22,9 @@
     <div id="app" v-cloak>
         <canvas id="canvas" width="100" height="100"></canvas>
         <div id="header-bar">
-            <div><button type="button" id="shutdown" @click="triggerShutdown()">{{ ["Shutdown", "Really?", "Last
-                    call?"][shutdownCalls.length] }}</button></div>
+            <div><button type="button" id="shutdown" @click="triggerShutdown()">
+                    {{ ["Shutdown", "Really?", "Last call?"][shutdownCalls.length] }}
+                </button></div>
             <div><button type="button" id="toggle_cam" @click="capture('toggle_continuous')">Start</button></div>
             <div><a href="./cameraWebgui.html"><button type="button">Camera View</button></a></div>
         </div>
