@@ -10,7 +10,6 @@ import pathlib
 import pickle
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial.transform
 
@@ -106,6 +105,8 @@ def calibrate(
         and the extrinsic camera parameters as a 3x3 rotation matrix.
     """
     if plot:
+        import matplotlib.pyplot as plt
+
         print("Plotting...")
         fig, axs = plt.subplots(2)
         axs[0].plot(image_points[..., 0], image_points[..., 1], "x")
@@ -152,6 +153,8 @@ def calibrate(
         print(f"RMS error: {rms_error:.2f} pixels, max error {max_error:.2f} pixels")
 
     if plot:
+        import matplotlib.pyplot as plt
+
         print("Plotting...")
         fig, axs = plt.subplots(2)
         axs[0].plot(image_points[..., 0], image_points[..., 1], "x")

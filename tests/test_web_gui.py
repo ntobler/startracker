@@ -31,6 +31,29 @@ def test_image_encoder():
         assert loop_broken
 
 
+def test_web_gui_start(tmp_path: pathlib.Path):
+    testing_utils.patch_persistent(tmp_path, cal=True)
+
+    cam = testing_utils.RandomStarCam
+    cam.time_warp_factor = 1000
+    cam.simulate_exposure_time = False
+    cam.default_config = testing_utils.StarImageGeneratorConfig(
+        exposure=200, catalog_max_magnitude=6.5
+    )
+    camera.RpiCamera = cam  # type: ignore[assignment, misc]
+
+    app = web_gui.App()
+    app_thread = threading.Thread(target=app.run)
+    app_thread.start()
+    try:
+        app.get_state()
+        app.capture(web_gui.CaptureMode.SINGLE)
+        app.stream.get_blocking()
+    finally:
+        app.terminate = True
+        app_thread.join()
+
+
 def test_app_capture(tmp_path: pathlib.Path):
     testing_utils.patch_persistent(tmp_path, cal=False)
 

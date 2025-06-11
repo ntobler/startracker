@@ -752,8 +752,10 @@ class App(webutil.QueueAbstractionClass):
         with self._cam, self._settings_saver():
             self._logger.info("Starting event processor")
             while not self.terminate:
-                with util.max_rate(10):
+                try:
                     self._tick()
+                except Exception:  # noqa: PERF203
+                    self._logger.exception("Exception in main event loop", exc_info=True)
         self._logger.info("Terminating event processor")
 
     def _tick(self) -> None:
