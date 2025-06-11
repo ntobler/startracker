@@ -190,7 +190,7 @@ export default {
             ctx.rect(-0.5, -0.5, width, height);
             ctx.clip();
 
-            if (this.view_settings.image_type != "crop2x") {
+            if (this.view_settings?.image_type != "crop2x") {
 
                 if (this.stream.attitude_estimation) {
                     this.drawStars(ctx, this.stream.attitude_estimation)

@@ -765,7 +765,8 @@ class App(webutil.QueueAbstractionClass):
             self._camera_job = CaptureMode.STOP
         elif self._camera_job in [CaptureMode.SINGLE, CaptureMode.CONTINUOUS]:
             self._logger.info("Capture image ...")
-            image = self._cam.capture()
+            # Flush if single image
+            image = self._cam.capture(flush=self._camera_job == CaptureMode.SINGLE)
             self._image_cache = image
             self._image_size = (image.shape[1], image.shape[0])
 
@@ -804,7 +805,7 @@ class App(webutil.QueueAbstractionClass):
                 display_image = processed_image
             elif self._view_settings.image_type == "crop2x":
                 h, w = image.shape[:2]
-                display_image = processed_image[h // 4 : 3 * (h // 4), w // 4 : 3 * (w // 4)]
+                display_image = image[h // 4 : 3 * (h // 4), w // 4 : 3 * (w // 4)]
             else:
                 display_image = image
 

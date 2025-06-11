@@ -8,7 +8,8 @@
 
 [Unit]
 Description=Startracker Application Service
-After=network.target
+After=basic.target
+Wants=network.target  # Not strictly waiting for network but it will be executed as quickly as possible
 
 [Service]
 Type=simple

@@ -53,7 +53,8 @@ class RpiCamera(camera.Camera):
             self._logger.info(f"Raw format: {raw_format}")
             self._logger.info(f"Raw format: {raw_format.__dict__}")
 
-            config = self._picam2.create_still_configuration(buffer_count=1, queue=False)
+            # Set buffer size to 2. One for the last frame and the new one
+            config = self._picam2.create_still_configuration(buffer_count=2, queue=True)
             self._picam2.configure(config)
 
             self._logger.info("Start camera")
@@ -69,28 +70,28 @@ class RpiCamera(camera.Camera):
             self._picam2.stop()
 
     @override
-    def capture_raw(self) -> npt.NDArray[np.uint16]:
+    def capture_raw(self, *, flush: bool = False) -> npt.NDArray[np.uint16]:
         self._check_context_manager()
-        self._logger.info("Taking image")
+        self._logger.info("Capturing image ...")
         t0 = time.monotonic()
         with self._lock:
-            raw = self._picam2.capture_array("raw")
-
-            # TODO use time from sensor metadata
-            # request = picam2.capture_request("raw")
-            # timestamp = request.get_metadata()["SensorTimestamp"]
-            # image = request.make_array("raw")
-
-            self.capture_time = time.monotonic() - (self._exposure_ms / 1000 / 2)
-        self._logger.info(f"Capturing took:{time.monotonic() - t0:.2f}s")
+            request = self._picam2.capture_request(flush=flush)
+            try:
+                timestamp = request.get_metadata()["SensorTimestamp"] / 1e9
+                raw = request.make_array("raw")
+            finally:
+                request.release()
+            self.capture_time = timestamp - (self._exposure_ms / 1000 / 2)
+        self._logger.info(f"Capturing took: {time.monotonic() - t0:.2f}s")
         bayer = image_processing.decode_srggb10(raw)
         return bayer
 
     @override
-    def capture(self) -> npt.NDArray[np.uint8]:
+    def capture(self, *, flush: bool = False) -> npt.NDArray[np.uint8]:
         image = None
         for _ in range(self.settings.stack):
-            raw = self.capture_raw()
+            # Only flush the first capture
+            raw = self.capture_raw(flush=flush and image is None)
 
             # Correct bias
             if self.settings.bias is not None:
@@ -118,9 +119,9 @@ class RpiCamera(camera.Camera):
         darkframe = None
         for _ in range(self.settings.darkframe_averaging):
             if darkframe is None:
-                darkframe = self.capture_raw()
+                darkframe = self.capture_raw(flush=True)
             else:
-                darkframe += self.capture_raw()
+                darkframe += self.capture_raw(flush=False)
         if darkframe is None:
             raise ValueError("settings.darkframe_averaging must be at least 1.")
         darkframe //= self.settings.darkframe_averaging

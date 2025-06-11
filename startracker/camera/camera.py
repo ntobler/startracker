@@ -79,16 +79,22 @@ class Camera(abc.ABC):
             raise RuntimeError("Context manager not entered")
 
     @abc.abstractmethod
-    def capture_raw(self) -> npt.NDArray[np.uint16]:
+    def capture_raw(self, *, flush: bool = False) -> npt.NDArray[np.uint16]:
         """Capture a raw image.
+
+        Args:
+            flush: Flush buffer (force return of freshly captured image)
 
         Returns:
             np.ndarray: uint16 bayer image
         """
 
     @abc.abstractmethod
-    def capture(self) -> npt.NDArray[np.uint8]:
+    def capture(self, *, flush: bool = False) -> npt.NDArray[np.uint8]:
         """Capture corrected, potentially stacked and binned image.
+
+        Args:
+            flush: Flush buffer (force return of freshly captured image)
 
         Returns:
             np.ndarray: uint8 image
@@ -103,13 +109,13 @@ class MockCamera(Camera):
     """Mock Camera implementation to replace the Raspberry Pi camera if not available."""
 
     @override
-    def capture_raw(self) -> npt.NDArray[np.uint16]:
+    def capture_raw(self, *, flush: bool = False) -> npt.NDArray[np.uint16]:
         frame = np.zeros((1080, 1920), np.uint16)
         frame[32:-32, 32:-32] = 100
         return frame
 
     @override
-    def capture(self) -> npt.NDArray[np.uint8]:
+    def capture(self, *, flush: bool = False) -> npt.NDArray[np.uint8]:
         frame = np.zeros((540, 960), np.uint8)
         frame[32:-32, 32:-32] = 100 + np.random.default_rng().integers(-20, 20)
         return frame

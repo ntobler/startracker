@@ -392,11 +392,11 @@ class ArtificialStarCam(camera.Camera):
         self._last_star_image_positions: Optional[npt.NDArray[np.float64]] = None
 
     @override
-    def capture_raw(self) -> npt.NDArray[np.uint16]:
-        return self.capture().astype(np.uint16)
+    def capture_raw(self, *, flush: bool = False) -> npt.NDArray[np.uint16]:
+        return self.capture(flush=flush).astype(np.uint16)
 
     @override
-    def capture(self) -> npt.NDArray[np.uint8]:
+    def capture(self, *, flush: bool = False) -> npt.NDArray[np.uint8]:
         if self.t is not None:
             self.capture_time = self.t
         elif self.time_interval is not None:
