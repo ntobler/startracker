@@ -10,6 +10,7 @@ import logging
 import os
 import pathlib
 import pickle
+import signal
 import tempfile
 import threading
 from collections.abc import Generator
@@ -469,6 +470,8 @@ class ImageEncoder:
 class App(webutil.QueueAbstractionClass):
     terminate: bool
     """Set True to terminate the application loop."""
+    retcode: int
+    """Application return code."""
     stream: webutil.DataDispatcher[dict]
     """Stream of dictionary containing attitude and meta data."""
     image_container: webutil.DataDispatcher[bytes]
@@ -478,6 +481,7 @@ class App(webutil.QueueAbstractionClass):
         super().__init__()
 
         self._logger = logging.getLogger("App")
+        self.retcode = 0
 
         self.terminate = False
         self.stream = webutil.DataDispatcher()
@@ -614,6 +618,18 @@ class App(webutil.QueueAbstractionClass):
             self._attitude_est.config = config
 
         return self._get_state()
+
+    @webutil.QueueAbstractionClass.queue_abstract
+    def shutdown(self, params: dict[str, float | int | bool]) -> dict:
+        """Set return code to 32 and terminate App graceful."""
+        if params != {"shutdown": "shutdown"}:
+            return {}
+        self.retcode = 31
+        self.terminate = True
+        # Send SIGINT to this process to trigger graceful shutdown
+        # of application
+        os.kill(os.getpid(), signal.SIGINT)
+        return {}
 
     @webutil.QueueAbstractionClass.queue_abstract
     def capture(self, mode: CaptureMode) -> dict:
@@ -837,6 +853,7 @@ class WebApp:
         self.flask_app.route("/api/calibration_result")(self._calibration_result)
         self.flask_app.post("/api/get_state")(self._get_state)
         self.flask_app.post("/api/set_settings")(self._set_settings)
+        self.flask_app.post("/api/shutdown")(self._shutdown)
         self.flask_app.post("/api/capture")(self._capture)
         self.flask_app.post("/api/camera_calibration")(self._camera_calibration)
         self.flask_app.post("/api/auto_calibration")(self._auto_calibration)
@@ -856,7 +873,7 @@ class WebApp:
     def _serve_file(self, filename: str) -> FlaskResponse:
         return send_from_directory("../web", filename)
 
-    def run(self) -> None:
+    def run(self) -> int:
         """Start the web application."""
         app_thread = threading.Thread(target=self._run_app)
         try:
@@ -869,6 +886,7 @@ class WebApp:
                 self.app.terminate = True
             app_thread.join()
             logging.info("App clean up done.")
+        return self.app.retcode if self.app is not None else 0
 
     def _calibration_pattern(self) -> FlaskResponse:
         if self.app is None:
@@ -891,6 +909,13 @@ class WebApp:
             return "Server error", 500
         params = request.get_json()
         d = self.app.set_settings(params)
+        return jsonify(d)
+
+    def _shutdown(self) -> FlaskResponse:
+        if self.app is None:
+            return "Server error", 500
+        params = request.get_json()
+        d = self.app.shutdown(params)
         return jsonify(d)
 
     def _capture(self) -> FlaskResponse:
@@ -943,7 +968,7 @@ class WebApp:
             pass
 
 
-def main() -> None:
+def main() -> int:
     """Web application main entry point."""
     logging.basicConfig(
         level=logging.INFO,
@@ -971,8 +996,8 @@ def main() -> None:
         camera.RpiCamera = cam  # type: ignore[assignment, misc]
 
     webapp = WebApp()
-    webapp.run()
+    return webapp.run()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

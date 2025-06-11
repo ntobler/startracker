@@ -1,0 +1,12 @@
+[Unit]
+Description=Shutdown if startracker fails with code 31
+After=startracker.service
+Requires=startracker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/startracker-shutdown-handler.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

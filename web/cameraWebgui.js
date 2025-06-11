@@ -25,6 +25,7 @@ export default {
             image_size: ref("??"),
             image_quality: ref("??"),
             helpDisplay: null,
+            shutdownCalls: ref([]),
         }
     },
     methods: {
@@ -380,6 +381,15 @@ export default {
         showHelp() {
             if (this.helpDisplay === null) return
             this.helpDisplay.toggleHelp()
+        },
+        triggerShutdown() {
+            const now = Date.now();
+            this.shutdownCalls = this.shutdownCalls.filter(ts => now - ts < 5000);
+            this.shutdownCalls.push(now);
+            if (this.shutdownCalls.length >= 3) {
+                this.shutdownCalls = [];
+                api('/api/shutdown', { shutdown: "shutdown" }, () => {});
+            }
         },
     },
     mounted() {
