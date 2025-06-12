@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 from picamera2 import Picamera2  # type: ignore
+from picamera2.request import MappedArray  # type: ignore
 from picamera2.sensor_format import SensorFormat  # type: ignore
 from typing_extensions import override
 
@@ -78,12 +79,13 @@ class RpiCamera(camera.Camera):
             request = self._picam2.capture_request(flush=flush)
             try:
                 timestamp = request.get_metadata()["SensorTimestamp"] / 1e9
-                raw = request.make_array("raw")
+                # This prevents copying (as in request.make_array("raw"))
+                with MappedArray(request, "raw") as m:
+                    bayer = image_processing.decode_srggb10(m.array)
             finally:
                 request.release()
             self.capture_time = timestamp - (self._exposure_ms / 1000 / 2)
         self._logger.info(f"Capturing took: {time.monotonic() - t0:.2f}s")
-        bayer = image_processing.decode_srggb10(raw)
         return bayer
 
     @override

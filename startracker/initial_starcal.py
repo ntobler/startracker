@@ -220,7 +220,7 @@ def star_gradient_calibration(
         ]
         intrinsic0s = np.stack(intrinsic0s_list, axis=0)
     else:
-        intrinsic0s = intrinsic0.astype(np.float64)[np.newaxis]
+        intrinsic0s = np.array(intrinsic0, dtype=np.float64, copy=False)[np.newaxis]
 
     theta0s = (
         np.array([np.pi / 4, -np.pi / 4], dtype=np.float64)
@@ -244,8 +244,10 @@ def star_gradient_calibration(
     if verbose:
         print(f"Finding best initial states with {len(stars_xy_np)} stars")
 
-    stars_xy_f32 = stars_xy_np.astype(np.float32)
-    stars_dxy_f32 = (stars_dxy_np / const.EARTH_ANGULAR_VELOCITY).astype(np.float32)
+    stars_xy_f32 = np.array(stars_xy_np, dtype=np.float32, copy=False)
+    stars_dxy_f32 = np.array(
+        stars_dxy_np / const.EARTH_ANGULAR_VELOCITY, dtype=np.float32, copy=False
+    )
 
     prior_errors_list = []
     for theta0, epsilon0, intrinsic0 in zip(theta0s, epsilon0s, intrinsic0s, strict=True):

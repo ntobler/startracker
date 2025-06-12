@@ -799,12 +799,12 @@ class App(webutil.QueueAbstractionClass):
             self._logger.info("Get attitude ...")
 
             if self._attitude_est is not None:
-                d = self._attitude_est.process(image)
-                data["attitude_estimation"] = d
+                data["attitude_estimation"] = self._attitude_est.process(processed_image)
 
             if self._auto_calibrator is not None:
-                d = self._auto_calibrator.process(image, self._cam.capture_time)
-                data["auto_calibrator"] = d
+                data["auto_calibrator"] = self._auto_calibrator.process(
+                    processed_image, self._cam.capture_time
+                )
 
                 if self._auto_calibrator.active:
                     img = self._auto_calibrator.get_cal_quality_image()

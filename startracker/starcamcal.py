@@ -74,7 +74,7 @@ def calibrate_camera(
         libstartracker.starcal_objective_function(
             tuple(params.tolist()), image_points, object_points
         )[0]
-        .astype(np.float32)
+        .astype(np.float32, copy=False)
         .reshape(-1, 2)
     )
     reprojection = error + image_points
