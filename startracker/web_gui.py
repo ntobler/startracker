@@ -769,7 +769,8 @@ class App(webutil.QueueAbstractionClass):
             self._logger.info("Starting event processor")
             while not self.terminate:
                 try:
-                    self._tick()
+                    with util.max_rate(20):
+                        self._tick()
                 except Exception:  # noqa: PERF203
                     self._logger.exception("Exception in main event loop", exc_info=True)
         self._logger.info("Terminating event processor")

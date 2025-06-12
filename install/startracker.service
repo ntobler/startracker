@@ -8,8 +8,9 @@
 
 [Unit]
 Description=Startracker Application Service
+OnFailure=startracker-shutdown.service
 After=basic.target
-Wants=network.target  # Not strictly waiting for network but it will be executed as quickly as possible
+Wants=network.target
 
 [Service]
 Type=simple
@@ -17,8 +18,9 @@ User=pi
 Group=pi
 WorkingDirectory=/home/pi/
 ExecStart=/home/pi/venv/bin/startracker-web-gui
-TimeoutStopSec=15
+TimeoutStopSec=10
 KillSignal=SIGINT
+Restart=no
 
 [Install]
 WantedBy=multi-user.target
