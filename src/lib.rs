@@ -14,6 +14,8 @@ mod starcal;
 mod stargradcal;
 mod util;
 
+mod cam;
+
 #[pymodule]
 fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(starcal_calibrate, m)?)?;
@@ -21,6 +23,7 @@ fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(stargradcal_calibrate, m)?)?;
     m.add_function(wrap_pyfunction!(stargradcal_objective_function, m)?)?;
     m.add_function(wrap_pyfunction!(even_spaced_indices, m)?)?;
+    m.add_function(wrap_pyfunction!(get_camera_frame, m)?)?;
     m.add_class::<CalibrationResult>()?;
     Ok(())
 }
@@ -271,4 +274,14 @@ fn numpy_to_dynamic_slice<'py, T: numpy::Element + Copy, const L: usize>(
         )));
     }
     Ok(util::as_slice_of_arrays(vectors.as_slice()?).unwrap())
+}
+
+#[pyfunction]
+fn get_camera_frame<'py>(py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray1<u8>>> {
+    let vec = match cam::get() {
+        Ok(v) => v,
+        Err(e) => return Err(PyRuntimeError::new_err(e)),
+    };
+    let np_array = vec.to_pyarray_bound(py);
+    Ok(np_array)
 }
