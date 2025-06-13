@@ -2,6 +2,7 @@
 
 import dataclasses
 import enum
+import functools
 import logging
 import math
 import threading
@@ -63,8 +64,6 @@ class AttitudeEstimatorConfig(util.PickleDataclass):
     epoch: Optional[float] = None
     """Astronomical epoch in years e.g. 2024.7 to calculate up-to-date star catalog.
     If None, the current date is used. Set to a fixed value to ensure reproducibility."""
-    catalog_max_magnitude: float = 5.5
-    """Maximum star intensity included in the star catalog. Higher number is more faint."""
 
     def copy(self) -> Self:
         """Create a copy of this instance."""
@@ -72,6 +71,12 @@ class AttitudeEstimatorConfig(util.PickleDataclass):
 
 
 FilterFunc = Callable[[np.ndarray, np.ndarray], np.ndarray]
+
+
+@functools.lru_cache(1)
+def get_catalog() -> ruststartracker.StarCatalog:
+    """Get cached star catalog."""
+    return ruststartracker.StarCatalog(max_magnitude=5.5)
 
 
 class AttitudeEstimator:
@@ -96,7 +101,7 @@ class AttitudeEstimator:
 
         self._config = config
 
-        catalog = ruststartracker.StarCatalog(max_magnitude=config.catalog_max_magnitude)
+        catalog = get_catalog()
         self.all_cat_xyz = catalog.normalized_positions(epoch=config.epoch)
         self.all_cat_mag = catalog.magnitude
 

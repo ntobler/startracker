@@ -21,7 +21,9 @@ class PickleDataclass:
     @classmethod
     def from_dict(cls, dictionary: dict) -> Self:
         """Create object from a dictionary."""
-        return cls(**dictionary)
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        filtered_dict = {k: v for k, v in dictionary.items() if k in field_names}
+        return cls(**filtered_dict)
 
     def save(self, filename: pathlib.Path) -> None:
         """Save the object to a file using pickle."""
@@ -49,7 +51,9 @@ class JsonDataclass:
     @classmethod
     def from_dict(cls, dictionary: dict) -> Self:
         """Create object from a dictionary."""
-        return cls(**dictionary)
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        filtered_dict = {k: v for k, v in dictionary.items() if k in field_names}
+        return cls(**filtered_dict)
 
     def save(self, filename: pathlib.Path) -> None:
         """Save the object to a file using pickle."""
