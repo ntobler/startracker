@@ -13,3 +13,8 @@ numpy = "0.21.0"
 nalgebra = "0.33.2"
 kdtree = "0.7.0"
 rand = "0.9.1"
+libcamera = { version = "0.3.0", optional = true }
+
+[features]
+default = []
+cam = ["libcamera"]
