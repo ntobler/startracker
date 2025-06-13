@@ -5,7 +5,7 @@ import scipy.optimize
 import scipy.spatial.transform
 
 
-def azel2nwu(az_el: np.ndarray, axis=-1, *, degrees: bool = False) -> np.ndarray:
+def azel2nwu(az_el: np.ndarray, axis: int = -1, *, degrees: bool = False) -> np.ndarray:
     """Convert azimuth, elevation to a unit vector in the north west up frame."""
     if degrees:
         az_el = np.radians(az_el)
@@ -16,18 +16,18 @@ def azel2nwu(az_el: np.ndarray, axis=-1, *, degrees: bool = False) -> np.ndarray
     x *= cos_el
     y = np.sin(-az)
     y *= cos_el
-    nwu = np.stack((x, y, z), axis=axis)
+    nwu: np.ndarray = np.stack((x, y, z), axis=axis)
     return nwu
 
 
-def nwu2azel(nwu: np.ndarray, axis=-1, *, degrees: bool = False):
+def nwu2azel(nwu: np.ndarray, axis: int = -1, *, degrees: bool = False):
     """Convert north west up coordinates to azimuth, elevation."""
     nwu = np.moveaxis(nwu, axis, 0)
     x, y, z = nwu
     az = np.arctan2(-y, x)
     el = np.arctan2(z, np.linalg.norm(nwu[:2], axis=0))
     az += (az < 0) * (np.pi * 2)
-    az_el = np.stack((az, el), axis=axis)
+    az_el: np.ndarray = np.stack((az, el), axis=axis)
     if degrees:
         az_el *= 180 / np.pi
     return az_el
@@ -49,8 +49,8 @@ def find_common_rotation_axis(quats: np.ndarray) -> tuple[np.ndarray, float]:
     rots = scipy.spatial.transform.Rotation.from_quat(quats)
     inv_rots = rots.inv()
 
-    mag_matrix = [(r * r_inv).magnitude() for r_inv in inv_rots for r in rots]
-    mag_matrix = np.array(mag_matrix).reshape((len(rots), len(rots)))
+    mag_matrix_list = [(r * r_inv).magnitude() for r_inv in inv_rots for r in rots]  # type: ignore[attr-defined]
+    mag_matrix = np.array(mag_matrix_list, dtype=np.float64).reshape((len(rots), len(rots)))
 
     dist_to_90_deg = np.abs(np.abs(mag_matrix % np.pi) - np.pi / 2)
     np.fill_diagonal(mag_matrix, 100)
@@ -90,9 +90,7 @@ def find_common_rotation_axis(quats: np.ndarray) -> tuple[np.ndarray, float]:
     return axis_vec, std_rad
 
 
-def find_common_rotation_axis_alt(
-    quats: np.ndarray,
-) -> tuple[np.ndarray, float]:
+def find_common_rotation_axis_alt(quats: np.ndarray) -> tuple[np.ndarray, float]:
     """Find the common rotation axis of a set of rotations.
 
     Find solution by solving minimization problem.
@@ -108,8 +106,8 @@ def find_common_rotation_axis_alt(
     rots = scipy.spatial.transform.Rotation.from_quat(quats)
     inv_rots = rots.inv()
 
-    mag_matrix = [(r * r_inv).magnitude() for r_inv in inv_rots for r in rots]
-    mag_matrix = np.array(mag_matrix).reshape((len(rots), len(rots)))
+    mag_matrix_list = [(r * r_inv).magnitude() for r_inv in inv_rots for r in rots]  # type: ignore[attr-defined]
+    mag_matrix = np.array(mag_matrix_list, dtype=np.float64).reshape((len(rots), len(rots)))
 
     dist_to_90_deg = np.abs(np.abs(mag_matrix % np.pi) - np.pi / 2)
     np.fill_diagonal(mag_matrix, 100)

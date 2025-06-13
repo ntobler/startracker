@@ -4,18 +4,22 @@ import functools
 import logging
 import queue
 import threading
-from typing import Generic, TypeVar, Union
+from collections.abc import Callable
+from typing import Any, Generic, Optional, TypeVar, Union
 
 from flask import Response
 
 FlaskResponse = Union[str, tuple[str, int], Response]
 
 
+FunctionCallTuple = tuple[Callable, tuple[Any, ...], dict[str, Any], queue.Queue[Any]]
+
+
 class QueueAbstractionClass:
     """Simplifies abstraction of calling functions through a queue interface."""
 
     def __init__(self) -> None:
-        self._calls_queue = queue.Queue()
+        self._calls_queue: queue.Queue[FunctionCallTuple] = queue.Queue()
         self._logger = logging.getLogger("QueueAbstractionClass")
 
     @staticmethod
@@ -63,7 +67,7 @@ class DataDispatcher(Generic[T]):
     """Thread save one-to-many distributor of objects."""
 
     def __init__(self) -> None:
-        self._data = None
+        self._data: Optional[T] = None
         self._data_lock = threading.Lock()
         self._data_changed = threading.Condition(lock=self._data_lock)
 
@@ -73,9 +77,10 @@ class DataDispatcher(Generic[T]):
         with self._data_lock:
             self._data_changed.notify_all()
 
-    def get_blocking(self) -> T:
+    def get_blocking(self, timeout: float | None = None) -> T:
         """Get the next put object in blocking mode."""
         with self._data_lock:
-            self._data_changed.wait()
+            if not self._data_changed.wait(timeout=timeout):
+                raise TimeoutError()
         assert self._data is not None
         return self._data

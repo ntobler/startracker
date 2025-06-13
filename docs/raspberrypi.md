@@ -50,12 +50,14 @@ sudo dphys-swapfile swapoff
 sudo sed -i 's/CONF_SWAPFILE/#CONF_SWAPFILE/g' /etc/dphys-swapfile
 sudo bash -c "echo 'CONF_SWAPSIZE=2048' >> /etc/dphys-swapfile"
 sudo dphys-swapfile setup
+sudo systemctl disable dphys-swapfile
 sudo dphys-swapfile swapon
 sudo reboot now
 ```
 
 The camera requires a specially built `libcamera` version. Install it with
 ``` bash
+sudo dphys-swapfile swapon
 export DPKG_DEB_THREADS_MAX=1
 mkdir temp && cd temp
 wget -O install_pivariety_pkgs.sh https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh
@@ -72,15 +74,17 @@ libcamera-still -o test.jpg
 Install rust toolchain. We set the number of cores to 1, as the Raspberry Pi runs low on RAM
 and is more likely to access swap with the standard amount of cores
 ```bash
+sudo dphys-swapfile swapon
 mkdir -p ~/.cargo && echo -e "[build]\njobs = 1" >> ~/.cargo/config.toml
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 Install startracker git repo
 ``` bash
-cd ~
+sudo dphys-swapfile swapon
 export DPKG_DEB_THREADS_MAX=1
 sudo apt install -y git libcairo2-dev python3-pip vim python3-virtualenv nginx
+cd ~
 git clone https://github.com/ntobler/startracker.git
 virtualenv venv --system-site-packages
 . venv/bin/activate
@@ -96,6 +100,64 @@ sudo nmcli connection modify preconfigured connection.autoconnect-priority 5
 sudo nmcli connection modify wifi_name connection.autoconnect true
 nmcli --fields autoconnect-priority,name connection
 sudo systemctl restart NetworkManager
+```
+
+Disable unnecessary services that delay boot:
+```bash
+sudo systemctl mask ModemManager.service
+# sudo systemctl mask NetworkManager-wait-online.service
+sudo systemctl mask bluetooth.service
+sudo systemctl mask avahi-daemon.service
+sudo systemctl mask dphys-swapfile.service
+sudo systemctl mask raspi-config.service
+sudo systemctl mask e2scrub_reap.service
+sudo systemctl mask alsa-restore.service
+sudo systemctl mask alsa-state.service
+sudo systemctl mask hciuart.service
+sudo systemctl mask keyboard-setup.service
+```
+
+Limit journal size (logfile)
+```bash
+sudo sed -i '/^SystemMaxUse=/d' /etc/systemd/journald.conf
+sudo sed -i '/^SystemKeepFree=/d' /etc/systemd/journald.conf
+sudo sed -i '/^SystemMaxFileSize=/d' /etc/systemd/journald.conf
+echo 'SystemMaxUse=10M' | sudo tee -a /etc/systemd/journald.conf
+echo 'SystemKeepFree=5M' | sudo tee -a /etc/systemd/journald.conf
+echo 'SystemMaxFileSize=5M' | sudo tee -a /etc/systemd/journald.conf
+sudo systemctl restart systemd-journald
+```
+
+Optimize firmware config.txt
+```ini
+dtparam=audio=on -> dtparam=audio=off
+camera_auto_detect=1 -> camera_auto_detect=0
+display_auto_detect=1 -> display_auto_detect=0
+dtoverlay=vc4-kms-v3d -> #dtoverlay=vc4-kms-v3d
+[all]
+dtoverlay=arducam-pivariety
+hdmi_blanking=2
+disable_splash=1
+```
+
+Disable some kernel modules:
+/etc/modprobe.d/raspi-blacklist.conf
+```ini
+# Disable Bluetooth
+blacklist btbcm
+blacklist hci_uart
+
+# Disable audio
+blacklist snd_bcm2835
+blacklist snd
+
+# Disable GPU display stack (VC4 driver)
+blacklist vc4
+
+# Disable HDMI CEC and other HDMI modules
+blacklist cec
+blacklist drm
+blacklist drm_kms_helper
 ```
 
 Your Startracker is ready to go.

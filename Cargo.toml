@@ -1,0 +1,15 @@
+[package]
+name = "startracker"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "startracker"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.21.0", features = ["extension-module"] }
+numpy = "0.21.0"
+nalgebra = "0.33.2"
+kdtree = "0.7.0"
+rand = "0.9.1"

@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 from picamera2 import Picamera2  # type: ignore
+from picamera2.request import MappedArray  # type: ignore
 from picamera2.sensor_format import SensorFormat  # type: ignore
 from typing_extensions import override
 
@@ -53,7 +54,8 @@ class RpiCamera(camera.Camera):
             self._logger.info(f"Raw format: {raw_format}")
             self._logger.info(f"Raw format: {raw_format.__dict__}")
 
-            config = self._picam2.create_still_configuration(buffer_count=1, queue=False)
+            # Set buffer size to 2. One for the last frame and the new one
+            config = self._picam2.create_still_configuration(buffer_count=2, queue=True)
             self._picam2.configure(config)
 
             self._logger.info("Start camera")
@@ -69,21 +71,29 @@ class RpiCamera(camera.Camera):
             self._picam2.stop()
 
     @override
-    def capture_raw(self) -> npt.NDArray[np.uint16]:
+    def capture_raw(self, *, flush: bool = False) -> npt.NDArray[np.uint16]:
         self._check_context_manager()
-        self._logger.info("Taking image")
+        self._logger.info("Capturing image ...")
         t0 = time.monotonic()
         with self._lock:
-            raw = self._picam2.capture_array("raw")
-        self._logger.info(f"Capturing took:{time.monotonic() - t0:.2f}s")
-        bayer = image_processing.decode_srggb10(raw)
+            request = self._picam2.capture_request(flush=flush)
+            try:
+                timestamp = request.get_metadata()["SensorTimestamp"] / 1e9
+                # This prevents copying (as in request.make_array("raw"))
+                with MappedArray(request, "raw") as m:
+                    bayer = image_processing.decode_srggb10(m.array)
+            finally:
+                request.release()
+            self.capture_time = timestamp - (self._exposure_ms / 1000 / 2)
+        self._logger.info(f"Capturing took: {time.monotonic() - t0:.2f}s")
         return bayer
 
     @override
-    def capture(self) -> npt.NDArray[np.uint8]:
+    def capture(self, *, flush: bool = False) -> npt.NDArray[np.uint8]:
         image = None
         for _ in range(self.settings.stack):
-            raw = self.capture_raw()
+            # Only flush the first capture
+            raw = self.capture_raw(flush=flush and image is None)
 
             # Correct bias
             if self.settings.bias is not None:
@@ -103,18 +113,17 @@ class RpiCamera(camera.Camera):
 
         if self.settings.digital_gain in [1, 2]:
             image //= 4 // self.settings.digital_gain
-        image = image.astype(np.uint8)
 
-        return image
+        return image.astype(np.uint8)
 
     @override
     def record_darkframe(self) -> None:
         darkframe = None
         for _ in range(self.settings.darkframe_averaging):
             if darkframe is None:
-                darkframe = self.capture_raw()
+                darkframe = self.capture_raw(flush=True)
             else:
-                darkframe += self.capture_raw()
+                darkframe += self.capture_raw(flush=False)
         if darkframe is None:
             raise ValueError("settings.darkframe_averaging must be at least 1.")
         darkframe //= self.settings.darkframe_averaging

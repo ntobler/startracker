@@ -1,45 +1,51 @@
 
-import { ZoomHandler, api, HelpDisplay } from './util.js';
+import { ZoomHandler, api, HelpDisplay, parseSize } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
 
 export default {
     setup() {
         return {
-            stream: ref({
-                quat: [],
-                obs_pix: [],
-                n_matches: 0,
-                pre_processing_time: 0,
-                processing_time: 0,
-                post_processing_time: 0,
-                alignment_error: 0,
-                image_size: [960, 540],
-                frame_points: [],
-            }),
+            stream: ref(undefined),
             packet_size: ref("??"),
             ui_zoom: 0.8,
-            calibrating: false,
             calibration_orientations: 0,
             history: [],
             helpDisplay: null,
+            shutdownCalls: ref([]),
         }
     },
     methods: {
         onmessage(response) {
-            this.stream = JSON.parse(response.data)
-            this.packet_size = parseSize(response.data.length),
+            this.stream = JSON.parse(response.data);
+            this.packet_size = parseSize(response.data.length);
+
+            let attitude_estimation = this.stream.attitude_estimation;
+            if (attitude_estimation) {
                 this.history.push({
-                    n_matches: this.stream.n_matches,
-                    processing_time: this.stream.processing_time,
+                    n_matches: attitude_estimation.n_matches,
+                    processing_time: attitude_estimation.processing_time,
                 })
-            if (this.history.length > 20) this.history.shift();
+                if (this.history.length > 20) this.history.shift();
+            }
+
             this.redraw()
-            document.getElementById('footerBar').style.display = "flex"
+            document.getElementById('footer-bar').style.display = "flex"
         },
         connectWebSocket() {
             let url = 'ws://' + window.location.host + "/api/stream";
             let ws = new WebSocket(url);
             ws.onmessage = this.onmessage.bind(this);
+        },
+        updateState(data) {
+            this.calibration_orientations = data.axis_calibration.calibration_orientations
+
+            const el = document.getElementById("toggle_cam");
+            el.classList.remove("pending");
+            if (data.camera_mode == "continuous") {
+                el.innerHTML = "Stop"
+            } else {
+                el.innerHTML = "Start"
+            }
         },
         resize() {
             let canvas = document.getElementById('canvas')
@@ -50,13 +56,8 @@ export default {
         redraw() {
             const scale = 50
 
-            let state = this.stream
             let ui_zoom = this.ui_zoom
-
             let canvas = document.getElementById('canvas')
-
-            if (state === null) return
-
             let ctx = canvas.getContext("2d")
 
             ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -75,46 +76,56 @@ export default {
             ctx.scale(s, s)
             ctx.lineWidth = 10 / scale
             ctx.font = "1px Consolas";
-            drawRings(ctx, ui_zoom)
-            drawCameraFrame(ctx, state, ui_zoom)
+            drawRings(ctx, ui_zoom);
 
-            ctx.lineWidth = 2 / scale
-            drawStars(ctx, state, ui_zoom)
+            if (this.stream?.attitude_estimation) {
+                drawCameraFrame(ctx, this.stream.attitude_estimation, ui_zoom)
+
+                ctx.lineWidth = 2 / scale
+                drawStars(ctx, this.stream.attitude_estimation, ui_zoom)
+            }
 
             ctx.restore()
 
             drawPlot(ctx, this.history)
-
         },
         addToCalibration() {
-            let self = this
-            api('/api/axis_calibration', { command: "put" }, data => {
-                self.calibration_orientations = data.calibration_orientations
-            });
+            api('/api/axis_calibration', { command: "put" }, this.updateState);
         },
         resetCalibration() {
-            let self = this
-            api('/api/axis_calibration', { command: "reset" }, data => {
-                self.calibration_orientations = data.calibration_orientations
-            });
+            api('/api/axis_calibration', { command: "reset" }, this.updateState);
         },
         calibrate() {
             if (this.calibration_orientations < 1) return;
-            this.calibrating = true;
-            let self = this
-            api(
-                '/api/axis_calibration', { command: "calibrate" },
-                data => { self.calibrating = false; },
-                error => { self.calibrating = true; },
-            );
+            document.getElementById("calibrate").classList.add("pending");
+            api('/api/axis_calibration', { command: "calibrate" }, (state) => {
+                this.updateState(state);
+                document.getElementById("calibrate").classList.remove("pending");
+            });
+        },
+        capture(mode) {
+            document.getElementById("toggle_cam").classList.add("pending");
+            let payload = { mode: mode };
+            api('/api/capture', payload, this.updateState);
         },
         showHelp() {
             if (this.helpDisplay === null) return
             this.helpDisplay.toggleHelp()
         },
+        triggerShutdown() {
+            const now = Date.now();
+            this.shutdownCalls = this.shutdownCalls.filter(ts => now - ts < 5000);
+            this.shutdownCalls.push(now);
+            if (this.shutdownCalls.length >= 3) {
+                this.shutdownCalls = [];
+                api('/api/shutdown', { shutdown: "shutdown" }, () => {});
+            }
+        },
     },
     mounted() {
         this.connectWebSocket();
+
+        api('/api/get_state', null, this.updateState);
 
         window.onresize = this.resize
         this.resize()
@@ -124,7 +135,7 @@ export default {
             this.redraw()
         });
         zoomHandler.attachEventListeners(document.getElementById('canvas'))
-        this.helpDisplay = new HelpDisplay(document.getElementById('footerBar'))
+        this.helpDisplay = new HelpDisplay(document.getElementById('footer-bar'))
     }
 }
 
@@ -224,7 +235,7 @@ function drawStars(ctx, state, ui_zoom) {
     const h = 10
     for (let i of [0, 1]) {
         let pos = state.north_south[i]
-        let name = ["north", "south"][i]
+        let name = ["North", "South"][i]
 
         let x = pos[0]
         let y = pos[1]
@@ -242,7 +253,7 @@ function drawStars(ctx, state, ui_zoom) {
         ctx.lineTo(0, h)
         ctx.stroke()
 
-        ctx.translate(0, -h)
+        ctx.translate(0.2, -h)
         ctx.rotate(Math.PI / 2)
         ctx.fillText(name, 0, 0)
 
@@ -251,15 +262,6 @@ function drawStars(ctx, state, ui_zoom) {
 
     ctx.restore()
     ctx.restore()
-}
-
-function parseSize(size) {
-    let unit
-    for (unit of ["B", "kB", "MB", "GB"]) {
-        if (size < 10) return size.toFixed(1) + unit
-        if (size < 100) return size.toFixed(0) + unit
-        size /= 1024
-    }
 }
 
 function drawPlot(ctx, history) {

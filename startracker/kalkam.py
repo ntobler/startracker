@@ -11,7 +11,7 @@ from typing import BinaryIO, Optional, Union
 import cairo
 import cv2
 import numpy as np
-from numpy.typing import ArrayLike
+import numpy.typing as npt
 from typing_extensions import override
 
 
@@ -500,7 +500,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
     squared_error_distances: list[np.ndarray]
     """Squared reprojection error distance for all image points."""
 
-    def plot(*, self, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
+    def plot(self, *, show: bool = False, save: Optional[Union[str, pathlib.Path]] = None):
         """Plot calibration quality using matplotlib."""
         import matplotlib.pyplot as plt
         from scipy.interpolate import griddata
@@ -536,8 +536,8 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
 
         if show:
             fig.show()
-
-        plt.close(fig)
+        else:
+            plt.close(fig)
 
     def plot_opencv(
         self,
@@ -546,7 +546,7 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
         *,
         show_points: bool = True,
         show_legend: bool = True,
-    ):
+    ) -> npt.NDArray[np.uint8]:
         """Plot calibration quality using OpenCV functions only."""
         w, h = self.image_size
 
@@ -573,8 +573,8 @@ class IntrinsicCalibrationWithData(IntrinsicCalibration):
             facets, _ = subdiv.getVoronoiFacetList([])
             for poly, value in zip(facets, intensities):
                 color = float(value)
-                poly = poly.astype(int)
-                cv2.fillConvexPoly(img_voronoi, poly, color, cv2.LINE_4, 0)
+                poly_int = np.array(poly, dtype=int, copy=False)
+                cv2.fillConvexPoly(img_voronoi, poly_int, color, cv2.LINE_4, 0)
             img += img_voronoi
 
         # Convert image to log
@@ -736,8 +736,8 @@ def calibration_from_points(
         threshold_score = np.sort(inverted_scores)[int(len(inverted_scores) * fraction)]
 
         # pick images that are better than the threshold
-        object_points_batch2 = []
-        image_points_batch2 = []
+        object_points_batch2: list[np.ndarray] = []
+        image_points_batch2: list[np.ndarray] = []
         for obj, pix, inverted_score in zip(
             object_points_batch, image_points_batch, inverted_scores
         ):
@@ -781,8 +781,8 @@ def calibration_from_points(
 
 
 def look_at_extrinsic(
-    target_pos: ArrayLike, eye_pos: ArrayLike, up_vector: ArrayLike
-) -> np.ndarray:
+    target_pos: npt.ArrayLike, eye_pos: npt.ArrayLike, up_vector: npt.ArrayLike
+) -> npt.NDArray[np.float64]:
     """Create a 4x4 extrinsic matrix of a camera positioned at eye_pos pointing to target_pos."""
     target_pos = np.asarray(target_pos, dtype=np.float64)
     eye_pos = np.asarray(eye_pos, dtype=np.float64)
@@ -791,7 +791,7 @@ def look_at_extrinsic(
     f = target_pos - eye_pos
     s = np.cross(f, up_vector)
 
-    m = np.eye(4)
+    m = np.eye(4, dtype=np.float64)
     m[0, :3] = s
     m[1, :3] = np.cross(f, s)
     m[2, :3] = f
@@ -803,7 +803,7 @@ def look_at_extrinsic(
 
 def intrinsic_from_camera_param(
     focal_length_mm: float, sensor_diagonal_mm: float, width: int, height: int
-) -> np.ndarray:
+) -> npt.NDArray[np.float64]:
     """Create an intrinsic matrix from camaera parameters."""
     diagonal_pix = np.sqrt(width**2 + height**2)
     factor = sensor_diagonal_mm / diagonal_pix
@@ -818,7 +818,8 @@ def intrinsic_from_camera_param(
             (f, 0, tx),
             (0, f, ty),
             (0, 0, 1),
-        )
+        ),
+        dtype=np.float64,
     )
 
     return intrinsic
@@ -827,12 +828,16 @@ def intrinsic_from_camera_param(
 class PointUndistorter:
     """Transform points between undistored image coordinates and distorted image coordinates."""
 
-    def __init__(self, cal):
+    def __init__(self, cal: IntrinsicCalibration):
         self.cal = cal
 
-    def undisort(self, xy, axis=-1):
+    def undisort(self, xy: npt.ArrayLike, axis=-1) -> npt.NDArray[np.float32]:
         """Transform points from distorted image coordinates to undistorted image coordinates."""
         xy = np.asarray(xy, dtype=np.float32)
+
+        if self.cal.dist_coeffs is None:
+            return xy
+
         xy = np.swapaxes(xy, axis, -1)
         shape = xy.shape
         xy = np.reshape(xy, (-1, 2))
@@ -845,16 +850,20 @@ class PointUndistorter:
         xy_undist = np.swapaxes(xy_undist, axis, -1)
         return xy_undist
 
-    def distort(self, xy, axis=-1):
+    def distort(self, xy: npt.ArrayLike, axis=-1) -> npt.NDArray[np.float32]:
         """Transform points from undistorted image coordinates to distorted image coordinates."""
         xy = np.asarray(xy, dtype=np.float32)
+
+        if self.cal.dist_coeffs is None:
+            return xy
+
         xy = np.swapaxes(xy, axis, -1)
         shape = xy.shape
         xy = np.reshape(xy, (-1, 2))
 
         t = self.cal.intrinsic[:2, 2]
         f = np.diagonal(self.cal.intrinsic)[:2]
-        k1, k2, p1, p2, k3 = self.cal.dist_coeffs.flatten()[:5]
+        k1, k2, p1, p2, k3 = self.cal.dist_coeffs.reshape(-1)[:5]
         p12 = np.array((p1, p2))
 
         xy = (xy - t) / f
@@ -913,9 +922,11 @@ class PointProjector:
         self.dist_coeffs = cal.dist_coeffs
         if cal.dist_coeffs is not None:
             self._undistorter = PointUndistorter(cal)
+        else:
+            self._undistorter = None
 
     def pix2obj(
-        self, xy: ArrayLike, obj_z: Union[ArrayLike, float] = 0.0, axis: int = -1
+        self, xy: npt.ArrayLike, obj_z: Union[npt.ArrayLike, float] = 0.0, axis: int = -1
     ) -> np.ndarray:
         """Convert pixel coordinates to object coordinates.
 
@@ -938,7 +949,7 @@ class PointProjector:
         obj_xyz = self.camera_mat_inverse @ (s[..., None] * xy1 - self.camera_mat[:, 3:])
         return np.swapaxes(obj_xyz[..., 0], axis, -1)
 
-    def obj2pix(self, obj_xyz: ArrayLike, axis: int = -1) -> np.ndarray:
+    def obj2pix(self, obj_xyz: npt.ArrayLike, axis: int = -1) -> np.ndarray:
         """Convert object coordinates to undistorted pixel coordinates.
 
         Args:

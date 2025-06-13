@@ -2,6 +2,7 @@
 
 import contextlib
 import dataclasses
+import json
 import pathlib
 import pickle
 import time
@@ -28,10 +29,40 @@ class PickleDataclass:
             pickle.dump(self.to_dict(), f)
 
     @classmethod
-    def load(cls, filename: pathlib.Path) -> Self:
+    def load(cls, filename: pathlib.Path, *, construct_default_if_missing: bool = False) -> Self:
         """Load the object from a file using pickle."""
+        if construct_default_if_missing is not None and not filename.is_file():
+            return cls()
         with filename.open("rb") as f:
             obj = cls.from_dict(pickle.load(f))
+        return obj
+
+
+@dataclasses.dataclass
+class JsonDataclass:
+    """Baseclass for picklable dataclasses."""
+
+    def to_dict(self) -> dict:
+        """Return dictionary of the object."""
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, dictionary: dict) -> Self:
+        """Create object from a dictionary."""
+        return cls(**dictionary)
+
+    def save(self, filename: pathlib.Path) -> None:
+        """Save the object to a file using pickle."""
+        with filename.open("w") as f:
+            json.dump(self.to_dict(), f)
+
+    @classmethod
+    def load(cls, filename: pathlib.Path, *, construct_default_if_missing: bool = False) -> Self:
+        """Load the object from a file using pickle."""
+        if construct_default_if_missing is not None and not filename.is_file():
+            return cls()
+        with filename.open("rb") as f:
+            obj = cls.from_dict(json.load(f))
         return obj
 
 

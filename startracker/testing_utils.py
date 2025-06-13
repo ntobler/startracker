@@ -3,19 +3,22 @@
 import abc
 import dataclasses
 import pathlib
+import queue
 import time
-from typing import Final, Optional
+from typing import Optional
 
 import cv2
 import numpy as np
 import numpy.typing as npt
 import ruststartracker
 import scipy.spatial.transform
-from typing_extensions import override
+import serial
+from typing_extensions import Buffer, override
 
 from startracker import (
     calibration,
     camera,
+    const,
     image_utils,
     kalkam,
     persistent,
@@ -25,46 +28,104 @@ from startracker import (
 UINT8_MAX = 255
 
 
-class TestingMaterial:
-    """Create a testing directory and calibration file for testing purposes."""
+def patch_persistent(path: pathlib.Path, *, cal: bool):
+    """Set persistent data directory with a new folder."""
+    path = pathlib.Path(path)
+    if not path.is_dir():
+        msg = f"Path {path} must be an existing directory"
+        raise ValueError(msg)
+    persistent.Persistent._instance = None
+    persistent.APPLICATION_USER_DIR = path
+    p = persistent.Persistent.get_instance()
+    if cal:
+        calibration.make_dummy().to_json(p.cam_file)
 
-    testing_dir: pathlib.Path
-    cam_file: pathlib.Path
 
-    def __init__(self, *, use_existing: bool = True):
-        user_data_dir = persistent.Persistent.get_instance().user_data_dir
+class MockSerial(serial.SerialBase):
+    def __init__(self):
+        super().__init__()
+        self.mosi_channel = queue.Queue()
+        self.miso_channel = queue.Queue()
 
-        self.testing_dir = user_data_dir / "testing"
-        self.testing_dir.mkdir(exist_ok=True)
+    @override
+    def read(self, size: int = -1, /) -> bytes:
+        ret = bytes(self.mosi_channel.get() for _ in range(size))
+        print(f"Device read: {ret!r}")
+        return ret
 
-        cal = calibration.make_dummy()
+    @override
+    def write(self, data: Buffer) -> int:
+        data = bytes(data)
+        print(f"Device wrote: {data!r}")
+        for x in data:
+            self.miso_channel.put(x)
+        return len(data)
 
-        self.cam_file = self.testing_dir / "calibration.json"
-        if (not self.cam_file.exists()) or (not use_existing):
-            cal.to_json(self.cam_file)
+    def reset_input_buffer(self) -> None:
+        """Clear the input buffer."""
+        while not self.mosi_channel.empty():
+            self.mosi_channel.get_nowait()
 
-    def patch_persistent(self):
-        """Patch the persistent instance to use the testing directory."""
-        persistent.Persistent.get_instance().cam_file = self.cam_file
+
+class MockSerialMaster(serial.SerialBase):
+    def __init__(self, test_serial: MockSerial):
+        super().__init__()
+        self.test_serial = test_serial
+
+    @override
+    def read(self, size: int = -1, /) -> bytes:
+        ret = bytes(self.test_serial.miso_channel.get() for _ in range(size))
+        print(f"Device read: {ret!r}")
+        return ret
+
+    @override
+    def write(self, data: Buffer) -> int:
+        data = bytes(data)
+        print(f"Master wrote: {data!r}")
+        for x in data:
+            self.test_serial.mosi_channel.put(x)
+        return len(data)
+
+    def reset_input_buffer(self):
+        """Clear the input buffer."""
+        while not self.test_serial.miso_channel.empty():
+            self.test_serial.miso_channel.get_nowait()
+
+
+@dataclasses.dataclass
+class StarImageGeneratorConfig:
+    """Configuration parameters for the StarImageGenerator."""
+
+    exposure: float = 15.0
+    """Simulated exposure time in seconds. Higher exposure results in brighter image."""
+    blur: float = 0.7
+    """Blur post-processing standard deviation."""
+    noise_sigma: float = 1.0
+    """Added noise standard deviation."""
+    black_level: float = 4.5
+    """Black level of sensor."""
+    catalog_max_magnitude: float = 5.5
+    """Maximum star intensity included in the star catalog. Higher number is more faint."""
 
 
 class StarImageGenerator:
+    distorter: Optional[kalkam.PointUndistorter]
+
     def __init__(
-        self,
-        cal: kalkam.IntrinsicCalibration,
-        exposure: float = 15.0,
-        blur: float = 0.7,
-        noise_sigma: float = 1.0,
-        black_level: float = 4.5,
+        self, cal: kalkam.IntrinsicCalibration, config: Optional[StarImageGeneratorConfig] = None
     ):
+        """Initialize."""
+        if config is None:
+            config = StarImageGeneratorConfig()
+
         self._cal = cal
         self.width, self.height = cal.image_size
         self.intrinsic = cal.intrinsic
 
-        self.exposure = exposure
-        self.blur = blur
-        self.noise_sigma = noise_sigma
-        self.black_level = black_level
+        self.exposure = config.exposure
+        self.blur = config.blur
+        self.noise_sigma = config.noise_sigma
+        self.black_level = config.black_level
 
         self._cos_phi = self._cal.cos_phi(angle_margin_factor=1.2)
 
@@ -73,7 +134,7 @@ class StarImageGenerator:
         else:
             self.distorter = None
 
-        catalog = ruststartracker.StarCatalog(max_magnitude=5.5)
+        catalog = ruststartracker.StarCatalog(max_magnitude=config.catalog_max_magnitude)
         self.stars_nwu = catalog.normalized_positions()
         self.stars_mags = catalog.magnitude
 
@@ -142,7 +203,9 @@ class StarImageGenerator:
 
         return stars_mags, stars_xy
 
-    def image_from_extrinsic(self, extrinsic: np.ndarray, *, grid: bool = False):
+    def image_from_extrinsic(
+        self, extrinsic: np.ndarray, *, grid: bool = False
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Create image of stars from extrinsic matrix."""
         width, height = self.width, self.height
 
@@ -191,8 +254,8 @@ class StarImageGenerator:
             kernel_size = np.minimum(self.blur * 4, 25)
             # Round up to next odd integer
             kernel_size = int(np.ceil(kernel_size) // 2 * 2 + 1)
-            canvas = cv2.GaussianBlur(canvas, (kernel_size, kernel_size), self.blur)
-            canvas = np.asarray(canvas, dtype=np.float32)  # for typing
+            canvas_ = cv2.GaussianBlur(canvas, (kernel_size, kernel_size), self.blur)
+            canvas = np.asarray(canvas_, dtype=np.float32)  # for typing
         if self.noise_sigma is not None:
             noise = self._rng.standard_normal(size=canvas.shape, dtype=np.float32)
             noise *= self.noise_sigma
@@ -299,39 +362,70 @@ class CameraTester:
 class ArtificialStarCam(camera.Camera):
     """Camera to generate artificial images of the sky."""
 
-    cal: Final[kalkam.IntrinsicCalibration]
+    cal: kalkam.IntrinsicCalibration
     """Calibration used to create mock images"""
     t: Optional[float] = None
     """Capture time in seconds."""
+    time_interval: Optional[float] = None
+    """Time interval between capture times. Ignored if t is set."""
     time_warp_factor: float = 1.0
-    """If t is not given, accelerate time by this factor."""
+    """If t is not given, accelerate time by this factor. Ignored if time_interval is set."""
     grid: bool = False
     """Display longitude and latitude grid overlay."""
     simulate_exposure_time: bool = False
     """Wait until exposure time has elapsed."""
+    default_config: StarImageGeneratorConfig = StarImageGeneratorConfig()
+    """Default configuration of the star image generator if None given.
+    Set this class variable to use config for newly instantiated objects."""
 
-    def __init__(self, camera_settings: camera.CameraSettings):
+    def __init__(
+        self,
+        camera_settings: camera.CameraSettings,
+        cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
+    ):
         super().__init__(camera_settings)
-        cam_file = TestingMaterial(use_existing=True).cam_file
         self._rng = np.random.default_rng(42)
-        self.cal = kalkam.IntrinsicCalibration.from_json(cam_file)
-        self._sig = StarImageGenerator(self.cal, exposure=200)
+        self.cal = calibration.make_dummy() if cal is None else cal
+        config = config if config is not None else self.default_config
+        self._sig = StarImageGenerator(self.cal, config)
+        self._last_star_image_positions: Optional[npt.NDArray[np.float64]] = None
 
     @override
-    def capture_raw(self) -> npt.NDArray[np.uint16]:
-        return self.capture().astype(np.uint16)
+    def capture_raw(self, *, flush: bool = False) -> npt.NDArray[np.uint16]:
+        return self.capture(flush=flush).astype(np.uint16)
 
     @override
-    def capture(self) -> npt.NDArray[np.uint8]:
-        with util.max_rate(1000 / self._sig.exposure):
-            return self._capture()
+    def capture(self, *, flush: bool = False) -> npt.NDArray[np.uint8]:
+        if self.t is not None:
+            self.capture_time = self.t
+        elif self.time_interval is not None:
+            self.capture_time += self.time_interval
+        else:
+            self.capture_time = time.monotonic() * self.time_warp_factor
+
+        if self.simulate_exposure_time:
+            with util.max_rate(1000 / self._sig.exposure):
+                image, self._last_star_image_positions = self._capture()
+                return image
+        else:
+            image, self._last_star_image_positions = self._capture()
+            return image
+
+    def get_last_star_image_positions(self) -> npt.NDArray[np.float64]:
+        """Get image positions of stars contained in previously captured image."""
+        if self._last_star_image_positions is None:
+            msg = "No image captured so far"
+            raise ValueError(msg)
+        return self._last_star_image_positions
 
     @override
     def record_darkframe(self) -> None:
         pass
 
     @abc.abstractmethod
-    def _capture(self) -> np.ndarray: ...
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+        """Return captured image and star image positions."""
 
     @override
     def _apply_settings(self) -> None:
@@ -347,25 +441,35 @@ class ArtificialStarCam(camera.Camera):
 class RandomStarCam(ArtificialStarCam):
     """Star camera pointing in a random direction and wiggeling."""
 
-    def __init__(self, camera_settings: camera.CameraSettings):
-        super().__init__(camera_settings)
+    def __init__(
+        self,
+        camera_settings: camera.CameraSettings,
+        cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
+    ):
+        super().__init__(camera_settings, cal=cal, config=config)
         self._vector = self._rng.normal(size=(2, 3)) * 0.3
 
     @override
-    def _capture(self) -> np.ndarray:
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
         self._vector *= 0.9
         self._vector += 0.1 * self._rng.normal(size=(2, 3)) * 0.3
         vector = self._vector + [[0, 0, 5], [0, 10, 0]]
         vector /= np.linalg.norm(vector, axis=-1, keepdims=True)
-        image, _, _ = self._sig(vector[0], vector[1], grid=self.grid)
-        return image
+        image, star_xy, _ = self._sig(vector[0], vector[1], grid=self.grid)
+        return image, star_xy
 
 
 class AxisAlignCalibrationTestCam(ArtificialStarCam):
     """Star camera rotating around a random axis."""
 
-    def __init__(self, camera_settings: camera.CameraSettings):
-        super().__init__(camera_settings)
+    def __init__(
+        self,
+        camera_settings: camera.CameraSettings,
+        cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
+    ):
+        super().__init__(camera_settings, cal=cal, config=config)
         vectors = self._rng.normal(size=(2, 3))
         vectors /= np.linalg.norm(vectors, axis=-1, keepdims=True)
 
@@ -382,18 +486,16 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
         self.axis_angle = 0.0
 
     @override
-    def _capture(self) -> np.ndarray:
-        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
-
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
-        self.axis_angle = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
+        self.axis_angle = (self.capture_time * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
         rotvec = np.array([0, 0, 1.0]) * self.axis_angle
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvec, degrees=False)
 
         quat = (self.axis_attitude * around_axis_rot * self.camera_rot).as_quat(canonical=False)
 
-        image, _, _ = self._sig.image_from_quaternion(quat, grid=self.grid)
-        return image
+        image, star_xy, _ = self._sig.image_from_quaternion(quat, grid=self.grid)
+        return image, star_xy
 
 
 class StarCameraCalibrationTestCam(ArtificialStarCam):
@@ -406,21 +508,24 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
     phi: float
     """Star angle, rotation about the north south axis."""
 
-    def __init__(self, camera_settings: camera.CameraSettings):
-        super().__init__(camera_settings)
+    def __init__(
+        self,
+        camera_settings: camera.CameraSettings,
+        cal: Optional[kalkam.IntrinsicCalibration] = None,
+        config: Optional[StarImageGeneratorConfig] = None,
+    ):
+        super().__init__(camera_settings, cal=cal, config=config)
 
         self.theta = self._rng.uniform(-np.pi / 2, np.pi / 2)
         self.epsilon = self._rng.uniform(-np.pi / 2, np.pi / 2)
         self.phi = 0
 
-    def get_extrinsic(self) -> np.ndarray:
+    def _get_extrinsic(self, t: float) -> np.ndarray:
         """Get the current extrinsic matrix of the camera.
 
         Changes with time.
         """
-        t = time.monotonic() * self.time_warp_factor if self.t is None else self.t
-
-        self.phi = (t * ((2 * np.pi) / (24 * 60 * 60))) % (2 * np.pi)
+        self.phi = (t * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
 
         r = scipy.spatial.transform.Rotation.from_euler(
             "zxz", (self.epsilon, np.pi / 2 - self.theta, self.phi), degrees=False
@@ -431,10 +536,10 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         return extrinsic
 
     @override
-    def _capture(self) -> np.ndarray:
-        extrinsic = self.get_extrinsic()
-        image, _, _ = self._sig.image_from_extrinsic(extrinsic, grid=self.grid)
-        return image
+    def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+        extrinsic = self._get_extrinsic(self.capture_time)
+        image, star_xy, _ = self._sig.image_from_extrinsic(extrinsic, grid=self.grid)
+        return image, star_xy
 
     def gui(self) -> None:
         """Play with this camera in a GUI."""

@@ -1,57 +1,12 @@
 """Main module tests."""
 
-import queue
+import pathlib
 import threading
 
-import serial
-from typing_extensions import Self, override
+import pytest
+from typing_extensions import Self
 
 from startracker import attitude_estimation, communication, config, main, testing_utils
-
-
-class MockSerial(serial.SerialBase):
-    def __init__(self):
-        super().__init__()
-        self.mosi_channel = queue.Queue()
-        self.miso_channel = queue.Queue()
-
-    @override
-    def read(self, count: int) -> bytes:
-        ret = bytes(self.mosi_channel.get() for _ in range(count))
-        print(f"Device read: {ret}")
-        return ret
-
-    @override
-    def write(self, data: bytes) -> None:
-        print(f"Device wrote: {data}")
-        for x in data:
-            self.miso_channel.put(x)
-
-    def reset_input_buffer(self) -> None:
-        """Clear the input buffer."""
-        while not self.mosi_channel.empty():
-            self.mosi_channel.get_nowait()
-
-
-class MockSerialMaster(serial.SerialBase):
-    def __init__(self, test_serial: MockSerial):
-        super().__init__()
-        self.test_serial = test_serial
-
-    @override
-    def read(self, count: int) -> bytes:
-        return bytes(self.test_serial.miso_channel.get() for _ in range(count))
-
-    @override
-    def write(self, data: bytes) -> None:
-        print(f"Master wrote: {data}")
-        for x in data:
-            self.test_serial.mosi_channel.put(x)
-
-    def reset_input_buffer(self):
-        """Clear the input buffer."""
-        while not self.test_serial.miso_channel.empty():
-            self.test_serial.miso_channel.get_nowait()
 
 
 class MasterEmulator:
@@ -95,6 +50,7 @@ class MasterEmulator:
         )
         import time
 
+        loop_broken = False
         while True:
             response = self.transceive(main.GetStatus, main.EmptyMessage())
             if (
@@ -106,9 +62,9 @@ class MasterEmulator:
                 response.attitude_estimation_mode
                 == attitude_estimation.AttitudeEstimationModeEnum.IDLE
             ):
+                loop_broken = True
                 break
-            else:
-                raise AssertionError()
+        assert loop_broken
 
         self.transceive(
             main.SetAttitudeEstimationMode,
@@ -150,13 +106,13 @@ class MasterEmulator:
         )
 
 
-def test_main():
-    testing_utils.TestingMaterial(use_existing=True).patch_persistent()
+def test_main(tmp_path: pathlib.Path):
+    testing_utils.patch_persistent(tmp_path, cal=True)
 
     config.settings.shutdown_delay = 0.1
 
-    device_serial = MockSerial()
-    master_serial = MockSerialMaster(device_serial)
+    device_serial = testing_utils.MockSerial()
+    master_serial = testing_utils.MockSerialMaster(device_serial)
     packet_handler = communication.PacketHandler(master_serial)
     with MasterEmulator(packet_handler), main.App(ser=device_serial) as app:
         returncode = app()
@@ -165,4 +121,4 @@ def test_main():
 
 
 if __name__ == "__main__":
-    test_main()
+    pytest.main([__file__])

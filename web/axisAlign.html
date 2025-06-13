@@ -19,17 +19,26 @@
 </head>
 
 <body>
-    <div id="app">
+    <div id="app" v-cloak>
         <canvas id="canvas" width="100" height="100"></canvas>
-        <div id="view"><a href="./cameraWebgui.html">Camera View</a></div>
-        <div id="footerBar">
-            <div v_if="stream != {}" title="Attitude estimation results">
+        <div id="header-bar">
+            <div><button type="button" id="shutdown" @click="triggerShutdown()">
+                    {{ ["Shutdown", "Really?", "Last call?"][shutdownCalls.length] }}
+                </button></div>
+            <div><button type="button" id="toggle_cam" @click="capture('toggle_continuous')">Start</button></div>
+            <div><a href="./cameraWebgui.html"><button type="button">Camera View</button></a></div>
+        </div>
+        <div id="footer-bar">
+            <div v-if="stream?.attitude_estimation" title="Attitude estimation results">
                 Stars:
-                Tracked {{stream.n_matches}}
-                Alignment error {{stream.alignment_error.toFixed(3)}}°
-                Times {{stream.pre_processing_time}}ms, {{stream.processing_time}}ms {{stream.post_processing_time}}ms
+                Tracked {{stream.attitude_estimation.n_matches}}
+                Alignment error {{stream.attitude_estimation.alignment_error.toFixed(3)}}°
+                Times {{stream.pre_processing_time}}ms, {{stream.attitude_estimation.processing_time}}ms
+                {{stream.attitude_estimation.post_processing_time}}ms
                 <div class="help">
-                    The number of stars detected (encircled in red), the current alignment error of the startracker to the celestial pole, and the time taken for each processing step (image processing, attitude estimation, post processing).
+                    The number of stars detected (encircled in red), the current alignment error of the startracker to
+                    the celestial pole, and the time taken for each processing step (image processing, attitude
+                    estimation, post processing).
                 </div>
             </div>
             <div title="Packet size of the data stream">
@@ -41,8 +50,8 @@
                     Add {{calibration_orientations > 0 ? `(${calibration_orientations})` : "" }}
                 </button>
                 <button type="button" @click="resetCalibration" v-if="calibration_orientations > 0">Clear</button>
-                <button type="button" @click="calibrate" v-if="calibration_orientations > 0">
-                    Calibrate{{calibrating? '\u25CF' : "" }}
+                <button type="button" @click="calibrate" id="calibrate" v-if="calibration_orientations > 0">
+                    Calibrate
                 </button>
                 <div class="help">
                     Calibrate the misaligment between the camera and the star tracker's rotational axis.

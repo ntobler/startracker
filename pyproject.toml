@@ -6,7 +6,10 @@ authors = ["Nicolas Tobler <nitobler@gmail.com>"]
 readme = "README.md"
 
 include = [
-    { path = "startracker/default_config.yml", format = ["sdist", "wheel"] }
+    { path = "startracker/default_config.yml", format = [
+        "sdist",
+        "wheel",
+    ] },
 ]
 
 [tool.poetry.dependencies]
@@ -27,15 +30,16 @@ viztracer = "^0.16.2"
 pre-commit = "^3.8.0"
 pytest = "^8.0.2"
 matplotlib = "^3.8.3"
+mypy = "^1.16.0"
 flake8 = "^7.0.0"
 flake8-pyproject = "^1.2.3"
 pytest-xdist = "^3.6.1"
 pytest-cov = "^5.0.0"
 ruff = "^0.8.2"
 scipy-stubs = "^1.14.1.5"
-
-[tool.poetry.group.experimental.dependencies]
-jax = {extras = ["cpu"], version = "^0.4.25"}
+sympy = "^1.14.0"
+types-pyserial = "^3.5.0.20250326"
+pillow = "^11.2.1"
 
 [tool.poetry.scripts]
 startracker = "startracker.main:main"
@@ -51,7 +55,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-addopts = "--cov=startracker --cov-report xml --cov-report term"
+addopts = "--cov=startracker --cov=tests --cov-report xml --cov-report term"
 
 [tool.ruff]
 line-length = 100
@@ -117,4 +121,19 @@ pydocstyle.convention = "google"
 "{test,stm32,startracker/scripts}*" = ["D100", "D103", "SLF001", "ANN", "S101"]
 
 [tool.codespell]
-ignore-words-list = "ser"
+ignore-words-list = "ser,crate"
+
+[tool.coverage.report]
+exclude_lines = [
+    'if __name__ == "__main__":',
+    'if plot:',
+    'if debug:',
+    'if verbose:',
+]
+
+[tool.mypy]
+packages = ["startracker"]
+exclude = "startracker/(main|kalkam)\\.py$" # There's still some issues here :(
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
