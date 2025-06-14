@@ -13,6 +13,7 @@ import pickle
 import signal
 import tempfile
 import threading
+import time
 from collections.abc import Generator
 from typing import Any, BinaryIO, Optional
 
@@ -766,7 +767,7 @@ class App(webutil.QueueAbstractionClass):
         """Run the backend application."""
         self._logger.info("Starting camera")
         with self._cam, self._settings_saver():
-            self._logger.info("Starting event processor")
+            self._logger.info(f"Starting event processor monotonic_time={time.monotonic()}")
             while not self.terminate:
                 try:
                     with util.max_rate(20):
