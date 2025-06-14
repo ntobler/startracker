@@ -1,11 +1,3 @@
-use rand::rngs::StdRng;
-use rand::RngCore;
-use rand::SeedableRng;
-
-#[cfg(feature = "cam")]
-use std::time::Duration;
-
-#[cfg(feature = "cam")]
 use libcamera::{
     camera::CameraConfigurationStatus,
     camera_manager::CameraManager,
@@ -16,18 +8,19 @@ use libcamera::{
     properties,
     stream::StreamRole,
 };
+#[cfg(feature = "cam")]
+use std::time::Duration;
 
 // drm-fourcc does not have MJPEG type yet, construct it from raw fourcc identifier
-#[cfg(feature = "cam")]
 const PIXEL_FORMAT_SRGGB10: PixelFormat =
     PixelFormat::new(u32::from_le_bytes([b'R', b'G', b'1', b'0']), 0);
 
-#[cfg(feature = "cam")]
 pub struct Camera {}
 
-#[cfg(feature = "cam")]
 impl Camera {
-    pub fn new() -> Self {}
+    pub fn new() -> Self {
+        Camera {}
+    }
 
     pub fn capture(&mut self) -> Result<Vec<u16>, String> {
         let mgr = CameraManager::new().map_err(|e| format!("CameraManager error: {e:?}"))?;
@@ -145,25 +138,5 @@ impl Camera {
             .collect();
 
         Ok(output)
-    }
-}
-
-#[cfg(not(feature = "cam"))]
-pub struct Camera {
-    rng: StdRng,
-}
-
-#[cfg(not(feature = "cam"))]
-impl Camera {
-    pub fn new() -> Self {
-        let seed: [u8; 32] = [42; 32];
-        let rng = rand::rngs::StdRng::from_seed(seed);
-        Camera { rng: rng }
-    }
-
-    pub fn capture(&mut self) -> Result<Vec<u16>, String> {
-        // Create a random image
-        let gray_value = self.rng.next_u32() as u16;
-        Ok(vec![gray_value; 1920 * 1080])
     }
 }

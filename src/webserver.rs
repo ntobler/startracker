@@ -10,7 +10,12 @@ use tokio::time::sleep;
 use warp::ws::WebSocket;
 use warp::Filter;
 
-mod cam;
+#[cfg(feature = "cam")]
+pub mod cam;
+
+#[cfg(not(feature = "cam"))]
+#[path = "cam_mock.rs"]
+pub mod cam;
 
 #[tokio::main]
 async fn main() {
