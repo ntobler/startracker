@@ -22,19 +22,14 @@ use libcamera::{
 const PIXEL_FORMAT_SRGGB10: PixelFormat =
     PixelFormat::new(u32::from_le_bytes([b'R', b'G', b'1', b'0']), 0);
 
-pub struct Camera {
-    rng: StdRng,
-}
+#[cfg(feature = "cam")]
+pub struct Camera {}
 
 #[cfg(feature = "cam")]
 impl Camera {
-    pub fn new() -> Self {
-        let seed: [u8; 32] = [42; 32];
-        let mut rng = rand::rngs::StdRng::from_seed(seed);
-        Camera { rng: rng }
-    }
+    pub fn new() -> Self {}
 
-    pub fn capture() -> Result<Vec<u16>, String> {
+    pub fn capture(&mut self) -> Result<Vec<u16>, String> {
         let mgr = CameraManager::new().map_err(|e| format!("CameraManager error: {e:?}"))?;
 
         let cameras = mgr.cameras();
@@ -151,6 +146,11 @@ impl Camera {
 
         Ok(output)
     }
+}
+
+#[cfg(not(feature = "cam"))]
+pub struct Camera {
+    rng: StdRng,
 }
 
 #[cfg(not(feature = "cam"))]
