@@ -291,8 +291,9 @@ fn numpy_to_slice_2d<'py, T: numpy::Element + Copy, const L: usize>(
 }
 
 #[pyfunction]
-fn get_camera_frame<'py>(py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray1<u8>>> {
-    let vec = match cam::get() {
+fn get_camera_frame<'py>(py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray1<u16>>> {
+    let mut camera = cam::Camera::new();
+    let vec = match camera.capture() {
         Ok(v) => v,
         Err(e) => return Err(PyRuntimeError::new_err(e)),
     };
