@@ -14,7 +14,12 @@ mod starcal;
 mod stargradcal;
 mod util;
 
-mod cam;
+#[cfg(feature = "cam")]
+pub mod cam;
+
+#[cfg(not(feature = "cam"))]
+#[path = "cam_mock.rs"]
+pub mod cam;
 
 #[pymodule]
 fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
