@@ -52,12 +52,18 @@ a {
     justify-content: end;
 }
 
-#header-bar div {
-    margin: 1em;
+#header-bar > div {
+    display: flex;
+    flex-direction: row;
+    justify-content: end;
+    padding: 1em;
+    gap: 1em;
+    flex-wrap: wrap;
 }
 
-#header-bar button {
-    padding: 1em;
+#header-bar div button {
+    padding: 0.5em;
+    margin: 0;
 }
 
 input[type=number] {
@@ -79,8 +85,8 @@ button[type=button] {
 }
 
 button[type=button]:hover {
-    border-color: white;
-    color: white;
+    border-color: white !important;
+    color: white !important;
 }
 
 button[type=button]:active {
@@ -91,6 +97,7 @@ button[type=button]:active {
 button[type=button].active {
     background-color: red;
     color: black;
+    border-color: red;
 }
 
 input.error {
@@ -113,6 +120,7 @@ select {
     position: fixed;
     left: 50%;
     top: 50%;
+    width: 80%;
     transform: translate(-50%, -50%);
     border: 2px solid currentColor;
     padding: 1em;
