@@ -12,6 +12,9 @@ export default {
             history: [],
             helpDisplay: null,
             shutdownCalls: ref([]),
+            viewSettings: ref(false),
+            cameraMode: ref(undefined),
+            fullscreen: ref(undefined),
         }
     },
     methods: {
@@ -37,15 +40,11 @@ export default {
             ws.onmessage = this.onmessage.bind(this);
         },
         updateState(data) {
-            this.calibration_orientations = data.axis_calibration.calibration_orientations
+            this.calibration_orientations = data.axis_calibration.calibration_orientations;
+            this.cameraMode = data.camera_mode;
 
             const el = document.getElementById("toggle_cam");
             el.classList.remove("pending");
-            if (data.camera_mode == "continuous") {
-                el.innerHTML = "Stop"
-            } else {
-                el.innerHTML = "Start"
-            }
         },
         resize() {
             let canvas = document.getElementById('canvas')
@@ -109,7 +108,7 @@ export default {
             api('/api/capture', payload, this.updateState);
         },
         showHelp() {
-            if (this.helpDisplay === null) return
+            this.helpDisplay = new HelpDisplay(document.getElementById('footer-bar'))
             this.helpDisplay.toggleHelp()
         },
         triggerShutdown() {
@@ -118,8 +117,20 @@ export default {
             this.shutdownCalls.push(now);
             if (this.shutdownCalls.length >= 3) {
                 this.shutdownCalls = [];
-                api('/api/shutdown', { shutdown: "shutdown" }, () => {});
+                api('/api/shutdown', { shutdown: "shutdown" }, () => { });
             }
+        },
+        toggleSettings() {
+            this.viewSettings = this.viewSettings ? false : true;
+        },
+        toggleFullscreen() {
+            const el = document.documentElement
+            if (!document.fullscreenElement) {
+                el.requestFullscreen()
+            } else {
+                document.exitFullscreen()
+            }
+            this.fullscreen = !document.fullscreenElement;
         },
     },
     mounted() {
@@ -135,7 +146,6 @@ export default {
             this.redraw()
         });
         zoomHandler.attachEventListeners(document.getElementById('canvas'))
-        this.helpDisplay = new HelpDisplay(document.getElementById('footer-bar'))
     }
 }
 

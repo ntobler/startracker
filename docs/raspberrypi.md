@@ -105,7 +105,6 @@ sudo systemctl restart NetworkManager
 Disable unnecessary services that delay boot:
 ```bash
 sudo systemctl mask ModemManager.service
-# sudo systemctl mask NetworkManager-wait-online.service
 sudo systemctl mask bluetooth.service
 sudo systemctl mask avahi-daemon.service
 sudo systemctl mask dphys-swapfile.service
@@ -115,6 +114,7 @@ sudo systemctl mask alsa-restore.service
 sudo systemctl mask alsa-state.service
 sudo systemctl mask hciuart.service
 sudo systemctl mask keyboard-setup.service
+sudo systemctl mask triggerhappy.service
 ```
 
 Limit journal size (logfile)
