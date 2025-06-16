@@ -1,16 +1,17 @@
 use std::thread;
 
 #[cfg(feature = "cam")]
-pub mod cam_thread;
+#[path = "cam_thread.rs"]
+mod cam_thread;
 
 #[cfg(not(feature = "cam"))]
 #[path = "cam_thread_mock.rs"]
-pub mod cam_thread;
+mod cam_thread;
 
 pub struct Camera {
     thread_handle: Option<thread::JoinHandle<Result<(), String>>>,
     thread_error: Option<String>,
-    trigger_tx: crossbeam_channel::Sender<()>,
+    trigger_tx: Option<crossbeam_channel::Sender<()>>,
     frame_rx: crossbeam_channel::Receiver<Vec<u16>>,
 }
 
@@ -24,7 +25,7 @@ impl Camera {
         Ok(Camera {
             thread_handle: Some(thread_handle),
             thread_error: None,
-            trigger_tx,
+            trigger_tx: Some(trigger_tx),
             frame_rx,
         })
     }
@@ -52,7 +53,12 @@ impl Camera {
             return Err(e.clone());
         }
         println!("Waiting for camera request execution");
-        match self.trigger_tx.send(()) {
+        match self
+            .trigger_tx
+            .as_ref()
+            .ok_or("trigger has been dropped".to_string())?
+            .send(())
+        {
             Ok(_) => {}
             Err(_) => {
                 return Err(self.get_thread_error());
@@ -64,8 +70,25 @@ impl Camera {
                 return Err(self.get_thread_error());
             }
         };
-        println!("Received");
+        println!("Capture received frame");
         Ok(frame)
+    }
+}
+
+impl Drop for Camera {
+    fn drop(&mut self) {
+        // Drop trigger_tx to close channel (happens automatically here)
+        // But explicitly drop to show intent:
+        drop(self.trigger_tx.take());
+
+        if let Some(handle) = self.thread_handle.take() {
+            println!("Dropping Camera: joining camera thread...");
+            match handle.join() {
+                Ok(Ok(())) => println!("Camera thread terminated gracefully."),
+                Ok(Err(e)) => eprintln!("Camera thread returned error: {}", e),
+                Err(e) => eprintln!("Camera thread panicked: {:?}", e),
+            }
+        }
     }
 }
 
