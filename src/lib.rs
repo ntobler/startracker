@@ -24,6 +24,7 @@ fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(even_spaced_indices, m)?)?;
     m.add_function(wrap_pyfunction!(get_camera_frame, m)?)?;
     m.add_class::<CalibrationResult>()?;
+    m.add_class::<Camera>()?;
     Ok(())
 }
 
@@ -302,4 +303,25 @@ fn get_camera_frame<'py>(py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray1
     };
     let np_array = vec.to_pyarray_bound(py);
     Ok(np_array)
+}
+
+#[pyclass]
+struct Camera {
+    inner: cam::Camera,
+}
+
+#[pymethods]
+impl Camera {
+    #[new]
+    fn new() -> PyResult<Self> {
+        Ok(Camera {
+            inner: cam::Camera::new().map_err(PyRuntimeError::new_err)?,
+        })
+    }
+
+    pub fn capture<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray1<u16>>> {
+        let vec = self.inner.capture().map_err(PyRuntimeError::new_err)?;
+        let np_array = vec.to_pyarray_bound(py);
+        Ok(np_array)
+    }
 }

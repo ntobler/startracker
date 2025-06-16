@@ -1,4 +1,4 @@
-use crossbeam_channel::{bounded, Receiver, Sender};
+#[cfg(feature = "cam")]
 use libcamera::{
     camera::CameraConfigurationStatus,
     camera_manager::CameraManager,
@@ -19,6 +19,7 @@ pub fn camera_thread(
     trigger_rx: crossbeam_channel::Receiver<()>,
     frame_tx: crossbeam_channel::Sender<Vec<u16>>,
 ) -> Result<(), String> {
+    println!("Camera thread: starting");
     let mgr = CameraManager::new().map_err(|e| format!("CameraManager error: {e:?}"))?;
 
     let cameras = mgr.cameras();
@@ -104,23 +105,28 @@ pub fn camera_thread(
         active_cam.queue_request(req).unwrap();
     }
 
+    println!("Camera thread: started");
+
     // Start acquisition loop
     loop {
         // Get pending request blocking
-        let req = req_rx.recv();
+        let mut req = req_rx
+            .recv()
+            .map_err(|_| "Failure reading from request channel".to_string())?;
 
         println!("Camera request {:?} completed!", req);
 
         //Check for trigger signal
         match trigger_rx.try_recv() {
-            Ok(value) => {
+            Ok(_) => {
                 // Trigger signal present -> get buffer and read data
+                println!("Camera thread: trigger ok received");
 
                 println!("Metadata: {:#?}", req.metadata());
 
                 // Get framebuffer for our stream
                 let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> =
-                    req.buffer(&self.stream).unwrap();
+                    req.buffer(&stream).unwrap();
                 println!("FrameBuffer metadata: {:#?}", framebuffer.metadata());
 
                 // MJPEG format has only one data plane containing encoded jpeg data with all the headers
@@ -136,7 +142,6 @@ pub fn camera_thread(
                     .bytes_used as usize;
 
                 print!("data_len {:?}", data_len);
-                let sum: u32 = buffer_data.iter().map(|&b| b as u32).sum();
 
                 let frame: Vec<u16> = buffer_data
                     .chunks_exact(2)
@@ -145,9 +150,14 @@ pub fn camera_thread(
 
                 frame_tx.send(frame).ok();
             }
-            Err(crossbeam_channel::TryRecvError::Empty) => { /* nothing available now */ }
+            Err(crossbeam_channel::TryRecvError::Empty) => {
+                // nothing available now, proceed
+            }
             Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                break;
+                // Channel has been closed from the other side. We can shut down the thread
+                println!("Camera thread: trigger error received");
+                println!("Camera thread: terminating gracefully");
+                return Ok(());
             }
         }
         // Requeue request
