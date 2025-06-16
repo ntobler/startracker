@@ -10,11 +10,6 @@ use tokio::time::sleep;
 use warp::ws::WebSocket;
 use warp::Filter;
 
-#[cfg(feature = "cam")]
-pub mod cam;
-
-#[cfg(not(feature = "cam"))]
-#[path = "cam_mock.rs"]
 pub mod cam;
 
 #[tokio::main]
@@ -77,7 +72,13 @@ async fn handle_ws(ws: WebSocket) {
 
     println!("WebSocket connected");
 
-    let mut camera = cam::Camera::new();
+    let mut camera = match cam::Camera::new() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error initializing camera: {}.", e);
+            return;
+        }
+    };
 
     loop {
         // Get fresh image
