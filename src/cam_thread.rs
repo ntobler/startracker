@@ -10,6 +10,7 @@ use libcamera::{
     request::Request,
     stream::StreamRole,
 };
+use std::time::Instant;
 
 // drm-fourcc does not have MJPEG type yet, construct it from raw fourcc identifier
 const PIXEL_FORMAT_SRGGB10: PixelFormat =
@@ -17,7 +18,8 @@ const PIXEL_FORMAT_SRGGB10: PixelFormat =
 
 pub fn camera_thread(
     trigger_rx: crossbeam_channel::Receiver<()>,
-    frame_tx: crossbeam_channel::Sender<Vec<u16>>,
+    frame_tx: crossbeam_channel::Sender<T>,
+    extraction_func: impl Fn(&[u16]) -> T,
 ) -> Result<(), String> {
     println!("Camera thread: starting");
     let mgr = CameraManager::new().map_err(|e| format!("CameraManager error: {e:?}"))?;
@@ -38,7 +40,7 @@ pub fn camera_thread(
 
     // This will generate default configuration for each specified role
     let mut cfgs = active_cam
-        .generate_configuration(&[StreamRole::ViewFinder])
+        .generate_configuration(&[StreamRole::StillCapture])
         .ok_or("Failed to generate camera configuration".to_string())?;
 
     // Use MJPEG format so we can write resulting frame directly into jpeg file
@@ -94,6 +96,7 @@ pub fn camera_thread(
     // Completed capture requests are returned as a callback
     let (req_tx, req_rx) = crossbeam_channel::bounded::<Request>(2); // frame response
     active_cam.on_request_completed(move |req| {
+        println!("Request callback called!!");
         req_tx.send(req).ok();
     });
 
@@ -127,26 +130,24 @@ pub fn camera_thread(
                 // Get framebuffer for our stream
                 let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> =
                     req.buffer(&stream).unwrap();
-                println!("FrameBuffer metadata: {:#?}", framebuffer.metadata());
 
-                // MJPEG format has only one data plane containing encoded jpeg data with all the headers
                 let planes = framebuffer.data();
-                let buffer_data = planes.get(0).unwrap();
+                let &buffer_data = planes.get(0).unwrap();
 
-                let data_len = framebuffer
-                    .metadata()
-                    .unwrap()
-                    .planes()
-                    .get(0)
-                    .unwrap()
-                    .bytes_used as usize;
+                println!("FrameBuffer metadata: {:#?}", framebuffer.metadata());
+                let frame_buffer_meta = framebuffer.metadata().unwrap();
+                println!(
+                    "bytes_used {:?}",
+                    frame_buffer_meta.planes().get(0).unwrap().bytes_used as usize
+                );
+                println!("timestamp {:?}", frame_buffer_meta.timestamp());
+                println!("sequence {:?}", frame_buffer_meta.sequence());
 
-                print!("data_len {:?}", data_len);
-
-                let frame: Vec<u16> = buffer_data
-                    .chunks_exact(2)
-                    .map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap()))
-                    .collect();
+                let start = Instant::now();
+                let raw: &[u16] = bytemuck::cast_slice(buffer_data);
+                let frame = extraction_func(raw);
+                let duration = start.elapsed();
+                println!("Extracting frame took {:?}", duration);
 
                 frame_tx.send(frame).ok();
             }
