@@ -30,6 +30,7 @@ serde_json = { version = "1.0.140", optional = true }
 futures-util = { version = "0.3.31", optional = true }
 opencv = { version = "0.94.4", optional = true }
 crossbeam-channel = "0.5.15"
+bytemuck = "1.23.1"
 
 [features]
 default = []

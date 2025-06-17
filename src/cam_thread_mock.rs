@@ -4,9 +4,10 @@ use rand::RngCore;
 use rand::SeedableRng;
 use std::time::Duration;
 
-pub fn camera_thread(
+pub fn camera_thread<T>(
     trigger_rx: crossbeam_channel::Receiver<()>,
-    frame_tx: crossbeam_channel::Sender<Vec<u16>>,
+    frame_tx: crossbeam_channel::Sender<T>,
+    extraction_func: impl Fn(&[u16]) -> T,
 ) -> Result<(), String> {
     println!("Camera thread: starting");
     let seed: [u8; 32] = [42; 32];
@@ -20,7 +21,8 @@ pub fn camera_thread(
                 // Trigger signal present -> get buffer and read data
                 println!("Camera thread: trigger ok received");
                 let gray_value = rng.next_u32() as u16;
-                let frame = vec![gray_value; 1920 * 1080];
+                let raw = vec![gray_value; 1920 * 1080];
+                let frame = extraction_func(&raw);
                 frame_tx.send(frame).ok();
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {
