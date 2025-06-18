@@ -22,8 +22,8 @@ fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(stargradcal_calibrate, m)?)?;
     m.add_function(wrap_pyfunction!(stargradcal_objective_function, m)?)?;
     m.add_function(wrap_pyfunction!(even_spaced_indices, m)?)?;
-    m.add_function(wrap_pyfunction!(get_camera_frame, m)?)?;
     m.add_class::<CalibrationResult>()?;
+    m.add_class::<CameraConfig>()?;
     m.add_class::<Camera>()?;
     Ok(())
 }
@@ -291,18 +291,28 @@ fn numpy_to_slice_2d<'py, T: numpy::Element + Copy, const L: usize>(
     Ok(unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const [T; L], slice.len() / L) })
 }
 
-#[pyfunction]
-fn get_camera_frame<'py>(py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray1<u16>>> {
-    let mut camera = match cam::Camera::new() {
-        Ok(v) => v,
-        Err(e) => return Err(PyRuntimeError::new_err(e)),
-    };
-    let vec = match camera.capture() {
-        Ok(v) => v,
-        Err(e) => return Err(PyRuntimeError::new_err(e)),
-    };
-    let np_array = vec.to_pyarray_bound(py);
-    Ok(np_array)
+#[pyclass]
+struct CameraConfig {
+    inner: cam::CameraConfig,
+}
+
+#[pymethods]
+impl CameraConfig {
+    #[new]
+    fn new(
+        analogue_gain: u32,
+        digital_gain: u32,
+        exposure_us: u32,
+        binning: u32,
+    ) -> PyResult<Self> {
+        let config = cam::CameraConfig {
+            analogue_gain,
+            digital_gain,
+            exposure_us,
+            binning,
+        };
+        Ok(CameraConfig { inner: config })
+    }
 }
 
 #[pyclass]
@@ -313,15 +323,17 @@ struct Camera {
 #[pymethods]
 impl Camera {
     #[new]
-    fn new() -> PyResult<Self> {
-        Ok(Camera {
-            inner: cam::Camera::new().map_err(PyRuntimeError::new_err)?,
-        })
+    fn new(config: &CameraConfig) -> PyResult<Self> {
+        let camera = cam::Camera::new(config.inner.clone()).map_err(PyRuntimeError::new_err)?;
+        Ok(Camera { inner: camera })
     }
 
-    pub fn capture<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray1<u16>>> {
-        let vec = self.inner.capture().map_err(PyRuntimeError::new_err)?;
-        let np_array = vec.to_pyarray_bound(py);
+    pub fn capture<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray2<u8>>> {
+        let frame: cam::Frame<u8> = self.inner.capture().map_err(PyRuntimeError::new_err)?;
+        let np_array = frame.data_row_major.to_pyarray_bound(py);
+        let np_array = np_array
+            .reshape((frame.height, frame.width))
+            .expect("Shape mismatch in reshape");
         Ok(np_array)
     }
 }

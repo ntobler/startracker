@@ -8,20 +8,102 @@ mod cam_thread;
 #[path = "cam_thread_mock.rs"]
 mod cam_thread;
 
+use num_traits::{PrimInt, Unsigned, WrappingAdd, Zero};
+use std::ops::Shr;
+
+pub trait Cast<T> {
+    fn cast(self) -> T;
+}
+
+macro_rules! impl_cast {
+    ($from:ty => $to:ty) => {
+        impl Cast<$to> for $from {
+            #[inline(always)]
+            fn cast(self) -> $to {
+                self as $to
+            }
+        }
+    };
+}
+macro_rules! impl_clip_cast {
+    ($from:ty => $to:ty) => {
+        impl Cast<$to> for $from {
+            #[inline(always)]
+            fn cast(self) -> $to {
+                self.min(<$to>::MAX as $from) as $to
+            }
+        }
+    };
+}
+impl_cast!(u8 => u8);
+impl_cast!(u8 => u16);
+impl_clip_cast!(u16 => u8);
+impl_cast!(u16 => u16);
+impl_cast!(i32 => u16);
+impl_cast!(i32 => u8);
+impl_cast!(i32 => usize);
+
+pub trait PixelType: PrimInt + Unsigned + Zero + Copy + Shr<Self> + WrappingAdd {}
+impl<T: PrimInt + Unsigned + Zero + Copy + Shr + WrappingAdd> PixelType for T {}
+
+pub struct Frame<T: PixelType> {
+    pub data_row_major: Vec<T>,
+    pub width: usize,
+    pub height: usize,
+}
+
+impl<T: PixelType> Frame<T> {
+    pub fn new(data_row_major: Vec<T>, width: usize, height: usize) -> Result<Self, String> {
+        if data_row_major.len() != width * height {
+            return Err("Frame dimensions don't match data".to_string());
+        }
+        Ok(Frame {
+            data_row_major,
+            width,
+            height,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct CameraConfig {
+    pub analogue_gain: u32,
+    pub digital_gain: u32,
+    pub exposure_us: u32,
+    pub binning: u32,
+}
+
+impl CameraConfig {
+    pub fn default() -> Self {
+        CameraConfig {
+            analogue_gain: 1,
+            digital_gain: 1,
+            exposure_us: 10000,
+            binning: 1,
+        }
+    }
+}
+
 pub struct Camera {
     thread_handle: Option<thread::JoinHandle<Result<(), String>>>,
     thread_error: Option<String>,
     trigger_tx: Option<crossbeam_channel::Sender<()>>,
-    frame_rx: crossbeam_channel::Receiver<Option<Vec<u16>>>,
+    frame_rx: crossbeam_channel::Receiver<(Vec<u16>, u32, u32)>,
+    config: CameraConfig,
 }
 
 impl Camera {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(config: CameraConfig) -> Result<Self, String> {
         let (trigger_tx, trigger_rx) = crossbeam_channel::bounded::<()>(0); // unbuffered: strictly 1:1 signal
-        let (frame_tx, frame_rx) = crossbeam_channel::bounded::<Option<Vec<u16>>>(1); // frame response
+        let (frame_tx, frame_rx) = crossbeam_channel::bounded::<(Vec<u16>, u32, u32)>(1); // frame response
 
         let thread_handle = thread::spawn(move || {
-            cam_thread::camera_thread(trigger_rx, frame_tx, |x| binning::<1>(x, 1920, 1080))
+            cam_thread::camera_thread(
+                trigger_rx,
+                frame_tx,
+                config.exposure_us,
+                config.analogue_gain,
+            )
         });
 
         Ok(Camera {
@@ -29,6 +111,7 @@ impl Camera {
             thread_error: None,
             trigger_tx: Some(trigger_tx),
             frame_rx,
+            config,
         })
     }
 
@@ -50,7 +133,11 @@ impl Camera {
         err
     }
 
-    pub fn capture(&mut self) -> Result<Vec<u16>, String> {
+    pub fn capture<T>(&mut self) -> Result<Frame<T>, String>
+    where
+        T: PixelType,
+        u16: Cast<T>,
+    {
         if let Some(e) = &self.thread_error {
             return Err(e.clone());
         }
@@ -67,15 +154,30 @@ impl Camera {
             }
         };
         let frame = match self.frame_rx.recv() {
-            Ok(f) => f,
+            Ok((f, w, h)) => Frame {
+                data_row_major: f,
+                width: w as usize,
+                height: h as usize,
+            },
             Err(_) => {
                 return Err(self.get_thread_error());
             }
         };
         println!("Capture received frame");
-        match frame {
-            Some(x) => Ok(x),
-            None => Err("Frame extraction function failed".to_string()),
+
+        let log2_f = match self.config.digital_gain {
+            1 => Ok(-2),
+            2 => Ok(-1),
+            4 => Ok(0),
+            8 => Ok(1),
+            x => Err(format!("Digital gain {:?} not available", x)),
+        }?;
+
+        match self.config.binning {
+            1 => Ok(amplify(&frame, log2_f)),
+            2 => Ok(amplify(&binning::<1, u16>(&frame)?, log2_f + 2)),
+            4 => Ok(amplify(&binning::<2, u16>(&frame)?, log2_f + 4)),
+            x => Err(format!("Binning {:?} not available", x)),
         }
     }
 }
@@ -97,51 +199,76 @@ impl Drop for Camera {
     }
 }
 
-fn binning<const LOG2_F: usize>(
-    buffer_row_major: &[u16],
-    width: usize,
-    height: usize,
-) -> Option<Vec<u16>> {
-    let f: usize = 1 << LOG2_F;
-    let out_width: usize = width >> LOG2_F;
-    let out_height: usize = height >> LOG2_F;
+pub fn amplify<T1, T2>(frame: &Frame<T1>, log2_f: i32) -> Frame<T2>
+where
+    T1: PixelType + Cast<T2>,
+    T2: PixelType,
+    <T1 as Shr<T1>>::Output: Cast<T2>,
+    i32: Cast<T1>,
+{
+    let new_frame = match log2_f {
+        x if x < 0 => frame
+            .data_row_major
+            .iter()
+            .map(|&v| (v >> Cast::<T1>::cast(-x)).cast())
+            .collect(),
+        0 => frame.data_row_major.iter().map(|&v| v.cast()).collect(),
+        x => frame
+            .data_row_major
+            .iter()
+            .map(|&v| (v << x as usize).cast())
+            .collect(),
+    };
 
-    if out_height * f != height
-        || out_width * f != width
-        || buffer_row_major.len() != width * height
-    {
-        return None;
+    Frame {
+        data_row_major: new_frame,
+        width: frame.width,
+        height: frame.height,
+    }
+}
+
+pub fn binning<const LOG2_F: usize, T: PixelType>(frame: &Frame<T>) -> Result<Frame<T>, String> {
+    let f: usize = 1 << LOG2_F;
+    let out_width: usize = frame.width >> LOG2_F;
+    let out_height: usize = frame.height >> LOG2_F;
+
+    if out_height * f != frame.height {
+        return Err("Can't bin height".to_string());
+    }
+    if out_width * f != frame.width {
+        return Err("Can't bin width".to_string());
     }
 
-    let mut out = Vec::<u16>::with_capacity(buffer_row_major.len() >> (LOG2_F + LOG2_F));
+    let mut out = Vec::<T>::with_capacity(frame.data_row_major.len() >> (LOG2_F + LOG2_F));
 
     for h in 0..out_height {
         let out_base = h * out_width;
 
         //first line append to out vector
-        let in_base = (h << LOG2_F) * width;
+        let in_base = (h << LOG2_F) * frame.width;
         for w in 0..out_width {
             let in_base2 = in_base + (w << LOG2_F);
-            let mut out_value: u16 = 0;
-            for sub_w in 0..f {
-                out_value = out_value.wrapping_add(buffer_row_major[in_base2 + sub_w]);
+            let mut out_value = frame.data_row_major[in_base2];
+            for sub_w in 1..f {
+                out_value = out_value.wrapping_add(&frame.data_row_major[in_base2 + sub_w]);
             }
             out.push(out_value);
         }
 
         // All other lines add to it
         for sub_h in 1..f {
-            let in_base = ((h << LOG2_F) + sub_h) * width;
+            let in_base = ((h << LOG2_F) + sub_h) * frame.width;
             for w in 0..out_width {
                 let in_base2 = in_base + (w << LOG2_F);
-                let out_value = &mut out[out_base + w];
-                for sub_w in 0..f {
-                    *out_value = out_value.wrapping_add(buffer_row_major[in_base2 + sub_w]);
+                let mut out_value = frame.data_row_major[in_base2];
+                for sub_w in 1..f {
+                    out_value = out_value.wrapping_add(&frame.data_row_major[in_base2 + sub_w]);
                 }
+                out[out_base + w] = out[out_base + w].wrapping_add(&out_value);
             }
         }
     }
-    Some(out)
+    Frame::new(out, out_width, out_height)
 }
 
 #[cfg(test)]
@@ -150,78 +277,74 @@ mod tests {
 
     #[test]
     fn test_camera() {
-        let mut cam = Camera::new().unwrap();
-        let frame = cam.capture().unwrap();
-        assert_eq!(frame.len(), 1920 * 1080 / 4);
+        let config = CameraConfig::default();
+        let mut cam = Camera::new(config).unwrap();
+        let _: Frame<u8> = cam.capture().unwrap();
     }
 
     #[test]
     fn test_binning() {
         #[rustfmt::skip]
-        let data = [
-            5, 5, 0, 5, 5, 5,
-            5, 5, 1, 5, 5, 5,
-            0, 1, 8, 1, 0, 0,
-            4, 5, 1, 5, 7, 7,
-        ];
+        let data = Frame::new(vec![
+                5, 5, 0, 5, 5, 5,
+                5, 5, 1, 5, 5, 5,
+                0, 1, 8, 1, 0, 0,
+                4, 5, 1, 5, 7, 7,
+            ], 6, 4).unwrap();
         #[rustfmt::skip]
-        let expected = [
+        let expected = Frame::new(vec![
             20, 11, 20,
             10, 15, 14,
-        ];
+        ], 3, 2).unwrap();
 
-        let out = binning::<1>(&data, 6, 4).unwrap();
+        let out = binning::<1, u16>(&data).unwrap();
 
-        assert_eq!(out, expected);
+        assert_eq!(out.data_row_major, expected.data_row_major);
+        assert_eq!(out.width, expected.width);
+        assert_eq!(out.height, expected.height);
 
         // Test with 1x1 binning (no change)
-        #[rustfmt::skip]
-        let data = [
-            1, 2,
-            3, 4,
-        ];
-        #[rustfmt::skip]
-        let expected = [
-            1, 2,
-            3, 4,
-        ];
-        let out = binning::<0>(&data, 2, 2).unwrap();
-        assert_eq!(out, expected);
+        let frame = Frame::new(vec![1, 2, 3, 4], 2, 2).unwrap();
+        let expected = Frame::new(vec![1, 2, 3, 4], 2, 2).unwrap();
+        let out = binning::<0, u16>(&frame).unwrap();
+        assert_eq!(out.data_row_major, expected.data_row_major);
+        assert_eq!(out.width, expected.width);
+        assert_eq!(out.height, expected.height);
 
         // Test with 2x2 binning
         #[rustfmt::skip]
-        let data = [
+        let data = Frame::new(vec![
             1, 2, 3, 4,
             5, 6, 7, 8,
             9, 10, 11, 12,
             13, 14, 15, 16,
-        ];
+        ], 4, 4).unwrap();
         #[rustfmt::skip]
-        let expected = [
+        let expected = Frame::new(vec![
             1+2+5+6, 3+4+7+8,
             9+10+13+14, 11+12+15+16,
-        ];
-        let out = binning::<1>(&data, 4, 4).unwrap();
-        assert_eq!(out, expected);
+        ], 2, 2).unwrap();
+        let out = binning::<1, u16>(&data).unwrap();
+        assert_eq!(out.data_row_major, expected.data_row_major);
+        assert_eq!(out.width, expected.width);
+        assert_eq!(out.height, expected.height);
 
         // Test 4x4 binning
         #[rustfmt::skip]
-        let expected = [
+        let expected = Frame::new(vec![
             1+2+5+6+ 3+4+7+8 + 9+10+13+14 + 11+12+15+16,
-        ];
-        let out = binning::<2>(&data, 4, 4).unwrap();
-        assert_eq!(out, expected);
+        ], 1, 1).unwrap();
+        let out = binning::<2, u16>(&data).unwrap();
+        assert_eq!(out.data_row_major, expected.data_row_major);
+        assert_eq!(out.width, expected.width);
+        assert_eq!(out.height, expected.height);
 
         // Test with non-divisible dimensions (should return None)
-        let data = [1, 2, 3, 4, 5, 6];
-        assert!(binning::<1>(&data, 3, 2).is_none());
-
-        // Test with divisible dimensions but wrong shape (should return None)
-        let data = [1, 2, 3, 4];
-        assert!(binning::<1>(&data, 2, 4).is_none());
+        let expected = Frame::new(vec![1, 2, 3, 4, 5, 6], 3, 2).unwrap();
+        assert!(binning::<1, u8>(&expected).is_err());
 
         // Test with empty input
-        let data: [u16; 0] = [];
-        assert!(binning::<1>(&data, 0, 0).is_some());
+        let expected = Frame::new(vec![], 0, 0).unwrap();
+        assert!(binning::<1, u8>(&expected).is_ok());
     }
 }
