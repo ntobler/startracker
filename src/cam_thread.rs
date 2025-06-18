@@ -18,8 +18,9 @@ const PIXEL_FORMAT_SRGGB10: PixelFormat =
 
 pub fn camera_thread(
     trigger_rx: crossbeam_channel::Receiver<()>,
-    frame_tx: crossbeam_channel::Sender<T>,
-    extraction_func: impl Fn(&[u16]) -> T,
+    frame_tx: crossbeam_channel::Sender<(Vec<u16>, u32, u32)>,
+    exposure_us: u32,
+    analogue_gain: u32,
 ) -> Result<(), String> {
     println!("Camera thread: starting");
     let mgr = CameraManager::new().map_err(|e| format!("CameraManager error: {e:?}"))?;
@@ -43,13 +44,10 @@ pub fn camera_thread(
         .generate_configuration(&[StreamRole::StillCapture])
         .ok_or("Failed to generate camera configuration".to_string())?;
 
-    // Use MJPEG format so we can write resulting frame directly into jpeg file
+    // Set stream format
     cfgs.get_mut(0)
         .ok_or("No configuration found".to_string())?
         .set_pixel_format(PIXEL_FORMAT_SRGGB10);
-
-    println!("Generated config: {:#?}", cfgs);
-
     match cfgs.validate() {
         CameraConfigurationStatus::Valid => println!("Camera configuration valid!"),
         CameraConfigurationStatus::Adjusted => {
@@ -57,13 +55,9 @@ pub fn camera_thread(
         }
         CameraConfigurationStatus::Invalid => panic!("Error validating camera configuration"),
     }
-
-    // Ensure that pixel format was unchanged
-    assert_eq!(
-        cfgs.get(0).unwrap().get_pixel_format(),
-        PIXEL_FORMAT_SRGGB10,
-        "SRGGB10 is not supported by the camera"
-    );
+    if cfgs.get(0).unwrap().get_pixel_format() != PIXEL_FORMAT_SRGGB10 {
+        return Err("SRGGB10 is not supported by the camera".to_string());
+    }
 
     active_cam
         .configure(&mut cfgs)
@@ -105,6 +99,15 @@ pub fn camera_thread(
 
     // Queue all requests
     for req in reqs.into_iter() {
+        let controls = req.controls_mut();
+        controls.set(ControlId::AeEnable, ControlValue::from(false));
+        controls.set(ControlId::ExposureTime, ControlValue::from(exposure_us)); //microseconds
+        controls.set(
+            ControlId::AnalogueGain,
+            ControlValue::from(analogue_gain as f32),
+        );
+        println!("Camera controls {:?} completed!", controls);
+
         active_cam.queue_request(req).unwrap();
     }
 
@@ -144,12 +147,15 @@ pub fn camera_thread(
                 println!("sequence {:?}", frame_buffer_meta.sequence());
 
                 let start = Instant::now();
-                let raw: &[u16] = bytemuck::cast_slice(buffer_data);
-                let frame = extraction_func(raw);
+                // Copying from the buffer is very slow on the Raspberry Pi (30..45ms)
+                // However it might be worth copying the data to an intermediate buffer before performing
+                // random access operations on the data, as this is magnitudes slower on the buffer compared
+                // to a freshly allocated Vec
+                let frame: Vev<u16> = bytemuck::cast_slice(buffer_data).to_vec();
                 let duration = start.elapsed();
                 println!("Extracting frame took {:?}", duration);
 
-                frame_tx.send(frame).ok();
+                frame_tx.send((frame, 1920, 1080)).ok();
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {
                 // nothing available now, proceed

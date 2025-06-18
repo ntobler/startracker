@@ -10,7 +10,7 @@ use tokio::time::sleep;
 use warp::ws::WebSocket;
 use warp::Filter;
 
-pub mod cam;
+mod cam;
 
 #[tokio::main]
 async fn main() {
@@ -72,7 +72,13 @@ async fn handle_ws(ws: WebSocket) {
 
     println!("WebSocket connected");
 
-    let mut camera = match cam::Camera::new() {
+    let config = cam::CameraConfig {
+        analogue_gain: 1,
+        digital_gain: 1,
+        exposure_us: 10000,
+        binning: 2,
+    };
+    let mut camera = match cam::Camera::new(config) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("Error initializing camera: {}.", e);
@@ -82,7 +88,7 @@ async fn handle_ws(ws: WebSocket) {
 
     loop {
         // Get fresh image
-        let raw = match camera.capture() {
+        let raw: cam::Frame<u8> = match camera.capture() {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Error getting camera image: {}.", e);
@@ -90,17 +96,16 @@ async fn handle_ws(ws: WebSocket) {
             }
         };
 
-        // convert to u8 image
-        let scaled: Vec<u8> = raw.iter().map(|v| (v / 4) as u8).collect();
-        let img = Mat::new_rows_cols_with_data(1080, 1920, &scaled).unwrap();
-
         // Encode to JPEG
+        let img =
+            Mat::new_rows_cols_with_data(raw.height as i32, raw.width as i32, &raw.data_row_major)
+                .unwrap();
         let mut buf = Vector::<u8>::new();
         imencode(
             ".jpg",
             &img,
             &mut buf,
-            &Vector::<i32>::from(vec![IMWRITE_JPEG_QUALITY, 50]),
+            &Vector::<i32>::from_iter([IMWRITE_JPEG_QUALITY, 50]),
         )
         .unwrap();
 
