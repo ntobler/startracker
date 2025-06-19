@@ -324,8 +324,12 @@ struct Camera {
 impl Camera {
     #[new]
     fn new(config: &CameraConfig) -> PyResult<Self> {
-        let camera = cam::Camera::new(config.inner.clone()).map_err(PyRuntimeError::new_err)?;
+        let camera = cam::Camera::new(&config.inner).map_err(PyRuntimeError::new_err)?;
         Ok(Camera { inner: camera })
+    }
+
+    pub fn set_config(&mut self, config: &CameraConfig) {
+        self.inner.set_config(&config.inner)
     }
 
     pub fn capture<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray2<u8>>> {

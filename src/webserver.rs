@@ -78,13 +78,15 @@ async fn handle_ws(ws: WebSocket) {
         exposure_us: 10000,
         binning: 2,
     };
-    let mut camera = match cam::Camera::new(config) {
+    let mut camera = match cam::Camera::new(&config) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("Error initializing camera: {}.", e);
             return;
         }
     };
+
+    camera.set_config(&config);
 
     loop {
         // Get fresh image
