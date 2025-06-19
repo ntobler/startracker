@@ -12,15 +12,17 @@ use libcamera::{
 };
 use std::time::Instant;
 
+use crate::cam;
+
 // drm-fourcc does not have MJPEG type yet, construct it from raw fourcc identifier
 const PIXEL_FORMAT_SRGGB10: PixelFormat =
     PixelFormat::new(u32::from_le_bytes([b'R', b'G', b'1', b'0']), 0);
 
 pub fn camera_thread(
-    trigger_rx: crossbeam_channel::Receiver<()>,
-    frame_tx: crossbeam_channel::Sender<(Vec<u16>, u32, u32)>,
-    exposure_us: u32,
-    analogue_gain: u32,
+    trigger_rx: crossbeam_channel::Receiver<(u32, u32)>,
+    frame_tx: crossbeam_channel::Sender<cam::Frame<u16>>,
+    mut exposure_us: u32,
+    mut analogue_gain: u32,
 ) -> Result<(), String> {
     println!("Camera thread: starting");
     let mgr = CameraManager::new().map_err(|e| format!("CameraManager error: {e:?}"))?;
@@ -99,32 +101,40 @@ pub fn camera_thread(
 
     // Queue all requests
     for req in reqs.into_iter() {
-        let controls = req.controls_mut();
-        controls.set(ControlId::AeEnable, ControlValue::from(false));
-        controls.set(ControlId::ExposureTime, ControlValue::from(exposure_us)); //microseconds
-        controls.set(
-            ControlId::AnalogueGain,
-            ControlValue::from(analogue_gain as f32),
-        );
-        println!("Camera controls {:?} completed!", controls);
-
+        set_controls(req, exposure_us, analogue_gain);
         active_cam.queue_request(req).unwrap();
     }
 
     println!("Camera thread: started");
 
+    let poll_interval = Duration::from_millis(100);
+
     // Start acquisition loop
     loop {
-        // Get pending request blocking
-        let mut req = req_rx
-            .recv()
-            .map_err(|_| "Failure reading from request channel".to_string())?;
+        // Get pending requests. Use timeout to check for disconnected trigger
+        let mut req = match req_rx.recv_timeout(poll_interval) {
+            Ok(req) => req,
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                if trigger_rx.is_disconnected() {
+                    return Ok(());
+                } else {
+                    continue;
+                }
+            }
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                return Err("Failure reading from request channel".to_string());
+            }
+        };
 
         println!("Camera request {:?} completed!", req);
 
         //Check for trigger signal
         match trigger_rx.try_recv() {
-            Ok(_) => {
+            Ok((new_exposure_ns, new_analogue_gain)) => {
+                // Get new parameters from trigger channel
+                exposure_us = new_exposure_ns;
+                analogue_gain = new_analogue_gain;
+
                 // Trigger signal present -> get buffer and read data
                 println!("Camera thread: trigger ok received");
 
@@ -151,11 +161,17 @@ pub fn camera_thread(
                 // However it might be worth copying the data to an intermediate buffer before performing
                 // random access operations on the data, as this is magnitudes slower on the buffer compared
                 // to a freshly allocated Vec
-                let frame: Vev<u16> = bytemuck::cast_slice(buffer_data).to_vec();
+                let frame_data: Vev<u16> = bytemuck::cast_slice(buffer_data).to_vec();
                 let duration = start.elapsed();
                 println!("Extracting frame took {:?}", duration);
 
-                frame_tx.send((frame, 1920, 1080)).ok();
+                let frame = cam::Frame {
+                    data_row_major: frame_data,
+                    width: width,
+                    height: height,
+                    timestamp_ns,
+                };
+                frame_tx.send(frame).ok();
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {
                 // nothing available now, proceed
@@ -169,6 +185,18 @@ pub fn camera_thread(
         }
         // Requeue request
         req.reuse(libcamera::request::ReuseFlag::REUSE_BUFFERS);
+        set_controls(req, exposure_us, analogue_gain);
         active_cam.queue_request(req).unwrap();
     }
+}
+
+fn set_controls(&mut request: libcamera::request::Request, exposure_us: u32, analogue_gain: u32) {
+    let mut controls = req.controls_mut();
+    // controls.set(ControlId::AeEnable, ControlValue::from(false));
+    // controls.set(ControlId::ExposureTime, ControlValue::from(exposure_us)); //microseconds
+    // controls.set(
+    //     ControlId::AnalogueGain,
+    //     ControlValue::from(analogue_gain as f32),
+    // );
+    println!("Camera controls {:?} completed!", controls);
 }

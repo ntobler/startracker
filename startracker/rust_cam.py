@@ -10,6 +10,8 @@ def rust_cam() -> None:
     config = libstartracker.CameraConfig(1, 4, 100000, 2)
     cam = libstartracker.Camera(config)
     for i in range(4):
+        config = libstartracker.CameraConfig(1, int(2**i), 100000, 2)
+        cam.set_config(config)
         frame = cam.capture()
         cv2.imwrite(f"test{i}.png", frame)
 
