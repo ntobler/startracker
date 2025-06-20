@@ -532,7 +532,7 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         )
 
         rot_matrix = r.as_matrix()
-        extrinsic = np.concatenate((rot_matrix.T, np.zeros((3, 1))), axis=1)
+        extrinsic: np.ndarray = np.concatenate((rot_matrix.T, np.zeros((3, 1))), axis=1)
         return extrinsic
 
     @override

@@ -61,6 +61,8 @@ pub fn camera_thread(
         return Err("SRGGB10 is not supported by the camera".to_string());
     }
 
+    let imsize: libcamera::geometry::Size = cfgs.get(0).unwrap().get_size();
+
     active_cam
         .configure(&mut cfgs)
         .expect("Unable to configure camera");
@@ -131,9 +133,11 @@ pub fn camera_thread(
                 // Trigger signal present -> get buffer and read data
                 println!("Camera thread: trigger ok received");
 
-                let &metadata = req.metadata();
-                let effective_exposure_us: libcamera::controls::ExposureTime = metadata.get()?;
-                let effective_analogue_gain: libcamera::controls::AnalogueGain = metadata.get()?;
+                let metadata = req.metadata();
+                let effective_exposure_us: libcamera::controls::ExposureTime =
+                    metadata.get().map_err(|e| e.to_string())?;
+                let effective_analogue_gain: libcamera::controls::AnalogueGain =
+                    metadata.get().map_err(|e| e.to_string())?;
                 println!(
                     "Camera thread: Exposure: {:?}, analogue gain {:?}",
                     effective_exposure_us, effective_analogue_gain
@@ -164,10 +168,14 @@ pub fn camera_thread(
                 let duration = start.elapsed();
                 println!("Camera thread: Extracting frame took {:?}", duration);
 
+                if frame_data.len() != (imsize.width * imsize.height) as usize {
+                    return Err("frame_data size does not equate to width * height".to_string());
+                }
+
                 let frame = cam::Frame {
                     data_row_major: frame_data,
-                    width: 1920,
-                    height: 1080,
+                    width: imsize.width as usize,
+                    height: imsize.height as usize,
                     timestamp_ns,
                 };
                 frame_tx.send(frame).ok();
