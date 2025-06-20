@@ -173,8 +173,8 @@ impl Camera {
 
         match self.config.binning {
             1 => Ok(amplify(&frame, log2_f)),
-            2 => Ok(amplify(&binning::<1, u16>(&frame)?, log2_f + 2)),
-            4 => Ok(amplify(&binning::<2, u16>(&frame)?, log2_f + 4)),
+            2 => Ok(amplify(&binning::<1, u16>(&frame)?, log2_f - 2)),
+            4 => Ok(amplify(&binning::<2, u16>(&frame)?, log2_f - 4)),
             x => Err(format!("Binning {:?} not available", x)),
         }
     }
