@@ -59,6 +59,12 @@ export default {
                 img.src = URL.createObjectURL(blob);
                 img.style.display = "block"
             };
+            ws.onclose = function(event) {
+                ws.close()
+            };
+            ws.onerror = function(event) {
+                ws.close()
+            };
         },
         onmessage(response) {
             this.stream = JSON.parse(response.data);
@@ -73,6 +79,12 @@ export default {
             let url = 'ws://' + window.location.host + "/api/stream";
             let ws = new WebSocket(url);
             ws.onmessage = this.onmessage.bind(this);
+            ws.onclose = function(event) {
+                ws.close()
+            };
+            ws.onerror = function(event) {
+                ws.close()
+            };
         },
         setSettings() {
             let payload = {
