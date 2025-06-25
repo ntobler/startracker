@@ -4,16 +4,37 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 use tokio::signal;
-use tokio::time::sleep;
 use warp::ws::WebSocket;
 use warp::Filter;
 
 mod cam;
+mod opencvutils;
+mod webutils;
 
 #[tokio::main]
 async fn main() {
+    let running = Arc::new(AtomicBool::new(true)); // Initially set to true
+
+    let image_dispatcher = Arc::new(webutils::DataDispatcher::<std::sync::Arc<Vec<u8>>>::new());
+    let stream_dispatcher = Arc::new(webutils::DataDispatcher::<String>::new());
+
+    //Start camera thread
+    let image_dis = Arc::clone(&image_dispatcher);
+    let stream_dis = Arc::clone(&stream_dispatcher);
+    let running_clone = Arc::clone(&running);
+    let camera_thread_handle = thread::spawn(move || {
+        tick(
+            image_dis.as_ref(),
+            stream_dis.as_ref(),
+            running_clone.as_ref(),
+        );
+    });
+
     // Serve / as /web/axisAlign.html
     let index = warp::path::end().map(|| {
         warp::reply::html(
@@ -29,7 +50,16 @@ async fn main() {
     let post_handler = warp::post()
         .and(warp::path!("api" / "get_state"))
         .and(warp::body::json().or_else(|_| async {
-            Ok::<(serde_json::Value,), Infallible>((serde_json::json!({}),))
+            let state = serde_json::json!({
+                "view_settings": serde_json::json!({
+                    "coordinate_frame": false,
+                    "brightness": 1u32,
+                    "image_type": "raw",
+                    "target_quality": "50k",
+                }),
+            });
+
+            Ok::<(serde_json::Value,), Infallible>((state,))
         }))
         .map(|mut payload: serde_json::Value| {
             println!("api/get_state");
@@ -38,44 +68,77 @@ async fn main() {
         });
 
     // WebSocket handler
-    let ws_route = warp::path!("api" / "image")
-        .and(warp::ws())
-        .map(|ws: warp::ws::Ws| ws.on_upgrade(handle_ws));
+    let running_clone = Arc::clone(&running);
+    let image_ws_route =
+        warp::path!("api" / "image")
+            .and(warp::ws())
+            .map(move |ws: warp::ws::Ws| {
+                let dispatcher = Arc::clone(&image_dispatcher);
+                let r = Arc::clone(&running_clone);
+                ws.on_upgrade(move |s| handle_image_ws(s, dispatcher, r))
+            });
+    let running_clone = Arc::clone(&running);
+    let stream_ws_route =
+        warp::path!("api" / "stream")
+            .and(warp::ws())
+            .map(move |ws: warp::ws::Ws| {
+                let dispatcher = Arc::clone(&stream_dispatcher);
+                let r = Arc::clone(&running_clone);
+                ws.on_upgrade(move |s| handle_stream_ws(s, dispatcher, r))
+            });
 
-    let routes = static_files.or(index).or(post_handler).or(ws_route);
+    let routes = static_files
+        .or(index)
+        .or(post_handler)
+        .or(image_ws_route)
+        .or(stream_ws_route);
 
     println!("Running server on http://localhost:3030");
 
-    let shutdown = async {
+    let running_clone = Arc::clone(&running);
+    let shutdown = async move {
         signal::ctrl_c()
             .await
             .expect("failed to install Ctrl+C handler");
         println!("Received Ctrl+C, shutting down...");
+        running_clone.store(false, Ordering::Release);
     };
 
-    let addr: SocketAddr = ([127, 0, 0, 1], 3030).into();
+    let addr: SocketAddr = ([0, 0, 0, 0], 5000).into();
     let (_addr, server_future) = warp::serve(routes).bind_with_graceful_shutdown(addr, shutdown);
 
-    server_future.await;
-
-    println!("Server shut down gracefully");
-}
-
-async fn handle_ws(ws: WebSocket) {
-    use opencv::{
-        core::{Mat, Vector},
-        imgcodecs::{imencode, IMWRITE_JPEG_QUALITY},
-        prelude::*,
+    let wait_for_signal_and_then_timeout = async move {
+        while running.load(Ordering::Acquire) {
+            tokio::time::sleep(Duration::from_millis(50)).await; // Poll every 50ms
+        }
+        println!("Hard shutdown trigger: Detected `running` flag is false. Starting post-signal delay...");
+        tokio::time::sleep(Duration::from_secs(2)).await;
     };
 
-    let (mut tx, mut _rx) = ws.split();
+    tokio::select! {
+        _ = server_future => {
+            println!("Server shut down gracefully");
+        }
+        _ = wait_for_signal_and_then_timeout => {
+            eprintln!("Server shut down failed. Forcing exit.");
+        }
+    }
 
-    println!("WebSocket connected");
+    camera_thread_handle.join().expect("Camera thread panicked");
+    println!("Camera joined");
+}
+
+fn tick(
+    image_dispatcher: &webutils::DataDispatcher<std::sync::Arc<Vec<u8>>>,
+    stream_dispatcher: &webutils::DataDispatcher<String>,
+    running: &AtomicBool,
+) {
+    println!("Setup Camera");
 
     let config = cam::CameraConfig {
         analogue_gain: 1,
-        digital_gain: 1,
-        exposure_us: 10000,
+        digital_gain: 4,
+        exposure_us: 500000,
         binning: 2,
     };
     let mut camera = match cam::Camera::new(&config) {
@@ -88,7 +151,9 @@ async fn handle_ws(ws: WebSocket) {
 
     camera.set_config(&config);
 
-    loop {
+    let mut ie = opencvutils::ImageEncoder::new(Some(30.0));
+
+    while running.load(Ordering::Acquire) {
         // Get fresh image
         let raw: cam::Frame<u8> = match camera.capture() {
             Ok(v) => v,
@@ -98,60 +163,94 @@ async fn handle_ws(ws: WebSocket) {
             }
         };
 
-        // Encode to JPEG
-        let img =
-            Mat::new_rows_cols_with_data(raw.height as i32, raw.width as i32, &raw.data_row_major)
-                .unwrap();
-        let mut buf = Vector::<u8>::new();
-        imencode(
-            ".jpg",
-            &img,
-            &mut buf,
-            &Vector::<i32>::from_iter([IMWRITE_JPEG_QUALITY, 50]),
-        )
-        .unwrap();
+        let encoded = match ie.encode(&raw) {
+            Some(v) => v,
+            None => {
+                eprintln!("Error encoding image");
+                continue;
+            }
+        };
 
+        image_dispatcher.put(std::sync::Arc::new(encoded));
+
+        let data = serde_json::json!({
+            "image_size": (raw.width, raw.height),
+            "image_quality": ie.quality_str(),
+        });
+
+        stream_dispatcher.put(data.to_string());
+    }
+
+    println!("Camera thread stopped gracefully");
+}
+
+async fn handle_image_ws(
+    ws: WebSocket,
+    dispatcher: Arc<webutils::DataDispatcher<std::sync::Arc<Vec<u8>>>>,
+    running: Arc<AtomicBool>,
+) {
+    let (mut tx, mut _rx) = ws.split();
+
+    println!("WebSocket image connected");
+
+    while running.load(Ordering::Acquire) {
+        // We need to copy the Vector inside the Arc to send it over WebSocket
+        // Copying here is better as we don't block the mutex
+        let d = Duration::from_millis(100);
+        let encoded = match dispatcher.get_blocking_with_timeout(d) {
+            Ok(data) => data.as_ref().clone(),
+            Err(webutils::TimeoutError) => {
+                // Timeout, continue to next iteration
+                continue;
+            }
+        };
         // Send over WebSocket as binary
-        if let Err(e) = tx.send(warp::ws::Message::binary(buf.to_vec())).await {
+        if let Err(e) = tx.send(warp::ws::Message::binary(encoded)).await {
             eprintln!("WS send error: {}. disconnected", e);
             break;
         }
-
-        sleep(Duration::from_secs(1)).await;
     }
+
+    if let Err(e) = tx.close().await {
+        eprintln!("Error sending WebSocket close frame: {}", e);
+    } else {
+        println!("Successfully sent WebSocket close frame.");
+    }
+
+    println!("WebSocket image disconnected gracefully");
 }
 
-#[cfg(test)]
-mod tests {
-    use opencv;
-    use opencv::core::MatTraitConst;
-    use opencv::prelude::MatTraitConstManual;
+async fn handle_stream_ws(
+    ws: WebSocket,
+    dispatcher: Arc<webutils::DataDispatcher<String>>,
+    running: Arc<AtomicBool>,
+) {
+    let (mut tx, mut _rx) = ws.split();
 
-    #[test]
-    fn test_opencv_array() {
-        let scaled: Vec<u8> = vec![1, 2, 3, 4, 5, 6];
-        let mat = opencv::core::Mat::new_rows_cols_with_data(2, 3, &scaled).unwrap();
-        let mut out_mat = opencv::core::Mat::new_rows_cols_with_default(
-            mat.rows(),
-            mat.cols(),
-            opencv::core::CV_8UC1,
-            opencv::core::Scalar::new(0.0, 0.0, 0.0, 0.0),
-        )
-        .unwrap();
-        opencv::imgproc::threshold(
-            &mat,
-            &mut out_mat,
-            2 as f64,
-            1 as f64,
-            opencv::imgproc::THRESH_BINARY,
-        )
-        .unwrap();
-        let out_array = out_mat.data_bytes().unwrap();
-        assert!(out_array[0] == 0);
-        assert!(out_array[1] == 0);
-        assert!(out_array[2] == 1);
-        assert!(out_array[3] == 1);
-        assert!(out_array[4] == 1);
-        assert!(out_array[5] == 1);
+    println!("WebSocket stream connected");
+
+    while running.load(Ordering::Acquire) {
+        let d = Duration::from_millis(100);
+        let json_str = match dispatcher.get_blocking_with_timeout(d) {
+            Ok(data) => data,
+            Err(webutils::TimeoutError) => {
+                // Timeout, continue to next iteration
+                continue;
+            }
+        };
+
+        // Send over WebSocket as json
+        if let Err(e) = tx.send(warp::ws::Message::text(json_str)).await {
+            eprintln!("WS send error: {}. disconnected", e);
+            break;
+        }
     }
+
+    if let Err(e) = tx.close().await {
+        eprintln!("Error sending WebSocket close frame: {}", e);
+    } else {
+        println!("Successfully sent WebSocket close frame.");
+    }
+
+    println!("WebSocket stream disconnected gracefully");
 }

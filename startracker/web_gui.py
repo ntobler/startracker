@@ -431,7 +431,6 @@ class ImageEncoder:
                 however, subsequent encodings will be lower in quality. If None, no limit is used.
         """
         self.max_kb = max_kb
-        self._level = 0
         self._file_type = ".png"
         self._quality = 100.0
 
