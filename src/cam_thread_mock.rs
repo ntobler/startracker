@@ -31,14 +31,12 @@ pub fn camera_thread(
 
         match trigger_rx.try_recv() {
             Ok((new_exposure_ns, new_analogue_gain)) => {
+                // Trigger signal present -> get buffer and read data
+
                 // Get new parameters from trigger channel
                 exposure_us = new_exposure_ns;
                 analogue_gain = new_analogue_gain;
-                // Trigger signal present -> get buffer and read data
-                println!(
-                    "Camera thread: trigger ok received {:?}, {:?}",
-                    exposure_us, analogue_gain
-                );
+
                 let mut frame_data = vec![0; width * height];
                 rng.fill_bytes(bytemuck::cast_slice_mut(&mut frame_data));
                 frame_data.iter_mut().for_each(|x| *x &= 0xf);

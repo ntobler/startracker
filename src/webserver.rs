@@ -1,38 +1,70 @@
-#![cfg(feature = "webserver")]
-
 use futures_util::{SinkExt, StreamExt};
-use serde_json;
+use serde::Serialize;
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::signal;
+use warp::http::StatusCode;
 use warp::ws::WebSocket;
 use warp::Filter;
+use warp::Rejection;
+use warp::Reply;
 
+mod app;
 mod cam;
 mod opencvutils;
 mod webutils;
 
+#[derive(Debug)]
+struct AppError {
+    inner: String,
+}
+impl warp::reject::Reject for AppError {}
+
+#[derive(Serialize)]
+struct ErrorResponse {
+    message: String,
+    code: u16,
+}
+
+async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
+    let code;
+    let message;
+
+    if err.is_not_found() {
+        code = StatusCode::NOT_FOUND;
+        message = "Not Found".to_string();
+    } else if let Some(app_err) = err.find::<AppError>() {
+        // This is our custom ApplicationError!
+        eprintln!("Application Error: {}", app_err.inner); // Log full error details
+        code = StatusCode::INTERNAL_SERVER_ERROR;
+        message = "Internal Server Error".to_string(); // Return a generic message to client
+    } else {
+        // Fallback for any unhandled rejections
+        eprintln!("Unhandled rejection: {:?}", err);
+        code = StatusCode::INTERNAL_SERVER_ERROR; // Or BAD_REQUEST, depending on the unhandled type
+        message = "An unexpected error occurred".to_string();
+    }
+
+    let json = warp::reply::json(&ErrorResponse {
+        message,
+        code: code.as_u16(),
+    });
+
+    Ok(warp::reply::with_status(json, code))
+}
+
 #[tokio::main]
 async fn main() {
-    let running = Arc::new(AtomicBool::new(true)); // Initially set to true
-
-    let image_dispatcher = Arc::new(webutils::DataDispatcher::<std::sync::Arc<Vec<u8>>>::new());
-    let stream_dispatcher = Arc::new(webutils::DataDispatcher::<String>::new());
+    let application = Arc::new(app::App::load_or_default("config.json"));
 
     //Start camera thread
-    let image_dis = Arc::clone(&image_dispatcher);
-    let stream_dis = Arc::clone(&stream_dispatcher);
-    let running_clone = Arc::clone(&running);
+    let app_clone = Arc::clone(&application);
     let camera_thread_handle = thread::spawn(move || {
-        tick(
-            image_dis.as_ref(),
-            stream_dis.as_ref(),
-            running_clone.as_ref(),
-        );
+        app::tick(app_clone.as_ref());
     });
 
     // Serve / as /web/axisAlign.html
@@ -46,69 +78,95 @@ async fn main() {
     // Serve static files from ./web
     let static_files = warp::fs::dir("web");
 
-    // POST handler
-    let post_handler = warp::post()
-        .and(warp::path!("api" / "get_state"))
-        .and(warp::body::json().or_else(|_| async {
-            let state = serde_json::json!({
-                "view_settings": serde_json::json!({
-                    "coordinate_frame": false,
-                    "brightness": 1u32,
-                    "image_type": "raw",
-                    "target_quality": "50k",
-                }),
+    // POST handlers
+    let app_clone = Arc::clone(&application);
+    let get_state_post_handler =
+        warp::post()
+            .and(warp::path!("api" / "get_state"))
+            .and_then(move || {
+                let app_cloned_for_fut = Arc::clone(&app_clone);
+                async move {
+                    println!("api/get_state");
+                    match app_cloned_for_fut.get_state() {
+                        Ok(state) => Ok(warp::reply::json(&state)),
+                        Err(e) => Err(warp::reject::custom(AppError { inner: e })),
+                    }
+                }
             });
 
-            Ok::<(serde_json::Value,), Infallible>((state,))
-        }))
-        .map(|mut payload: serde_json::Value| {
-            println!("api/get_state");
-            payload["parsed"] = serde_json::json!(true);
-            warp::reply::json(&payload)
+    let app_clone = Arc::clone(&application);
+    let set_settings_post_handler = warp::post()
+        .and(warp::path!("api" / "set_settings"))
+        .and(warp::body::json())
+        .and_then(move |rx: app::Persistent| {
+            let app_cloned_for_fut = Arc::clone(&app_clone);
+            async move {
+                println!("api/set_settings");
+                match app_cloned_for_fut.set_settings(rx) {
+                    Ok(state) => Ok(warp::reply::json(&state)),
+                    Err(e) => Err(warp::reject::custom(AppError { inner: e })),
+                }
+            }
+        });
+
+    let app_clone = Arc::clone(&application);
+    let capture_post_handler = warp::post()
+        .and(warp::path!("api" / "capture"))
+        .and(warp::body::json())
+        .and_then(move |rx: app::CameraModeRequest| {
+            let app_cloned_for_fut = Arc::clone(&app_clone);
+            async move {
+                println!("api/capture");
+                match app_cloned_for_fut.set_camera_mode(rx) {
+                    Ok(state) => Ok(warp::reply::json(&state)),
+                    Err(e) => Err(warp::reject::custom(AppError { inner: e })),
+                }
+            }
         });
 
     // WebSocket handler
-    let running_clone = Arc::clone(&running);
+    let app_clone = Arc::clone(&application);
     let image_ws_route =
         warp::path!("api" / "image")
             .and(warp::ws())
             .map(move |ws: warp::ws::Ws| {
-                let dispatcher = Arc::clone(&image_dispatcher);
-                let r = Arc::clone(&running_clone);
-                ws.on_upgrade(move |s| handle_image_ws(s, dispatcher, r))
+                let a = Arc::clone(&app_clone);
+                ws.on_upgrade(move |s| handle_image_ws(s, a))
             });
-    let running_clone = Arc::clone(&running);
+
+    let app_clone = Arc::clone(&application);
     let stream_ws_route =
         warp::path!("api" / "stream")
             .and(warp::ws())
             .map(move |ws: warp::ws::Ws| {
-                let dispatcher = Arc::clone(&stream_dispatcher);
-                let r = Arc::clone(&running_clone);
-                ws.on_upgrade(move |s| handle_stream_ws(s, dispatcher, r))
+                let a = Arc::clone(&app_clone);
+                ws.on_upgrade(move |s| handle_stream_ws(s, a))
             });
 
     let routes = static_files
         .or(index)
-        .or(post_handler)
+        .or(get_state_post_handler)
+        .or(set_settings_post_handler)
+        .or(capture_post_handler)
         .or(image_ws_route)
-        .or(stream_ws_route);
+        .or(stream_ws_route)
+        .recover(handle_rejection);
 
-    println!("Running server on http://localhost:3030");
-
-    let running_clone = Arc::clone(&running);
+    let app_clone = Arc::clone(&application);
     let shutdown = async move {
         signal::ctrl_c()
             .await
             .expect("failed to install Ctrl+C handler");
         println!("Received Ctrl+C, shutting down...");
-        running_clone.store(false, Ordering::Release);
+        app_clone.running.store(false, Ordering::Release);
     };
 
     let addr: SocketAddr = ([0, 0, 0, 0], 5000).into();
+    println!("Running server on {:?}", addr);
     let (_addr, server_future) = warp::serve(routes).bind_with_graceful_shutdown(addr, shutdown);
 
     let wait_for_signal_and_then_timeout = async move {
-        while running.load(Ordering::Acquire) {
+        while application.running.load(Ordering::Acquire) {
             tokio::time::sleep(Duration::from_millis(50)).await; // Poll every 50ms
         }
         println!("Hard shutdown trigger: Detected `running` flag is false. Starting post-signal delay...");
@@ -128,72 +186,14 @@ async fn main() {
     println!("Camera joined");
 }
 
-fn tick(
-    image_dispatcher: &webutils::DataDispatcher<std::sync::Arc<Vec<u8>>>,
-    stream_dispatcher: &webutils::DataDispatcher<String>,
-    running: &AtomicBool,
-) {
-    println!("Setup Camera");
-
-    let config = cam::CameraConfig {
-        analogue_gain: 1,
-        digital_gain: 4,
-        exposure_us: 500000,
-        binning: 2,
-    };
-    let mut camera = match cam::Camera::new(&config) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error initializing camera: {}.", e);
-            return;
-        }
-    };
-
-    camera.set_config(&config);
-
-    let mut ie = opencvutils::ImageEncoder::new(Some(30.0));
-
-    while running.load(Ordering::Acquire) {
-        // Get fresh image
-        let raw: cam::Frame<u8> = match camera.capture() {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Error getting camera image: {}.", e);
-                continue;
-            }
-        };
-
-        let encoded = match ie.encode(&raw) {
-            Some(v) => v,
-            None => {
-                eprintln!("Error encoding image");
-                continue;
-            }
-        };
-
-        image_dispatcher.put(std::sync::Arc::new(encoded));
-
-        let data = serde_json::json!({
-            "image_size": (raw.width, raw.height),
-            "image_quality": ie.quality_str(),
-        });
-
-        stream_dispatcher.put(data.to_string());
-    }
-
-    println!("Camera thread stopped gracefully");
-}
-
-async fn handle_image_ws(
-    ws: WebSocket,
-    dispatcher: Arc<webutils::DataDispatcher<std::sync::Arc<Vec<u8>>>>,
-    running: Arc<AtomicBool>,
-) {
+async fn handle_image_ws(ws: WebSocket, application: Arc<app::App>) {
     let (mut tx, mut _rx) = ws.split();
 
     println!("WebSocket image connected");
 
-    while running.load(Ordering::Acquire) {
+    let dispatcher = &application.image_dispatcher;
+
+    while application.running.load(Ordering::Acquire) {
         // We need to copy the Vector inside the Arc to send it over WebSocket
         // Copying here is better as we don't block the mutex
         let d = Duration::from_millis(100);
@@ -220,16 +220,14 @@ async fn handle_image_ws(
     println!("WebSocket image disconnected gracefully");
 }
 
-async fn handle_stream_ws(
-    ws: WebSocket,
-    dispatcher: Arc<webutils::DataDispatcher<String>>,
-    running: Arc<AtomicBool>,
-) {
+async fn handle_stream_ws(ws: WebSocket, application: Arc<app::App>) {
     let (mut tx, mut _rx) = ws.split();
 
     println!("WebSocket stream connected");
 
-    while running.load(Ordering::Acquire) {
+    let dispatcher = &application.stream_dispatcher;
+
+    while application.running.load(Ordering::Acquire) {
         let d = Duration::from_millis(100);
         let json_str = match dispatcher.get_blocking_with_timeout(d) {
             Ok(data) => data,
