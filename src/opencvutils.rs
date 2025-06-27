@@ -51,6 +51,10 @@ impl ImageEncoder {
         }
     }
 
+    pub fn set_max_kb(&mut self, max_kb: Option<f32>) {
+        self.max_kb = max_kb;
+    }
+
     pub fn encode(&mut self, frame: &cam::Frame<u8>) -> Option<Vec<u8>> {
         let encoded_bytes = encode_image(
             frame,

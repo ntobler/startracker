@@ -413,7 +413,8 @@ class ViewSettings(util.JsonDataclass):
     """Brightness for the camera display"""
     image_type: str = "raw"
     """Image type to show. One of raw, processed, or crop2x"""
-    target_quality: str = "50k"
+    target_quality: int = 50
+    """Image quality target size in kilobytes. 0 is unlimited."""
 
 
 class ImageEncoder:

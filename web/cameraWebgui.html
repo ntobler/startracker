@@ -60,9 +60,9 @@
                     </button></div>
                 <div><button type="button" id="toggle_settings" @click="toggleSettings()"
                         :class="{ active: viewSettings }">Settings</button></div>
-                <div><button type="button" id="toggle_cam" @click="capture('toggle_continuous')"
-                        :class="{ active: cameraMode=='continuous' }">
-                        {{ cameraMode=='continuous' ? "Stop" : "Start" }}
+                <div><button type="button" id="toggle_cam" @click="capture('ToggleContinuous')"
+                        :class="{ active: cameraMode=='Continuous' }">
+                        {{ cameraMode=='Continuous' ? "Stop" : "Start" }}
                     </button></div>
                 <div><a href="./axisAlign.html"><button type="button">Align View</button></a></div>
             </div>
@@ -70,10 +70,10 @@
         <div id="footer-bar">
             <div v-if="camera_settings && viewSettings" title="Camera exposure and resolution settings">
                 Exposure
-                <input type="number" step="1" v-model.number="camera_settings.exposure_ms" @change="setSettings"
+                <input type="number" step="1" v-model.number="exposureMs" @change="setSettings"
                     style="width: 4em" title="Exposure setting of the camera in milliseconds" /> ms
                 Gain
-                <input type="number" v-model.number="camera_settings.analog_gain" @change="setSettings"
+                <input type="number" v-model.number="camera_settings.analogue_gain" @change="setSettings"
                     title="Analog gain setting of the camera" />
                 Digital gain
                 <select v-model.number="camera_settings.digital_gain" @change="setSettings"
@@ -97,10 +97,10 @@
             </div>
             <div v-if="camera_settings && viewSettings" title="Camera acquisition controls">
                 Capture
-                <button type="button" @click="capture('single')" title="Capture a single image">Single</button>
-                <button type="button" @click="capture('continuous')" title="Capture continuously">Continuous</button>
-                <button type="button" @click="capture('stop')" title="Halt continuous capture">Stop</button>
-                <button type="button" @click="capture('darkframe')"
+                <button type="button" @click="capture('Single')" title="Capture a single image">Single</button>
+                <button type="button" @click="capture('Continuous')" title="Capture continuously">Continuous</button>
+                <button type="button" @click="capture('Stop')" title="Halt continuous capture">Stop</button>
+                <button type="button" @click="capture('Darkframe')"
                     title="Record a darkframe for noise compensation">Darkframe</button>
                 <div class="help">
                     <b>Camera acquisition controls</b><br>
@@ -109,46 +109,6 @@
                     The darkframe is used to remove the static noise from the image due to imperfections of the sensor.
                     Attach the camera lid to record a darkframe.
                     Use continuous capture mode for normal operation.
-                </div>
-            </div>
-            <div v-if="intrinsic_calibrator && viewSettings" title="Pattern generation for camera calibration">
-                Pattern
-                <input type="number" value="13" v-model.number="intrinsic_calibrator.pattern_width"
-                    @change="setSettings" size="0" /> x
-                <input type="number" value="9" v-model.number="intrinsic_calibrator.pattern_height"
-                    @change="setSettings" size="1" /> @
-                <input type="number" value="40" v-model.number="intrinsic_calibrator.pattern_size" @change="setSettings"
-                    size="1" /> mm
-                <button type="button"
-                    onclick="window.open('api/calibration_pattern', '_blank'); return false;">Open</button>
-                <div class="help">
-                    <b>Pattern generation for camera calibration</b><br>
-                    Before the algorithm can be used, the camera needs to be calibrated.
-                    Generate a calibration pattern with the desired size and open it in a browser displayed on a big
-                    screen, such as a TV.
-                    The bigger the pattern, the better the calibration result, as the camera should be focused to
-                    infinity.
-                </div>
-            </div>
-            <div v-if="intrinsic_calibrator && viewSettings" title="Camera calibration controls">
-                Calibration
-                <button type="button" @click="calibrationPut">Put {{ intrinsic_calibrator.index > 0 ?
-                    intrinsic_calibrator.index : ""}}</button>
-                <button type="button" @click="calibrationReset">Reset</button>
-                <button type="button" @click="calibrationCalibrate" id="calibrate">Calibrate</button>
-                <button type="button"
-                    onclick="window.open('api/calibration_result', '_blank'); return false;">Result</button>
-                <button type="button" @click="calibrationAccept">Accept</button>
-                <div class="help">
-                    <b>Camera calibration</b><br>
-                    Capture the calibration pattern displayed on a big screen with the camera and click "Put" to add the
-                    image to the calibration set.
-                    The calibration pattern should be somewhat in focus (given that the focus is at infinity to see
-                    stars) and the camera should be moved around to capture the pattern from different angles.
-                    After approx 10 images have been recorded, click "Calibrate" to start the calibration process.
-                    This might take several tens seconds, as the Raspberry Pi is not the fastest computer.
-                    After the calibration is finished, the result can be viewed by clicking "Result".
-                    Repeat if the result is not satisfactory.
                 </div>
             </div>
             <div v-if="viewSettings" title="Auto camera calibration controls">
@@ -189,8 +149,8 @@
                 <button type="button" @click="toggleCoordinateFrame()"
                     :class="{ active: view_settings.coordinate_frame }">Attitude</button>
                 <button type="button" @click="toggleImageType()">Image type: {{ view_settings.image_type }}</button>
-                <button type="button" @click="toggleImageTargetQuality()">Image quality: {{ view_settings.target_quality
-                    }}</button>
+                <button type="button" @click="toggleImageTargetQuality()">
+                    Image quality: {{ view_settings.target_quality_kb == 0 ? "PNG" : view_settings.target_quality_kb + "kB" }}</button>
                 <div class="help">
                     <b>Display settings</b><br>
                     The UI brightness of the image can be adjusted, and the star detection overlay can be toggled on and

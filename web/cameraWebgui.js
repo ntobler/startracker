@@ -19,7 +19,6 @@ export default {
     setup() {
         return {
             camera_settings: ref(undefined),
-            intrinsic_calibrator: ref(undefined),
             attitude: ref(undefined),
             stream: ref(undefined),
             view_settings: ref(undefined),
@@ -31,6 +30,16 @@ export default {
             viewSettings: ref(false),
             cameraMode: ref(undefined),
             fullscreen: ref(undefined),
+        }
+    },
+    computed: {
+        exposureMs: {
+            get() {
+                return this.camera_settings.exposure_us / 1000;
+            },
+            set(newValue) {
+                this.camera_settings.exposure_us = newValue * 1000;
+            }
         }
     },
     methods: {
@@ -61,10 +70,10 @@ export default {
                 img.src = URL.createObjectURL(blob);
                 img.style.display = "block"
             };
-            ws.onclose = function(event) {
+            ws.onclose = function (event) {
                 ws.close()
             };
-            ws.onerror = function(event) {
+            ws.onerror = function (event) {
                 ws.close()
             };
         },
@@ -82,37 +91,25 @@ export default {
             let ws = new WebSocket(url);
             ws.binaryType = "arraybuffer"
             ws.onmessage = this.onmessage.bind(this);
-            ws.onclose = function(event) {
+            ws.onclose = function (event) {
                 ws.close()
             };
-            ws.onerror = function(event) {
+            ws.onerror = function (event) {
                 ws.close()
             };
         },
         setSettings() {
             let payload = {
-                exposure_ms: this.camera_settings.exposure_ms,
-                analog_gain: this.camera_settings.analog_gain,
-                digital_gain: this.camera_settings.digital_gain,
-                binning: this.camera_settings.binning,
-                pattern_width: this.intrinsic_calibrator.pattern_width,
-                pattern_height: this.intrinsic_calibrator.pattern_height,
-                pattern_size: this.intrinsic_calibrator.pattern_size,
-                min_matches: this.attitude.min_matches,
-                pixel_tolerance: this.attitude.pixel_tolerance,
-                timeout_secs: this.attitude.timeout_secs,
-                coordinate_frame: this.view_settings.coordinate_frame,
-                image_type: this.view_settings.image_type,
-                brightness: this.view_settings.brightness,
-                target_quality: this.view_settings.target_quality,
+                camera_config: this.camera_settings,
+                view_settings: this.view_settings,
+                attitude_est_config: this.attitude,
             }
             api('/api/set_settings', payload, this.updateState);
         },
         updateState(data) {
-            this.camera_settings = data.camera_settings
-            this.intrinsic_calibrator = data.intrinsic_calibrator
-            this.attitude = data.attitude
-            this.view_settings = data.view_settings
+            this.camera_settings = data.persistent.camera_config
+            this.attitude = data.persistent.attitude_est_config
+            this.view_settings = data.persistent.view_settings
             this.cameraMode = data.camera_mode;
 
             const el = document.getElementById("toggle_cam");
@@ -134,37 +131,20 @@ export default {
         },
         toggleImageType() {
             this.view_settings.image_type = {
-                "raw": "processed", "processed": "crop2x", "crop2x": "raw",
+                "Raw": "Processed", "Processed": "Crop2x", "Crop2x": "Raw",
             }[this.view_settings.image_type];
             this.setSettings()
         },
         toggleImageTargetQuality() {
-            this.view_settings.target_quality = {
-                "20k": "50k", "50k": "100k", "100k": "200k", "200k": "500k", "500k": "PNG", "PNG": "20k"
-            }[this.view_settings.target_quality];
+            this.view_settings.target_quality_kb = {
+                20: 50, 50: 100, 100: 200, 200: 500, 500: 0, 0: 20
+            }[this.view_settings.target_quality_kb];
             this.setSettings()
         },
         capture(mode) {
             document.getElementById("toggle_cam").classList.add("pending");
-            let payload = { mode: mode };
+            let payload = mode;
             api('/api/capture', payload, this.updateState);
-        },
-        calibrationPut() {
-            api('/api/camera_calibration', { command: "put" }, this.updateState);
-        },
-        calibrationReset() {
-            api('/api/camera_calibration', { command: "reset" }, this.updateState);
-        },
-        calibrationCalibrate() {
-            if (this.intrinsic_calibrator.index < 1) return;
-            document.getElementById("calibrate").classList.add("pending");
-            api('/api/camera_calibration', { command: "calibrate" }, (state) => {
-                this.updateState(state);
-                document.getElementById("calibrate").classList.remove("pending");
-            });
-        },
-        calibrationAccept() {
-            api('/api/camera_calibration', { command: "accept" }, this.updateState);
         },
         autoCalibration(cmd) {
             api('/api/auto_calibration', { command: cmd }, this.updateState);

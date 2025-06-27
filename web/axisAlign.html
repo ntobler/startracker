@@ -28,9 +28,9 @@
                     </button></div>
                 <div><button type="button" id="toggle_settings" @click="toggleSettings()"
                         :class="{ active: viewSettings }">Settings</button></div>
-                <div><button type="button" id="toggle_cam" @click="capture('toggle_continuous')"
+                <div><button type="button" id="toggle_cam" @click="capture('ToggleContinuous')"
                         :class="{ active: cameraMode=='continuous' }">
-                        {{ cameraMode=='continuous' ? "Stop" : "Start" }}
+                        {{ cameraMode=='Continuous' ? "Stop" : "Start" }}
                     </button></div>
                 <div><a href="./cameraWebgui.html"><button type="button">Camera View</button></a></div>
             </div>

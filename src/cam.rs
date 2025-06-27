@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::thread;
 
 #[cfg(feature = "cam")]
@@ -72,12 +73,25 @@ impl<T: PixelType> Frame<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct CameraConfig {
     pub analogue_gain: u32,
     pub digital_gain: u32,
     pub exposure_us: u32,
     pub binning: u32,
+}
+
+impl CameraConfig {
+    pub fn validate(self) -> Result<Self, String> {
+        // Check if exponential of 2
+        if (self.binning & (self.binning - 1)) != 0 {
+            return Err("binning must be integer exponential of 2".to_string());
+        }
+        if (self.binning < 1) || (self.binning > 8) {
+            return Err("binning must be between 1 and 8".to_string());
+        }
+        Ok(self)
+    }
 }
 
 pub struct Camera {
@@ -143,7 +157,6 @@ impl Camera {
         if let Some(e) = &self.thread_error {
             return Err(e.clone());
         }
-        println!("Waiting for camera request execution");
         match self
             .trigger_tx
             .as_ref()
@@ -161,7 +174,6 @@ impl Camera {
                 return Err(self.get_thread_error());
             }
         };
-        println!("Capture received frame");
 
         let log2_f = match self.config.digital_gain {
             1 => Ok(-2),
@@ -177,6 +189,10 @@ impl Camera {
             4 => Ok(amplify(&binning::<2, u16>(&frame)?, log2_f - 4)),
             x => Err(format!("Binning {:?} not available", x)),
         }
+    }
+
+    pub fn record_darkframe(&mut self) -> Result<(), String> {
+        Ok(())
     }
 }
 
