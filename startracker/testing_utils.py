@@ -150,14 +150,14 @@ class StarImageGenerator:
             dtype=np.uint32,
         )
 
-    def __call__(
+    def image_from_look_at(
         self,
         target_vector: npt.ArrayLike,
         up_vector: npt.ArrayLike,
         *,
         grid: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Create image of stars.
+        """Create image of stars from look-at vectors.
 
         Args:
             target_vector: shape=[3] Equatorical target vector, the camera points at in astronomical
@@ -469,7 +469,7 @@ class RandomStarCam(ArtificialStarCam):
         self._vector += 0.1 * self._rng.normal(size=(2, 3)) * 0.3
         vector = self._vector + [[0, 0, 5], [0, 10, 0]]
         vector /= np.linalg.norm(vector, axis=-1, keepdims=True)
-        image, star_xy, _ = self._sig(vector[0], vector[1], grid=self.grid)
+        image, star_xy, _ = self._sig.image_from_look_at(vector[0], vector[1], grid=self.grid)
         return image, star_xy
 
 

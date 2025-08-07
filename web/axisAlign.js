@@ -40,6 +40,9 @@ export default {
             let ws = new WebSocket(url);
             ws.binaryType = "arraybuffer"
             ws.onmessage = this.onmessage.bind(this);
+            window.addEventListener("beforeunload", () => {
+                ws.close(1000, "Page is unloading");
+            });
         },
         updateState(data) {
             this.calibration_orientations = data.axis_calibration.calibration_orientations;
@@ -236,6 +239,7 @@ function drawStars(ctx, state, ui_zoom) {
         ctx.fill()
     }
 
+    // Draw matched stars
     ctx.strokeStyle = "red"
     ctx.fillStyle = "red"
 
@@ -247,7 +251,7 @@ function drawStars(ctx, state, ui_zoom) {
         ctx.stroke()
     }
 
-    ctx.save()
+    // Draw poles
     const w = 10
     const h = 10
     for (let i of [0, 1]) {
@@ -277,7 +281,6 @@ function drawStars(ctx, state, ui_zoom) {
         ctx.restore()
     }
 
-    ctx.restore()
     ctx.restore()
 }
 

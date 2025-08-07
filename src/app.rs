@@ -1,9 +1,14 @@
+use arc_swap::ArcSwap;
+use opencv;
+use opencv::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
+use crate::attitude_estimation;
 use crate::cam;
+use crate::cam_cal;
 use crate::opencvutils;
 use crate::webutils;
 
@@ -38,6 +43,20 @@ enum ImageType {
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
+pub enum AutoCalibrationRequest {
+    Restart,
+    Discard,
+    Accept,
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone)]
+pub enum AxisCalibrationRequest {
+    Put,
+    Reset,
+    Calibrate,
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone)]
 struct ViewSettings {
     /// Overlay star coordinate frame.
     coordinate_frame: bool,
@@ -67,36 +86,11 @@ impl ViewSettings {
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
-struct AttitudeEstimationConfig {
-    min_matches: u32,
-    pixel_tolerance: f32,
-    timeout_secs: f32,
-}
-
-impl Default for AttitudeEstimationConfig {
-    fn default() -> Self {
-        AttitudeEstimationConfig {
-            min_matches: 10,
-            pixel_tolerance: 0.5,
-            timeout_secs: 0.2,
-        }
-    }
-}
-
-impl AttitudeEstimationConfig {
-    fn validate(self) -> Result<Self, String> {
-        if self.timeout_secs < 0.001 {
-            return Err("timeout_secs mut be larger than 1ms".to_string());
-        }
-        Ok(self)
-    }
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct Persistent {
     camera_config: cam::CameraConfig,
     view_settings: ViewSettings,
-    attitude_est_config: AttitudeEstimationConfig,
+    attitude_est_config: attitude_estimation::AttitudeEstimationConfig,
+    cal: Option<cam_cal::CameraParameters>,
 }
 
 impl Persistent {
@@ -118,28 +112,48 @@ impl Default for Persistent {
                 binning: 2,
             },
             view_settings: ViewSettings::default(),
-            attitude_est_config: AttitudeEstimationConfig::default(),
+            attitude_est_config: attitude_estimation::AttitudeEstimationConfig::default(),
+            cal: None,
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
-struct AxisCalibration {
-    error_deg: f64,
+struct AxisCalibrationState {
+    error_deg: Option<f64>,
     orientations: u32,
+}
+
+struct AxisCalibration {
+    rotations: Vec<nalgebra::Rotation<f64, 3>>,
+    calibrated_rotation: nalgebra::Rotation<f64, 3>,
+    error_deg: Option<f64>,
 }
 
 impl AxisCalibration {
     pub fn new() -> Self {
         AxisCalibration {
-            error_deg: 0.0,
-            orientations: 0,
+            rotations: Vec::new(),
+            calibrated_rotation: nalgebra::Rotation::identity(),
+            error_deg: None,
         }
     }
 
     pub fn reset(&mut self) {
-        self.error_deg = 0.0;
-        self.orientations = 0;
+        self.rotations.clear();
+    }
+
+    pub fn put(&mut self, rot: &nalgebra::Rotation<f64, 3>) {
+        self.rotations.push(rot.clone());
+    }
+
+    pub fn calibrate(&mut self) {}
+
+    pub fn get_state(&self) -> AxisCalibrationState {
+        AxisCalibrationState {
+            error_deg: self.error_deg,
+            orientations: self.rotations.len() as u32,
+        }
     }
 }
 
@@ -154,12 +168,18 @@ impl AutoCalibration {
     }
 }
 
+struct State {
+    persistent: Persistent,
+    axis_calibration: AxisCalibration,
+    auto_calibration: AutoCalibration,
+    camera_mode: CameraMode,
+    attitude: Option<nalgebra::Rotation<f64, 3>>,
+}
+
 #[derive(Serialize, Deserialize, Copy, Clone)]
-pub struct State {
-    pub persistent: Persistent,
-    pub axis_calibration: AxisCalibration,
-    pub auto_calibration: AutoCalibration,
-    pub camera_mode: CameraMode,
+pub struct PublicState {
+    persistent: Persistent,
+    camera_mode: CameraMode,
 }
 
 impl State {
@@ -175,6 +195,7 @@ pub struct App {
     pub image_dispatcher: webutils::DataDispatcher<std::sync::Arc<Vec<u8>>>,
     pub stream_dispatcher: webutils::DataDispatcher<String>,
     pub running: AtomicBool,
+    attitude_estimation: ArcSwap<Option<attitude_estimation::AttitudeEstimation>>,
 }
 
 impl App {
@@ -201,6 +222,7 @@ impl App {
             axis_calibration: AxisCalibration::new(),
             auto_calibration: AutoCalibration::new(),
             camera_mode: CameraMode::Stop,
+            attitude: None,
         };
 
         App {
@@ -209,42 +231,134 @@ impl App {
             image_dispatcher: webutils::DataDispatcher::<std::sync::Arc<Vec<u8>>>::new(),
             stream_dispatcher: webutils::DataDispatcher::<String>::new(),
             running: AtomicBool::new(true),
+            attitude_estimation: ArcSwap::new(Arc::new(None)),
         }
     }
 
-    pub fn get_state(&self) -> Result<State, String> {
+    pub fn get_state(&self) -> Result<PublicState, String> {
         let state_ref = self.state.lock().map_err(|e| e.to_string())?;
-        Ok(state_ref.clone())
+
+        Ok(PublicState {
+            persistent: state_ref.persistent.clone(),
+            camera_mode: state_ref.camera_mode,
+        })
     }
 
-    pub fn set_settings(&self, settings: Persistent) -> Result<State, String> {
-        let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
-        state_ref.set_persistent(settings)?;
-        Ok(state_ref.clone())
+    pub fn set_settings(&self, settings: Persistent) -> Result<PublicState, String> {
+        {
+            let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
+            state_ref.set_persistent(settings)?;
+        }
+        self.get_state()
     }
 
-    pub fn set_camera_mode(&self, mode: CameraModeRequest) -> Result<State, String> {
-        let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
-        state_ref.camera_mode = match mode {
-            CameraModeRequest::Single => CameraMode::Single,
-            CameraModeRequest::Continuous => CameraMode::Continuous,
-            CameraModeRequest::ToggleContinuous => {
-                if state_ref.camera_mode == CameraMode::Continuous {
-                    CameraMode::Stop
-                } else {
-                    CameraMode::Continuous
+    pub fn set_camera_mode(&self, mode: CameraModeRequest) -> Result<PublicState, String> {
+        {
+            let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
+            state_ref.camera_mode = match mode {
+                CameraModeRequest::Single => CameraMode::Single,
+                CameraModeRequest::Continuous => CameraMode::Continuous,
+                CameraModeRequest::ToggleContinuous => {
+                    if state_ref.camera_mode == CameraMode::Continuous {
+                        CameraMode::Stop
+                    } else {
+                        CameraMode::Continuous
+                    }
+                }
+                CameraModeRequest::Stop => CameraMode::Stop,
+                CameraModeRequest::Darkframe => CameraMode::Darkframe,
+            };
+        }
+        self.get_state()
+    }
+
+    pub fn axis_calibration(&self, request: AxisCalibrationRequest) -> Result<PublicState, String> {
+        {
+            let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
+            match request {
+                AxisCalibrationRequest::Put => match state_ref.attitude {
+                    Some(attitude) => state_ref.axis_calibration.put(&attitude),
+                    None => return Err("No attitude available for calibration.".to_string()),
+                },
+                AxisCalibrationRequest::Reset => {
+                    state_ref.axis_calibration.reset();
+                }
+                AxisCalibrationRequest::Calibrate => {
+                    state_ref.axis_calibration.calibrate();
                 }
             }
-            CameraModeRequest::Stop => CameraMode::Stop,
-            CameraModeRequest::Darkframe => CameraMode::Darkframe,
+        }
+        self.get_state()
+    }
+
+    pub fn auto_calibration(&self, request: AutoCalibrationRequest) -> Result<PublicState, String> {
+        match request {
+            AutoCalibrationRequest::Restart => {
+                // TODO implement
+            }
+            AutoCalibrationRequest::Discard => {
+                // Discard current calibration
+                // TODO implement
+            }
+            AutoCalibrationRequest::Accept => {
+                // Accept current calibration
+                // TODO Example calibration parameters, replace with actual calibration logic
+                let instance1 = cam_cal::CameraParameters::new(
+                    nalgebra::Matrix3::new(
+                        2126.9433827817543,
+                        0.0,
+                        471.5660270698475,
+                        0.0,
+                        2125.4878604007063,
+                        310.73929485280405,
+                        0.0,
+                        0.0,
+                        1.0,
+                    ),
+                    (960, 540),
+                    Some([
+                        -0.4412080745099301,
+                        -0.159542022464492,
+                        0.007670124986859448,
+                        -0.002132920872628578,
+                        -1.6478824652916775,
+                    ]),
+                );
+
+                {
+                    let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
+                    state_ref.persistent.cal = Some(instance1);
+                }
+
+                self.init_attitude_estimation()?;
+            }
+        }
+        self.get_state()
+    }
+
+    fn init_attitude_estimation(&self) -> Result<(), String> {
+        let (att_config, cal) = {
+            let state_ref = self.state.lock().map_err(|e| e.to_string())?;
+            (
+                state_ref.persistent.attitude_est_config.clone(),
+                state_ref.persistent.cal.clone(),
+            )
         };
-        Ok(state_ref.clone())
+
+        self.attitude_estimation.store(Arc::new(match cal {
+            Some(cal) => Some(
+                attitude_estimation::AttitudeEstimation::new(att_config, cal)
+                    .map_err(|e| format!("Error initializing attitude estimation: {}.", e))?,
+            ),
+            None => None,
+        }));
+        Ok(())
     }
 }
 
 impl Drop for App {
     fn drop(&mut self) {
-        let persistent = self.state.lock().unwrap().persistent.clone();
+        let persistent = { self.state.lock().unwrap().persistent.clone() };
 
         if let Err(e) = std::fs::write(
             &self.config_path,
@@ -255,59 +369,54 @@ impl Drop for App {
     }
 }
 
-pub fn tick(app: &App) {
+pub fn tick(app: &App) -> Result<(), String> {
     let image_dispatcher = &app.image_dispatcher;
     let stream_dispatcher = &app.stream_dispatcher;
     let running = &app.running;
 
     println!("Setup Camera");
 
-    let config = cam::CameraConfig {
-        analogue_gain: 1,
-        digital_gain: 4,
-        exposure_us: 500000,
-        binning: 2,
-    };
-    let mut camera = match cam::Camera::new(&config) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error initializing camera: {}.", e);
-            return;
-        }
+    let cam_config = {
+        app.state
+            .lock()
+            .map_err(|e| e.to_string())?
+            .persistent
+            .camera_config
+            .clone()
     };
 
-    camera.set_config(&config);
+    let mut camera =
+        cam::Camera::new(&cam_config).map_err(|e| format!("Error initializing camera: {}.", e))?;
+
+    app.init_attitude_estimation()?;
 
     let mut ie = opencvutils::ImageEncoder::new(Some(30.0));
 
     while running.load(Ordering::Acquire) {
         //Update config
-        let acquisition_request = match app.state.lock() {
-            Ok(mut state_ref) => {
-                match state_ref.persistent.view_settings.target_quality_kb {
-                    0u32 => ie.set_max_kb(None),
-                    x => ie.set_max_kb(Some(x as f32)),
-                }
-                camera.set_config(&state_ref.persistent.camera_config);
-                let request_mode = match state_ref.camera_mode {
-                    CameraMode::Single => AcqusitionRequest::Normal,
-                    CameraMode::Continuous => AcqusitionRequest::Normal,
-                    CameraMode::Stop => AcqusitionRequest::None,
-                    CameraMode::Darkframe => AcqusitionRequest::Darkframe,
-                };
+        let (acquisition_request, image_type) = {
+            let mut state_ref = app.state.lock().map_err(|e| e.to_string())?;
 
-                state_ref.camera_mode = match state_ref.camera_mode {
-                    CameraMode::Single => CameraMode::Stop,
-                    CameraMode::Continuous => CameraMode::Continuous,
-                    CameraMode::Stop => CameraMode::Stop,
-                    CameraMode::Darkframe => CameraMode::Stop,
-                };
+            match state_ref.persistent.view_settings.target_quality_kb {
+                0u32 => ie.set_max_kb(None),
+                x => ie.set_max_kb(Some(x as f32)),
+            }
+            camera.set_config(&state_ref.persistent.camera_config);
+            let request_mode = match state_ref.camera_mode {
+                CameraMode::Single => AcqusitionRequest::Normal,
+                CameraMode::Continuous => AcqusitionRequest::Normal,
+                CameraMode::Stop => AcqusitionRequest::None,
+                CameraMode::Darkframe => AcqusitionRequest::Darkframe,
+            };
 
-                request_mode
-            }
-            Err(_) => {
-                break;
-            }
+            state_ref.camera_mode = match state_ref.camera_mode {
+                CameraMode::Single => CameraMode::Stop,
+                CameraMode::Continuous => CameraMode::Continuous,
+                CameraMode::Stop => CameraMode::Stop,
+                CameraMode::Darkframe => CameraMode::Stop,
+            };
+
+            (request_mode, state_ref.persistent.view_settings.image_type)
         };
 
         // Acquire image from camera
@@ -337,8 +446,28 @@ pub fn tick(app: &App) {
             }
         };
 
+        // Process image
+        let preprocessed = preprocess(&raw)?;
+
+        // Find attitude estimation result
+        let att_result = match app.attitude_estimation.load_full().as_ref() {
+            Some(att_est) => att_est.estimate_attitude_from_image(&preprocessed),
+            None => Err("attitude estimation not available".to_string()),
+        };
+
+        // Chose image to send
+        let send_image = match image_type {
+            ImageType::Raw => &raw,
+            ImageType::Processed => &preprocessed,
+            ImageType::Crop2x => {
+                // TODO crop to 2x
+                // let crop = opencvutils::crop_to_2x(&raw);
+                &raw
+            }
+        };
+
         // Encode image
-        let encoded = match ie.encode(&raw) {
+        let encoded = match ie.encode(send_image) {
             Some(v) => v,
             None => {
                 eprintln!("Error encoding image");
@@ -354,11 +483,61 @@ pub fn tick(app: &App) {
             "auto_calibrator": serde_json::json!({
                 "active": false,
             }),
-
+            "attitude_estimation": match att_result {
+                Ok(result) => serde_json::to_value(result).unwrap_or(serde_json::json!({"error": "Failed to serialize result"})),
+                Err(e) => serde_json::json!({"error": e}),
+            },
         });
 
         stream_dispatcher.put(data.to_string());
     }
 
     println!("Camera thread stopped gracefully");
+    Ok(())
+}
+
+fn preprocess(raw: &cam::Frame<u8>) -> Result<cam::Frame<u8>, String> {
+    // Create OpenCV Mat from raw data
+    let raw_mat = opencv::core::Mat::new_rows_cols_with_data(
+        raw.height as i32,
+        raw.width as i32,
+        &raw.data_row_major,
+    )
+    .map_err(|e| format!("Failed to create Mat: {}", e))?;
+
+    // 7x7 top hat filter
+    let kernel = opencv::core::Mat::ones(7, 7, opencv::core::CV_8U).unwrap();
+    let mut morth_result = opencv::core::Mat::default();
+    opencv::imgproc::morphology_ex(
+        &raw_mat,
+        &mut morth_result,
+        opencv::imgproc::MORPH_TOPHAT,
+        &kernel,
+        opencv::core::Point::new(-1, -1),
+        1,
+        opencv::core::BORDER_DEFAULT,
+        opencv::core::Scalar::default(),
+    )
+    .map_err(|e| format!("Failed to apply morphology: {}", e))?;
+
+    // 3x3 blur
+    let mut blur_result = opencv::core::Mat::default();
+    opencv::imgproc::blur(
+        &morth_result,
+        &mut blur_result,
+        opencv::core::Size::new(3, 3),
+        opencv::core::Point::new(-1, -1),
+        opencv::core::BORDER_DEFAULT,
+    )
+    .map_err(|e| format!("Failed to apply blur: {}", e))?;
+
+    Ok(cam::Frame {
+        data_row_major: blur_result
+            .data_typed::<u8>()
+            .map_err(|e| format!("Failed to get data from Mat: {}", e))?
+            .to_vec(),
+        width: raw.width,
+        height: raw.height,
+        timestamp_ns: raw.timestamp_ns,
+    })
 }

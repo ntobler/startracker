@@ -186,7 +186,7 @@ pub fn camera_thread(
             }
             Err(crossbeam_channel::TryRecvError::Disconnected) => {
                 // Channel has been closed from the other side. We can shut down the thread
-                println!("Camera thread: trigger error received, terminating gracefully");
+                println!("Camera thread: terminated gracefully.");
                 return Ok(());
             }
         }

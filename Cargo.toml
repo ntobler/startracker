@@ -32,6 +32,9 @@ opencv = "0.94.4"
 crossbeam-channel = "0.5.15"
 bytemuck = "1.23.1"
 num-traits = "0.2.19"
+ruststartracker = { path = "../ruststartracker", features = ["improc"] }
+arc-swap = "1.7.1"
+image = { version = "0.25.6", default-features = false, features = ["png"] }
 
 [features]
 default = []

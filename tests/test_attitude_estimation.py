@@ -36,13 +36,13 @@ def test_attutude_estimation_error():
     sig_conf = testing_utils.StarImageGeneratorConfig(noise_sigma=200)
     sig = testing_utils.StarImageGenerator(cal, sig_conf)
 
-    image, _, _ = sig([0, 0, 1], [0, 1, 0])
+    image, _, _ = sig.image_from_look_at([0, 0, 1], [0, 1, 0])
 
     att_res = ae(image)
     assert att_res == attitude_estimation.ERROR_ATTITUDE_RESULT
 
 
-def test_attutude_estimation():
+def test_attitude_estimation():
     rng = np.random.default_rng(42)
 
     cal = calibration.make_dummy()
@@ -57,7 +57,7 @@ def test_attutude_estimation():
     false_negative_mags = []
 
     for _, vector in enumerate(vectors):
-        image, gt_xy, mag = sig(vector, [0, 1, 0])
+        image, gt_xy, mag = sig.image_from_look_at(vector, [0, 1, 0])
 
         att_res = ae(image)
 

@@ -8,14 +8,18 @@ use std::thread;
 use std::time::Duration;
 use tokio::signal;
 use warp::http::StatusCode;
+use warp::reject::MethodNotAllowed;
 use warp::ws::WebSocket;
 use warp::Filter;
 use warp::Rejection;
 use warp::Reply;
 
 mod app;
+mod attitude_estimation;
 mod cam;
+mod cam_cal;
 mod opencvutils;
+mod testingutils;
 mod webutils;
 
 #[derive(Debug)]
@@ -35,6 +39,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let message;
 
     if err.is_not_found() {
+        eprintln!("Rejection: 404 Not Found. Details: {:?}", err);
         code = StatusCode::NOT_FOUND;
         message = "Not Found".to_string();
     } else if let Some(app_err) = err.find::<AppError>() {
@@ -42,6 +47,16 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         eprintln!("Application Error: {}", app_err.inner); // Log full error details
         code = StatusCode::INTERNAL_SERVER_ERROR;
         message = "Internal Server Error".to_string(); // Return a generic message to client
+    } else if let Some(err) = err.find::<MethodNotAllowed>() {
+        // Handle MethodNotAllowed specifically
+        eprintln!("Method Not Allowed: {:?}", err);
+        code = StatusCode::METHOD_NOT_ALLOWED;
+        message = "Method Not Allowed".to_string();
+    } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        // Handle deserialization errors
+        eprintln!("Deserialization Error: {}", e);
+        code = StatusCode::BAD_REQUEST;
+        message = "Invalid request body".to_string();
     } else {
         // Fallback for any unhandled rejections
         eprintln!("Unhandled rejection: {:?}", err);
@@ -64,7 +79,13 @@ async fn main() {
     //Start camera thread
     let app_clone = Arc::clone(&application);
     let camera_thread_handle = thread::spawn(move || {
-        app::tick(app_clone.as_ref());
+        if let Err(res) = app::tick(app_clone.as_ref()) {
+            eprintln!("App failed: {:?}", res);
+            println!("Shutting down due to app failure");
+            app_clone.running.store(false, Ordering::Release);
+        } else {
+            println!("App terminated normally");
+        }
     });
 
     // Serve / as /web/axisAlign.html
@@ -110,6 +131,30 @@ async fn main() {
         });
 
     let app_clone = Arc::clone(&application);
+    let shutdown_post_handler = warp::post()
+        .and(warp::path!("api" / "shutdown"))
+        .and(warp::body::json())
+        .and_then(move |rx: serde_json::Value| {
+            let app_cloned_for_fut = Arc::clone(&app_clone);
+            async move {
+                println!("api/shutdown");
+                match rx {
+                    serde_json::Value::Object(ref map)
+                        if map.get("shutdown")
+                            == Some(&serde_json::Value::String("shutdown".to_string())) =>
+                    {
+                        println!("Received shutdown command, shutting down...");
+                        app_cloned_for_fut.running.store(false, Ordering::Release);
+                        Ok(warp::reply::json(&serde_json::json!({})))
+                    }
+                    _ => Err(warp::reject::custom(AppError {
+                        inner: "Payload must be {'shutdown': 'shutdown'} to shutdown".to_string(),
+                    })),
+                }
+            }
+        });
+
+    let app_clone = Arc::clone(&application);
     let capture_post_handler = warp::post()
         .and(warp::path!("api" / "capture"))
         .and(warp::body::json())
@@ -118,6 +163,36 @@ async fn main() {
             async move {
                 println!("api/capture");
                 match app_cloned_for_fut.set_camera_mode(rx) {
+                    Ok(state) => Ok(warp::reply::json(&state)),
+                    Err(e) => Err(warp::reject::custom(AppError { inner: e })),
+                }
+            }
+        });
+
+    let app_clone = Arc::clone(&application);
+    let axis_calibration_post_handler = warp::post()
+        .and(warp::path!("api" / "axis_calibration"))
+        .and(warp::body::json())
+        .and_then(move |rx: app::AxisCalibrationRequest| {
+            let app_cloned_for_fut = Arc::clone(&app_clone);
+            async move {
+                println!("api/axis_calibration");
+                match app_cloned_for_fut.axis_calibration(rx) {
+                    Ok(state) => Ok(warp::reply::json(&state)),
+                    Err(e) => Err(warp::reject::custom(AppError { inner: e })),
+                }
+            }
+        });
+
+    let app_clone = Arc::clone(&application);
+    let auto_calibration_post_handler = warp::post()
+        .and(warp::path!("api" / "auto_calibration"))
+        .and(warp::body::json())
+        .and_then(move |rx: app::AutoCalibrationRequest| {
+            let app_cloned_for_fut = Arc::clone(&app_clone);
+            async move {
+                println!("api/auto_calibration");
+                match app_cloned_for_fut.auto_calibration(rx) {
                     Ok(state) => Ok(warp::reply::json(&state)),
                     Err(e) => Err(warp::reject::custom(AppError { inner: e })),
                 }
@@ -147,7 +222,10 @@ async fn main() {
         .or(index)
         .or(get_state_post_handler)
         .or(set_settings_post_handler)
+        .or(shutdown_post_handler)
         .or(capture_post_handler)
+        .or(axis_calibration_post_handler)
+        .or(auto_calibration_post_handler)
         .or(image_ws_route)
         .or(stream_ws_route)
         .recover(handle_rejection);
@@ -157,13 +235,25 @@ async fn main() {
         signal::ctrl_c()
             .await
             .expect("failed to install Ctrl+C handler");
-        println!("Received Ctrl+C, shutting down...");
         app_clone.running.store(false, Ordering::Release);
+        println!("Received Ctrl+C, shutdown triggered...");
     };
 
     let addr: SocketAddr = ([0, 0, 0, 0], 5000).into();
     println!("Running server on {:?}", addr);
-    let (_addr, server_future) = warp::serve(routes).bind_with_graceful_shutdown(addr, shutdown);
+    let app_clone = Arc::clone(&application);
+    let server_future = async {
+        match warp::serve(routes).try_bind_with_graceful_shutdown(addr, shutdown) {
+            Ok((_, future)) => {
+                future.await;
+            }
+            Err(e) => {
+                app_clone.running.store(false, Ordering::Release);
+                eprintln!("Failed to bind to {}: {}", addr, e);
+                println!("Server failed to start, cleanup triggered...");
+            }
+        };
+    };
 
     let wait_for_signal_and_then_timeout = async move {
         while application.running.load(Ordering::Acquire) {
@@ -182,12 +272,14 @@ async fn main() {
         }
     }
 
-    camera_thread_handle.join().expect("Camera thread panicked");
-    println!("Camera joined");
+    match camera_thread_handle.join() {
+        Ok(_) => println!("Camera thread joined successfully"),
+        Err(e) => eprintln!("Camera thread panicked: {:?}", e),
+    }
 }
 
 async fn handle_image_ws(ws: WebSocket, application: Arc<app::App>) {
-    let (mut tx, mut _rx) = ws.split();
+    let (mut tx, mut rx) = ws.split();
 
     println!("WebSocket image connected");
 
@@ -201,27 +293,29 @@ async fn handle_image_ws(ws: WebSocket, application: Arc<app::App>) {
             Ok(data) => data.as_ref().clone(),
             Err(webutils::TimeoutError) => {
                 // Timeout, continue to next iteration
+                if let Ok(None) = tokio::time::timeout(Duration::from_millis(0), rx.next()).await {
+                    println!("WebSocket stream disconnected by client");
+                    return;
+                }
                 continue;
             }
         };
         // Send over WebSocket as binary
-        if let Err(e) = tx.send(warp::ws::Message::binary(encoded)).await {
-            eprintln!("WS send error: {}. disconnected", e);
-            break;
+        if let Err(_) = tx.send(warp::ws::Message::binary(encoded)).await {
+            println!("WebSocket image disconnected by client.");
+            return;
         }
     }
 
     if let Err(e) = tx.close().await {
-        eprintln!("Error sending WebSocket close frame: {}", e);
+        eprintln!("Error closing WebSocket image: {}", e);
     } else {
-        println!("Successfully sent WebSocket close frame.");
+        println!("WebSocket image disconnected by server.");
     }
-
-    println!("WebSocket image disconnected gracefully");
 }
 
 async fn handle_stream_ws(ws: WebSocket, application: Arc<app::App>) {
-    let (mut tx, mut _rx) = ws.split();
+    let (mut tx, mut rx) = ws.split();
 
     println!("WebSocket stream connected");
 
@@ -233,22 +327,24 @@ async fn handle_stream_ws(ws: WebSocket, application: Arc<app::App>) {
             Ok(data) => data,
             Err(webutils::TimeoutError) => {
                 // Timeout, continue to next iteration
+                if let Ok(None) = tokio::time::timeout(Duration::from_millis(0), rx.next()).await {
+                    println!("WebSocket stream disconnected by client");
+                    return;
+                }
                 continue;
             }
         };
 
         // Send over WebSocket as json
-        if let Err(e) = tx.send(warp::ws::Message::text(json_str)).await {
-            eprintln!("WS send error: {}. disconnected", e);
-            break;
+        if let Err(_) = tx.send(warp::ws::Message::text(json_str)).await {
+            println!("WebSocket stream disconnected by client");
+            return;
         }
     }
 
     if let Err(e) = tx.close().await {
-        eprintln!("Error sending WebSocket close frame: {}", e);
+        eprintln!("Error closing WebSocket stream: {}", e);
     } else {
-        println!("Successfully sent WebSocket close frame.");
+        println!("WebSocket stream disconnected by server.");
     }
-
-    println!("WebSocket stream disconnected gracefully");
 }

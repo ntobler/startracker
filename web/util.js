@@ -56,7 +56,6 @@ export function api(url, payload = null, onSuccess = null, onFailure = null) {
     }
     fetch(url, context).then(response => response.json()).then((data) => {
         if (onSuccess !== null) onSuccess(data);
-        console.log(data)
     }).catch(error => {
         if (onFailure !== null) onFailure(error);
         console.error('Error:', error);

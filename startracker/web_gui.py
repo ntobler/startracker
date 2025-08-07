@@ -96,11 +96,11 @@ class IntrinsicCalibrator:
 
 
 class CaptureMode(enum.Enum):
-    SINGLE = "single"
-    CONTINUOUS = "continuous"
-    TOGGLE_CONTINUOUS = "toggle_continuous"
-    STOP = "stop"
-    DARKFRAME = "darkframe"
+    SINGLE = "Single"
+    CONTINUOUS = "Continuous"
+    TOGGLE_CONTINUOUS = "ToggleContinuous"
+    STOP = "Stop"
+    DARKFRAME = "Darkframe"
 
 
 def project_radial(xyz: np.ndarray) -> np.ndarray:
@@ -285,8 +285,8 @@ class AttitudeEstimation:
             "frame_points": self._camera_frame,
             "quat": self.quat.tolist(),
             "n_matches": att_res.n_matches,
-            "obs_pix": to_contiguious_f32_blob(obs_xy),
-            "cat_pix": to_contiguious_f32_blob(cat_xy),
+            "obs_xy": to_contiguious_f32_blob(obs_xy),
+            "cat_xy": to_contiguious_f32_blob(cat_xy),
             "image_size": image_size,
             "processing_time": int(tm2.t * 1000),
             "post_processing_time": int(tm3.t * 1000),
@@ -413,7 +413,7 @@ class ViewSettings(util.JsonDataclass):
     """Brightness for the camera display"""
     image_type: str = "raw"
     """Image type to show. One of raw, processed, or crop2x"""
-    target_quality: int = 50
+    target_quality_kb: int = 50
     """Image quality target size in kilobytes. 0 is unlimited."""
 
 
@@ -526,8 +526,8 @@ class App(webutil.QueueAbstractionClass):
         # Init Axis Calibrator
         self._axis_calibrator = AxisCalibrator(self._pers)
 
-        q = self._view_settings.target_quality
-        quality = None if q == "PNG" else float(q.rstrip("k"))
+        q = self._view_settings.target_quality_kb
+        quality = None if q == 0 else float(q)
         self._image_encoder = ImageEncoder(max_kb=quality)
 
         self._init_attitude_estimator()
@@ -611,10 +611,10 @@ class App(webutil.QueueAbstractionClass):
         self._view_settings.coordinate_frame = bool(params["coordinate_frame"])
         self._view_settings.brightness = int(params["brightness"])
         self._view_settings.image_type = str(params["image_type"])
-        self._view_settings.target_quality = str(params["target_quality"])
+        self._view_settings.target_quality_kb = int(params["target_quality_kb"])
 
-        q = self._view_settings.target_quality
-        self._image_encoder.max_kb = None if q == "PNG" else float(q.rstrip("k"))
+        q = self._view_settings.target_quality_kb
+        self._image_encoder.max_kb = None if q == 0 else q
 
         if self._attitude_est is not None:
             config = self._attitude_est.config
@@ -726,11 +726,11 @@ class App(webutil.QueueAbstractionClass):
         """
         if self._image_size is None:
             return {}
-        if command == "restart":
+        if command == "Restart":
             self._auto_calibrator.restart(self._image_size)
-        elif command == "discard":
+        elif command == "Discard":
             self._auto_calibrator.stop()
-        elif command == "accept":
+        elif command == "Accept":
             self._auto_calibrator.stop()
             self._cal = self._auto_calibrator.cal
             self._save_calibration()
@@ -929,7 +929,7 @@ class WebApp:
         if self.app is None:
             return "Server error", 500
         params = request.get_json()
-        d = self.app.capture(CaptureMode(params["mode"]))
+        d = self.app.capture(CaptureMode(params))
         return jsonify(d)
 
     def _camera_calibration(self) -> FlaskResponse:

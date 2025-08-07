@@ -76,6 +76,9 @@ export default {
             ws.onerror = function (event) {
                 ws.close()
             };
+            window.addEventListener("beforeunload", () => {
+                ws.close(1000, "Page is unloading");
+            });
         },
         onmessage(response) {
             this.stream = unpack(response.data);
@@ -97,6 +100,9 @@ export default {
             ws.onerror = function (event) {
                 ws.close()
             };
+            window.addEventListener("beforeunload", () => {
+                ws.close(1000, "Page is unloading");
+            });
         },
         setSettings() {
             let payload = {
@@ -147,7 +153,7 @@ export default {
             api('/api/capture', payload, this.updateState);
         },
         autoCalibration(cmd) {
-            api('/api/auto_calibration', { command: cmd }, this.updateState);
+            api('/api/auto_calibration', cmd, this.updateState);
         },
         resize() {
             let canvas = document.getElementById('canvas')
@@ -213,21 +219,21 @@ export default {
         drawStars(ctx, state) {
             if (state.obs_pix === undefined) return
 
-            let obs_pix = toF32Array(state.obs_pix);
-            let cat_pix = toF32Array(state.cat_pix);
+            let obs_xy = toF32Array(state.obs_xy);
+            let cat_xy = toF32Array(state.cat_xy);
 
             ctx.save()
 
             ctx.lineCap = "round"
 
-            for (let i2 = 0; i2 < Math.min(obs_pix.length, cat_pix.length); i2 += 2) {
+            for (let i2 = 0; i2 < Math.min(obs_xy.length, cat_xy.length); i2 += 2) {
                 ctx.beginPath()
-                ctx.arc(obs_pix[i2], obs_pix[i2+1], 5, 0, 2 * Math.PI)
+                ctx.arc(obs_xy[i2], obs_xy[i2+1], 5, 0, 2 * Math.PI)
                 ctx.stroke()
 
                 ctx.beginPath()
-                ctx.moveTo(obs_pix[i2], obs_pix[i2+1])
-                ctx.lineTo(cat_pix[i2], cat_pix[i2+1])
+                ctx.moveTo(obs_xy[i2], obs_xy[i2+1])
+                ctx.lineTo(cat_xy[i2], cat_xy[i2+1])
                 ctx.stroke()
             }
             ctx.restore()
@@ -313,7 +319,7 @@ export default {
                 const img_x = (p[0][0] * x + p[0][1] * y + p[0][2] * z) / diviser;
                 const img_y = (p[1][0] * x + p[1][1] * y + p[1][2] * z) / diviser;
 
-                // // Distortion
+                // Distortion
                 x = (img_x - tx) / fx
                 y = (img_y - ty) / fy
                 const r2 = x ** 2 + y ** 2

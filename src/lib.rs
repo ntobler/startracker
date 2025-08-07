@@ -12,6 +12,7 @@ mod optim;
 mod poisson_disk;
 mod starcal;
 mod stargradcal;
+mod testingutils;
 
 pub mod cam;
 

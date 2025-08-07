@@ -105,11 +105,11 @@ def test_app_auto_calibration(tmp_path: pathlib.Path):
     app_thread.start()
     try:
         app.capture(web_gui.CaptureMode.CONTINUOUS)
-        app.auto_calibration("restart")
+        app.auto_calibration("Restart")
         app.stream.get_blocking()
-        app.auto_calibration("discard")
+        app.auto_calibration("Discard")
         app.stream.get_blocking()
-        app.auto_calibration("restart")
+        app.auto_calibration("Restart")
 
         loop_broken = False
         for _ in range(20):
@@ -121,7 +121,7 @@ def test_app_auto_calibration(tmp_path: pathlib.Path):
 
         assert not persistent.Persistent.get_instance().cam_file.is_file()
 
-        app.auto_calibration("accept")
+        app.auto_calibration("Accept")
 
         assert persistent.Persistent.get_instance().cam_file.is_file()
 
