@@ -306,7 +306,7 @@ class CameraTester:
 
     sliders: list[Slider]
 
-    def __init__(self, cam: camera.Camera):
+    def __init__(self, cam: camera.Camera) -> None:
         self._cam = cam
         self.sliders = []
 
@@ -318,13 +318,13 @@ class CameraTester:
         init: Optional[float] = None,
         step: Optional[float] = None,
         dtype: type[float | int] = int,
-    ):
+    ) -> None:
         """Add slider for a numerical attribute of the camera."""
         init = (min + max) / 2 if init is None else init
         step = (max - min) / 100 if step is None else step
         self.sliders.append(self.Slider(name, min, max, init, step, dtype))
 
-    def run(self):
+    def run(self) -> None:
         """Run matplotlib GUI."""
         import matplotlib.pyplot as plt
         import matplotlib.widgets
@@ -340,7 +340,7 @@ class CameraTester:
         initial_image = cam.capture()
         img = ax.imshow(initial_image, cmap="viridis", vmax=255)
 
-        plt_sliders = []
+        plt_sliders: list[matplotlib.widgets.Slider] = []
 
         # Callback function to update the image
         def update(val):
@@ -544,7 +544,7 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         rot_matrix = scipy.spatial.transform.Rotation.from_euler(
             "zxz", (self.epsilon, np.pi / 2 - self.theta, phi), degrees=False
         ).as_matrix()
-        extrinsic = np.concatenate((rot_matrix.T, np.zeros((3, 1))), axis=1)
+        extrinsic: np.ndarray = np.concatenate((rot_matrix.T, np.zeros((3, 1))), axis=1)
         return extrinsic
 
     @override
