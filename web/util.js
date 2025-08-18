@@ -155,3 +155,18 @@ export function parseSize(size) {
         size /= 1024
     }
 }
+
+export function toF32Array(u8_array) {
+    if (u8_array.byteLength % 4 != 0) {
+        throw Error("Array must be divisible by 4")
+    }
+    if (u8_array.byteOffset % 4 == 0) {
+        // bytes are aligned, we can take a view
+        return new Float32Array(u8_array.buffer, u8_array.byteOffset, u8_array.byteLength / 4)
+    } else {
+        // bytes ar not aligned, we need to copy first
+        const alignedBuffer = new Uint8Array(u8_array.byteLength)
+        alignedBuffer.set(u8_array, 0)
+        return new Float32Array(alignedBuffer.buffer, 0, alignedBuffer.byteLength / 4)
+    }
+}

@@ -1,6 +1,8 @@
 
-import { api, HelpDisplay, matmul3x3, matToLaTeX, vecToLaTeX, parseSize } from './util.js';
+import { api, HelpDisplay, matmul3x3, matToLaTeX, vecToLaTeX, parseSize, toF32Array } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
+import { pack, unpack } from './msgpackr.js'
+
 
 let katexPromise;
 
@@ -61,8 +63,8 @@ export default {
             };
         },
         onmessage(response) {
-            this.stream = JSON.parse(response.data);
-            this.packet_size = parseSize(response.data.length);
+            this.stream = unpack(response.data);
+            this.packet_size = parseSize(response.data.byteLength);
 
             this.image_quality = this.stream.image_quality
 
@@ -72,6 +74,7 @@ export default {
         connectStreamWebSocket() {
             let url = 'ws://' + window.location.host + "/api/stream";
             let ws = new WebSocket(url);
+            ws.binaryType = "arraybuffer"
             ws.onmessage = this.onmessage.bind(this);
         },
         setSettings() {
@@ -191,7 +194,7 @@ export default {
             ctx.rect(-0.5, -0.5, width, height);
             ctx.clip();
 
-            if (this.view_settings?.image_type != "crop2x") {
+            if (this.view_settings && (this.view_settings?.image_type != "crop2x")) {
 
                 if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
                     this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
@@ -217,22 +220,22 @@ export default {
         },
         drawStars(ctx, state) {
             if (state.obs_pix === undefined) return
-            let obs_pix = state.obs_pix;
-            let cat_pix = state.cat_pix;
+
+            let obs_pix = toF32Array(state.obs_pix);
+            let cat_pix = toF32Array(state.cat_pix);
+
             ctx.save()
 
             ctx.lineCap = "round"
 
-            for (let i = 0; i < Math.min(obs_pix.length, cat_pix.length); i++) {
-                let coord = obs_pix[i]
+            for (let i2 = 0; i2 < Math.min(obs_pix.length, cat_pix.length); i2 += 2) {
                 ctx.beginPath()
-                ctx.arc(coord[0], coord[1], 5, 0, 2 * Math.PI)
+                ctx.arc(obs_pix[i2], obs_pix[i2+1], 5, 0, 2 * Math.PI)
                 ctx.stroke()
 
                 ctx.beginPath()
-                ctx.moveTo(coord[0], coord[1])
-                coord = cat_pix[i]
-                ctx.lineTo(coord[0], coord[1])
+                ctx.moveTo(obs_pix[i2], obs_pix[i2+1])
+                ctx.lineTo(cat_pix[i2], cat_pix[i2+1])
                 ctx.stroke()
             }
             ctx.restore()

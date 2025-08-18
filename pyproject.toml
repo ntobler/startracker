@@ -24,6 +24,7 @@ dynaconf = "^3.2.4"
 pycairo = "^1.26.0"
 ruststartracker = "0.2.4"
 typing-extensions = "^4.12.2"
+msgpack = "^1.1.1"
 
 [tool.poetry.group.dev.dependencies]
 viztracer = "^0.16.2"

@@ -5,7 +5,6 @@ import dataclasses
 import datetime
 import enum
 import io
-import json
 import logging
 import os
 import pathlib
@@ -17,6 +16,7 @@ from collections.abc import Generator
 from typing import Any, BinaryIO, Optional
 
 import cv2
+import msgpack
 import numpy as np
 import numpy.typing as npt
 import scipy.spatial
@@ -124,6 +124,11 @@ def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None) -> list[Any]:
     return ret
 
 
+def to_contiguious_f32_blob(x: np.ndarray) -> bytes:
+    """Return contiguous f32 blob of the given array."""
+    return np.ascontiguousarray(x.astype(np.float32), dtype=np.float32).tobytes()
+
+
 class AxisCalibrator:
     """Class to calibrate the camera axis to the star tracker axis."""
 
@@ -197,7 +202,7 @@ class AttitudeEstimation:
 
         self._last_attitude_res = attitude_estimation.ERROR_ATTITUDE_RESULT
         self._calibration_rots: list[npt.NDArray[np.floating]] = []
-        self._camera_frame: list[list[float]] = []
+        self._camera_frame: bytes = b""
 
         self.quat = np.array([0.0, 0.0, 0.0, 1.0])
 
@@ -271,16 +276,16 @@ class AttitudeEstimation:
         extrinsic = scipy.spatial.transform.Rotation.from_quat(self.quat).inv().as_matrix()
 
         data = {
-            "star_coords": to_rounded_list(star_coords_radial, 2),
+            "star_coords": to_contiguious_f32_blob(star_coords_radial),
             "alignment_error": alignment_error,
-            "cat_xyz": to_rounded_list(cat_xyz_radial, 2),
-            "cat_mags": to_rounded_list(cat_mags, 2),
+            "cat_xyz": to_contiguious_f32_blob(cat_xyz_radial),
+            "cat_mags": to_contiguious_f32_blob(cat_mags),
             "north_south": to_rounded_list(north_south_radial, 2),
             "frame_points": self._camera_frame,
             "quat": self.quat.tolist(),
             "n_matches": att_res.n_matches,
-            "obs_pix": obs_xy.tolist(),
-            "cat_pix": cat_xy.tolist(),
+            "obs_pix": to_contiguious_f32_blob(obs_xy),
+            "cat_pix": to_contiguious_f32_blob(cat_xy),
             "image_size": image_size,
             "processing_time": int(tm2.t * 1000),
             "post_processing_time": int(tm3.t * 1000),
@@ -296,7 +301,7 @@ class AttitudeEstimation:
         if self._axis_calibrator is not None:
             points = self._axis_calibrator.axis_rot.apply(points)
         points = project_radial(points)
-        self._camera_frame = to_rounded_list(points.T, 2)
+        self._camera_frame = to_contiguious_f32_blob(points)
 
     def save_database(self) -> None:
         """Save the fine calibration database to the filesystem."""
@@ -954,7 +959,7 @@ class WebApp:
         try:
             while True:
                 d = self.app.stream.get_blocking()
-                ws.send(json.dumps(d))
+                ws.send(msgpack.dumps(d, use_single_float=True))
         except ConnectionClosed:
             pass
 
@@ -992,7 +997,7 @@ def main() -> int:
         cam.time_warp_factor = 100
         cam.simulate_exposure_time = True
         cam.default_config = testing_utils.StarImageGeneratorConfig(
-            exposure=200, catalog_max_magnitude=6.5
+            exposure=50, catalog_max_magnitude=6.5
         )
 
         camera.RpiCamera = cam  # type: ignore[assignment, misc]
