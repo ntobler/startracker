@@ -16,7 +16,7 @@ from collections.abc import Generator
 from typing import Any, BinaryIO, Optional
 
 import cv2
-import msgpack
+import msgpack  # type: ignore[import-untyped]
 import numpy as np
 import numpy.typing as npt
 import scipy.spatial
