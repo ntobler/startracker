@@ -7,7 +7,7 @@ import logging
 import math
 import threading
 import time
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 import numpy as np
 import ruststartracker
@@ -51,6 +51,8 @@ ERROR_ATTITUDE_RESULT = AttitudeEstimationResult(
 
 @dataclasses.dataclass
 class AttitudeEstimatorConfig(util.PickleDataclass):
+    max_candidates: int = 100
+    """Maximum number of star candidates extracted from an image (sorted by brightness)."""
     min_star_area: int = 3
     """Minimum area in pixels for a star to be detected."""
     max_star_area: int = 100
@@ -64,6 +66,9 @@ class AttitudeEstimatorConfig(util.PickleDataclass):
     epoch: Optional[float] = None
     """Astronomical epoch in years e.g. 2024.7 to calculate up-to-date star catalog.
     If None, the current date is used. Set to a fixed value to ensure reproducibility."""
+    max_lookup_magnitude: float = 5.5
+    """Maximum magnitude of stars used in the triangulation. Reducing this number means only
+    bright stars are used for triangulation. This results in faster lookup performance."""
 
     def copy(self) -> Self:
         """Create a copy of this instance."""
@@ -76,7 +81,11 @@ FilterFunc = Callable[[np.ndarray, np.ndarray], np.ndarray]
 @functools.lru_cache(1)
 def get_catalog() -> ruststartracker.StarCatalog:
     """Get cached star catalog."""
-    return ruststartracker.StarCatalog(max_magnitude=5.5)
+    return ruststartracker.StarCatalog.from_hipparcos(max_magnitude=8.0)
+
+
+class NoUpdate(enum.Enum):
+    NO_UPDATE = 0
 
 
 class AttitudeEstimator:
@@ -129,11 +138,44 @@ class AttitudeEstimator:
 
         self._backend = ruststartracker.StarTracker(
             self.cat_xyz,
+            self.cat_mag,
             camera_params,
+            max_lookup_magnitude=self._config.max_lookup_magnitude,
             inter_star_angle_tolerance=isa_angle_tol,
             n_minimum_matches=self._config.n_match,
             timeout_secs=self._config.timeout_secs,
         )
+
+    def update(
+        self,
+        cal: kalkam.IntrinsicCalibration | Literal[NoUpdate.NO_UPDATE] = NoUpdate.NO_UPDATE,
+        cat_filter: Optional[FilterFunc] | Literal[NoUpdate.NO_UPDATE] = NoUpdate.NO_UPDATE,
+        config: AttitudeEstimatorConfig | Literal[NoUpdate.NO_UPDATE] = NoUpdate.NO_UPDATE,
+    ) -> None:
+        """Update parameters that require reinitialization."""
+        reinitialization_needed = False
+        if cal is not NoUpdate.NO_UPDATE:
+            self._cal = cal
+            reinitialization_needed = True
+        if cat_filter is not NoUpdate.NO_UPDATE:
+            self._cat_filter = cat_filter
+            reinitialization_needed = True
+        if config is not NoUpdate.NO_UPDATE:
+            config_requireds_reinitialization = [
+                "n_match",
+                "timeout_secs",
+                "star_match_pixel_tol",
+            ]
+            old_config_dict = self._config.to_dict()
+            new_config_dict = config.to_dict()
+            self._config = config
+            if any(
+                old_config_dict[k] != new_config_dict[k] for k in config_requireds_reinitialization
+            ):
+                reinitialization_needed = True
+
+        if reinitialization_needed:
+            self._initialize_backend()
 
     @property
     def cal(self) -> kalkam.IntrinsicCalibration:
@@ -169,11 +211,9 @@ class AttitudeEstimator:
         ]
         old_config_dict = self._config.to_dict()
         new_config_dict = config.to_dict()
+        self._config = config
         if any(old_config_dict[k] != new_config_dict[k] for k in config_requireds_reinitialization):
-            self._config = config
             self._initialize_backend()
-        else:
-            self._config = config
 
     def image_xyz_to_xy(self, image_xyz_cam: np.ndarray) -> np.ndarray:
         """Convert camera frame XYZ coordinates to image pixel coordinates."""
@@ -189,6 +229,7 @@ class AttitudeEstimator:
         return self._backend.get_centroids(
             image,
             darkframe=darkframe,
+            n_candidates=self._config.max_candidates,
             min_star_area=self._config.min_star_area,
             max_star_area=self._config.max_star_area,
         )
@@ -224,6 +265,7 @@ class AttitudeEstimator:
             result = self._backend.process_image(
                 image,
                 darkframe=darkframe,
+                n_candidates=self._config.max_candidates,
                 min_star_area=self._config.min_star_area,
                 max_star_area=self._config.max_star_area,
             )

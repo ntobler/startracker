@@ -428,6 +428,8 @@ pub fn calibrate(
     object_points: &[[f32; 3]],
     intrinsic: &[[f64; 3]; 3],
     dist_coefs: &[f64; 5],
+    tol: f64,
+    max_iter: usize,
 ) -> CalibrationResult {
     let initial_params = [
         0.0,
@@ -446,7 +448,7 @@ pub fn calibrate(
 
     // Solve optimization problem with Levenberg-Marquardt algorithm
     let mut problem = CameraCalibrationProblem::new(&initial_params, image_points, object_points);
-    crate::optim::levenberg_marquardt(&mut problem, 10, 1e-4, 1e-3);
+    crate::optim::levenberg_marquardt(&mut problem, max_iter, tol, 1e-3);
 
     let rms_error = problem.get_residuals().map(|x| x * x).mean().sqrt();
     CalibrationResult {

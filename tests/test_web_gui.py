@@ -92,7 +92,8 @@ def test_app_auto_calibration(tmp_path: pathlib.Path):
     testing_utils.patch_persistent(tmp_path, cal=False)
 
     cam = testing_utils.StarCameraCalibrationTestCam
-    cam.time_interval = 60
+    cam.time_interval = 10
+    cam.theta = 0.5
     cam.simulate_exposure_time = False
     cam.default_config = testing_utils.StarImageGeneratorConfig(
         exposure=200, catalog_max_magnitude=6.5

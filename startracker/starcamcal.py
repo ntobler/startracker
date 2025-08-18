@@ -23,6 +23,7 @@ def calibrate_camera(
     *,
     intrinsic_guess: np.ndarray | None = None,
     dist_coefs_guess: np.ndarray | None = None,
+    tol: float = 1e-5,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Calibrate camera parameters given image points and 3d object camera frame vectors.
 
@@ -32,7 +33,7 @@ def calibrate_camera(
         image_size: Size of the camera image in pixels as (width, height).
         intrinsic_guess: Optional initial guess for the intrinsic camera parameters, shape=(3, 3).
         dist_coefs_guess: Optional initial guess for the distortion coefficients, shape=(5,).
-        level: Optimization level, see _objective_function
+        tol: Tolerance for Levenberg-Marquardt algorithm
 
     Returns:
         A tuple containing:
@@ -61,6 +62,7 @@ def calibrate_camera(
         dist_coefs_guess=np.ascontiguousarray(dist_coefs_guess, dtype=np.float64)
         if dist_coefs_guess is not None
         else None,
+        tol=tol,
     )
     params = np.array(res.params, dtype=np.float64)
     extrinsic = scipy.spatial.transform.Rotation.from_mrp(params[:3]).as_matrix()

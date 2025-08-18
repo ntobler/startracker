@@ -193,17 +193,18 @@ export default {
 
             if (this.view_settings?.image_type != "crop2x") {
 
+                if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
+                    this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
+                } else if (this.view_settings.coordinate_frame && this.stream.attitude_estimation?.n_matches > 0) {
+                    this.drawCelestialCoordinateFrame(ctx, this.stream.attitude_estimation);
+                }
+
                 if (this.stream.attitude_estimation) {
                     this.drawStars(ctx, this.stream.attitude_estimation)
                 }
 
                 this.showAutoCalibrationInfo(this.stream.auto_calibrator);
 
-                if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
-                    this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
-                } else if (this.view_settings.coordinate_frame && this.stream.attitude_estimation?.n_matches > 0) {
-                    this.drawCelestialCoordinateFrame(ctx, this.stream.attitude_estimation);
-                }
             }
 
             ctx.restore()

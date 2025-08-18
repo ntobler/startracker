@@ -12,7 +12,6 @@ mod optim;
 mod poisson_disk;
 mod starcal;
 mod stargradcal;
-mod util;
 
 #[pymodule]
 fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -57,12 +56,12 @@ fn starcal_objective_function<'py>(
     params: [f64; starcal::PARAM_COUNT],
     image_points: numpy::PyReadonlyArray2<'py, f32>,
     object_points: numpy::PyReadonlyArray2<'py, f32>,
-) -> (
+) -> PyResult<(
     Bound<'py, numpy::PyArray1<f64>>,
     Bound<'py, numpy::PyArray2<f64>>,
-) {
-    let image_points_view = numpy_to_dynamic_slice(&image_points).unwrap();
-    let object_points_view = numpy_to_dynamic_slice(&object_points).unwrap();
+)> {
+    let image_points_view = numpy_to_slice_2d(&image_points)?;
+    let object_points_view = numpy_to_slice_2d(&object_points)?;
     let mut problem: starcal::CameraCalibrationProblem<'_> =
         starcal::CameraCalibrationProblem::new(&params, image_points_view, object_points_view);
 
@@ -70,14 +69,10 @@ fn starcal_objective_function<'py>(
     problem.calc_residuals();
 
     let residuals = problem.get_residuals().as_slice().to_pyarray_bound(py);
-    let jacobian_flat = problem.get_jacobian().as_slice().to_pyarray_bound(py);
-    let jacobian = jacobian_flat
-        .reshape((
-            problem.get_jacobian().ncols(),
-            problem.get_jacobian().nrows(),
-        ))
-        .expect("Shape mismatch in jacobian reshape");
-    (residuals, jacobian)
+    let jacobian_array = problem.get_jacobian();
+    let jacobian_flat = jacobian_array.as_slice().to_pyarray_bound(py);
+    let jacobian = jacobian_flat.reshape((jacobian_array.ncols(), jacobian_array.nrows()))?;
+    Ok((residuals, jacobian))
 }
 
 #[pyfunction]
@@ -87,9 +82,11 @@ fn starcal_calibrate<'py>(
     image_size: [usize; 2],
     intrinsic_guess: Option<numpy::PyReadonlyArray2<'py, f64>>,
     dist_coefs_guess: Option<numpy::PyReadonlyArray1<'py, f64>>,
+    tol: Option<f64>,
+    max_iter: Option<usize>,
 ) -> PyResult<CalibrationResult> {
-    let image_points_view = numpy_to_dynamic_slice(&image_points).unwrap();
-    let object_points_view = numpy_to_dynamic_slice(&object_points).unwrap();
+    let image_points_view = numpy_to_slice_2d(&image_points)?;
+    let object_points_view = numpy_to_slice_2d(&object_points)?;
 
     let intrinsic: [[f64; 3]; 3] = if let Some(guess) = intrinsic_guess {
         if guess.shape() != [3, 3] {
@@ -130,11 +127,23 @@ fn starcal_calibrate<'py>(
         [0.0, 0.0, 0.0, 0.0, 0.0]
     };
 
+    let tol_value = match tol {
+        Some(v) => v,
+        None => 1e-4,
+    };
+
+    let max_iter_value = match max_iter {
+        Some(v) => v,
+        None => 20,
+    };
+
     let result = starcal::calibrate(
         image_points_view,
         object_points_view,
         &intrinsic,
         &dist_coefs,
+        tol_value,
+        max_iter_value,
     );
 
     Ok(CalibrationResult { inner: result })
@@ -153,8 +162,8 @@ fn stargradcal_objective_function<'py>(
     Bound<'py, numpy::PyArray1<f64>>,
     Bound<'py, numpy::PyArray2<f64>>,
 )> {
-    let image_points_view = numpy_to_dynamic_slice(&image_points).unwrap();
-    let image_gradients_view = numpy_to_dynamic_slice(&image_gradients).unwrap();
+    let image_points_view = numpy_to_slice_2d(&image_points)?;
+    let image_gradients_view = numpy_to_slice_2d(&image_gradients)?;
 
     if intrinsic_guess.shape() != [3, 3] {
         return Err(PyRuntimeError::new_err(
@@ -208,6 +217,8 @@ fn stargradcal_calibrate<'py>(
     dist_coef_guess: f64,
     theta_guess: f64,
     epsilon_guess: f64,
+    tol: f64,
+    max_iter: usize,
 ) -> PyResult<(
     Bound<'py, numpy::PyArray2<f64>>,
     f64,
@@ -215,8 +226,8 @@ fn stargradcal_calibrate<'py>(
     f64,
     Bound<'py, numpy::PyArray1<f64>>,
 )> {
-    let image_points_view = numpy_to_dynamic_slice(&image_points).unwrap();
-    let image_gradients_view = numpy_to_dynamic_slice(&image_gradients).unwrap();
+    let image_points_view = numpy_to_slice_2d(&image_points)?;
+    let image_gradients_view = numpy_to_slice_2d(&image_gradients)?;
 
     if intrinsic_guess.shape() != [3, 3] {
         return Err(PyRuntimeError::new_err(
@@ -237,6 +248,8 @@ fn stargradcal_calibrate<'py>(
         dist_coef_guess,
         theta_guess,
         epsilon_guess,
+        tol,
+        max_iter,
     );
 
     let intrinsic_numpy_flat = intrinsic.as_slice().to_pyarray_bound(py);
@@ -255,13 +268,13 @@ fn even_spaced_indices<'py>(
     points: numpy::PyReadonlyArray2<'py, f32>,
     n_samples: usize,
     rng_seed: u64,
-) -> Bound<'py, numpy::PyArray1<usize>> {
-    let points_view = numpy_to_dynamic_slice(&points).unwrap();
+) -> PyResult<Bound<'py, numpy::PyArray1<usize>>> {
+    let points_view = numpy_to_slice_2d(&points)?;
     let accepted_indices = poisson_disk::even_spaced_indices(&points_view, n_samples, rng_seed);
-    accepted_indices.as_slice().to_pyarray_bound(py)
+    Ok(accepted_indices.as_slice().to_pyarray_bound(py))
 }
 
-fn numpy_to_dynamic_slice<'py, T: numpy::Element + Copy, const L: usize>(
+fn numpy_to_slice_2d<'py, T: numpy::Element + Copy, const L: usize>(
     vectors: &'py numpy::PyReadonlyArray2<'py, T>,
 ) -> PyResult<&'py [[T; L]]> {
     if !vectors.is_c_contiguous() || vectors.ndim() != 2 || vectors.shape()[1] != L {
@@ -270,5 +283,6 @@ fn numpy_to_dynamic_slice<'py, T: numpy::Element + Copy, const L: usize>(
             L
         )));
     }
-    Ok(util::as_slice_of_arrays(vectors.as_slice()?).unwrap())
+    let slice = vectors.as_slice()?;
+    Ok(unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const [T; L], slice.len() / L) })
 }

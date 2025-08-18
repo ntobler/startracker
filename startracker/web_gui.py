@@ -260,9 +260,9 @@ class AttitudeEstimation:
             cat_xyz = cat_xyz[pos_z]
             cat_mags = cat_mags[pos_z]
 
-            star_coords = project_radial(star_coords)
-            cat_xyz = project_radial(cat_xyz)
-            north_south = project_radial(north_south)
+            star_coords_radial = project_radial(star_coords)
+            cat_xyz_radial = project_radial(cat_xyz)
+            north_south_radial = project_radial(north_south)
 
             self._update_camera_frame()
 
@@ -271,11 +271,11 @@ class AttitudeEstimation:
         extrinsic = scipy.spatial.transform.Rotation.from_quat(self.quat).inv().as_matrix()
 
         data = {
-            "star_coords": to_rounded_list(star_coords, 2),
+            "star_coords": to_rounded_list(star_coords_radial, 2),
             "alignment_error": alignment_error,
-            "cat_xyz": to_rounded_list(cat_xyz, 2),
+            "cat_xyz": to_rounded_list(cat_xyz_radial, 2),
             "cat_mags": to_rounded_list(cat_mags, 2),
-            "north_south": to_rounded_list(north_south, 2),
+            "north_south": to_rounded_list(north_south_radial, 2),
             "frame_points": self._camera_frame,
             "quat": self.quat.tolist(),
             "n_matches": att_res.n_matches,
@@ -383,7 +383,7 @@ class AutoCalibrator:
         """Restart calibration procedure."""
         # TODO find a way to get image width and height
         width, height = image_size
-        ae_config = attitude_estimation.AttitudeEstimatorConfig(star_match_pixel_tol=10, n_match=8)
+        ae_config = attitude_estimation.AttitudeEstimatorConfig(star_match_pixel_tol=5, n_match=10)
         sc_config = initial_starcal.StarCalibratorConfig(ae_config)
         self._star_calibrator = initial_starcal.StarCalibrator(sc_config, (width, height))
         self._t0 = None
@@ -988,7 +988,8 @@ def main() -> int:
         # cam = testing_utils.RandomStarCam
         cam = testing_utils.AxisAlignCalibrationTestCam
         cam = testing_utils.StarCameraCalibrationTestCam
-        cam.time_warp_factor = 1000
+        cam.theta = -np.pi / 2 * 0.8
+        cam.time_warp_factor = 100
         cam.simulate_exposure_time = True
         cam.default_config = testing_utils.StarImageGeneratorConfig(
             exposure=200, catalog_max_magnitude=6.5
