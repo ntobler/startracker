@@ -1091,6 +1091,8 @@ pub fn calibrate(
     dist_coef0: f64,
     theta0: f64,
     epsilon0: f64,
+    tol: f64,
+    max_iter: usize,
 ) -> (
     nalgebra::Matrix3<f64>,
     f64,
@@ -1111,7 +1113,7 @@ pub fn calibrate(
     // Solve optimization problem with Levenberg-Marquardt algorithm
     let mut problem =
         StarGradCalibrationProblem::new(&initial_params, image_points, image_gradients);
-    crate::optim::levenberg_marquardt(&mut problem, 10, 1e-4, 1e-3);
+    crate::optim::levenberg_marquardt(&mut problem, max_iter, tol, 1e-3);
 
     let params = problem.params.as_slice();
 

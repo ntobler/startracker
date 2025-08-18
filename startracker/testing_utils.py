@@ -104,7 +104,7 @@ class StarImageGeneratorConfig:
     """Added noise standard deviation."""
     black_level: float = 4.5
     """Black level of sensor."""
-    catalog_max_magnitude: float = 5.5
+    catalog_max_magnitude: float = 7
     """Maximum star intensity included in the star catalog. Higher number is more faint."""
 
 
@@ -134,7 +134,9 @@ class StarImageGenerator:
         else:
             self.distorter = None
 
-        catalog = ruststartracker.StarCatalog(max_magnitude=config.catalog_max_magnitude)
+        catalog = ruststartracker.StarCatalog.from_hipparcos(
+            max_magnitude=config.catalog_max_magnitude
+        )
         self.stars_nwu = catalog.normalized_positions()
         self.stars_mags = catalog.magnitude
 
@@ -187,13 +189,22 @@ class StarImageGenerator:
         extrinsic = np.concatenate((rot.as_matrix().T, np.zeros((3, 1))), axis=-1)
         return self.image_from_extrinsic(extrinsic, grid=grid)
 
-    def stars_from_extrinsic(self, extrinsic: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Get star magnitudes and pixel positions from extrinsic matrix."""
+    def stars_from_extrinsic(
+        self, extrinsic: np.ndarray, *, ids: Optional[npt.NDArray[np.bool_]] = None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Get star magnitudes and pixel positions from extrinsic matrix.
+
+        Args:
+            extrinsic: Extrinsic matrix of the camera.
+            ids: If given, selects these ids of the star catalog.
+        """
         # Take z image vector of the inverted extrinsic
         target_vector = extrinsic[2, :3]
 
         # Select all stars that are roughly in frame
-        in_frame = np.inner(self.stars_nwu, target_vector) > self._cal.cos_phi()
+        in_frame = (
+            np.inner(self.stars_nwu, target_vector) > self._cal.cos_phi() if ids is None else ids
+        )
         stars_nwu = self.stars_nwu[in_frame]
         stars_mags = self.stars_mags[in_frame]
 
@@ -201,7 +212,9 @@ class StarImageGenerator:
         pp = kalkam.PointProjector(self._cal, extrinsic)
         stars_xy = pp.obj2pix(stars_nwu, axis=-1)
 
-        return stars_mags, stars_xy
+        stars_id = in_frame
+
+        return stars_mags, stars_xy, stars_id
 
     def image_from_extrinsic(
         self, extrinsic: np.ndarray, *, grid: bool = False
@@ -209,7 +222,7 @@ class StarImageGenerator:
         """Create image of stars from extrinsic matrix."""
         width, height = self.width, self.height
 
-        stars_mags, stars_xy = self.stars_from_extrinsic(extrinsic)
+        stars_mags, stars_xy, _ = self.stars_from_extrinsic(extrinsic)
 
         if False:
             import matplotlib.pyplot as plt
@@ -405,7 +418,7 @@ class ArtificialStarCam(camera.Camera):
             self.capture_time = time.monotonic() * self.time_warp_factor
 
         if self.simulate_exposure_time:
-            with util.max_rate(1000 / self._sig.exposure):
+            with util.max_rate(1000 / self._settings.exposure_ms):
                 image, self._last_star_image_positions = self._capture()
                 return image
         else:
@@ -501,11 +514,11 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
 class StarCameraCalibrationTestCam(ArtificialStarCam):
     """Star camera steadily facing a random direction."""
 
-    theta: float
+    theta: float = np.pi / 2
     """Elevation angle 0 is equatorial, pi/2 is to north pole, -pi/2 is to south pole."""
-    epsilon: float
+    epsilon: float = np.pi / 6
     """Roll component about the camera axis."""
-    phi: float
+    phi: float = np.pi / 6
     """Star angle, rotation about the north south axis."""
 
     def __init__(
@@ -516,22 +529,21 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
     ):
         super().__init__(camera_settings, cal=cal, config=config)
 
-        self.theta = self._rng.uniform(-np.pi / 2, np.pi / 2)
-        self.epsilon = self._rng.uniform(-np.pi / 2, np.pi / 2)
-        self.phi = 0
+        # self.theta = self._rng.uniform(-np.pi / 2, np.pi / 2)
+        # self.epsilon = self._rng.uniform(-np.pi / 2, np.pi / 2)
+        # self.phi = 0
 
     def _get_extrinsic(self, t: float) -> np.ndarray:
         """Get the current extrinsic matrix of the camera.
 
         Changes with time.
         """
-        self.phi = (t * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
+        # add the Earth's rotation based on time to pi
+        phi = (self.phi + t * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
 
-        r = scipy.spatial.transform.Rotation.from_euler(
-            "zxz", (self.epsilon, np.pi / 2 - self.theta, self.phi), degrees=False
-        )
-
-        rot_matrix = r.as_matrix()
+        rot_matrix = scipy.spatial.transform.Rotation.from_euler(
+            "zxz", (self.epsilon, np.pi / 2 - self.theta, phi), degrees=False
+        ).as_matrix()
         extrinsic = np.concatenate((rot_matrix.T, np.zeros((3, 1))), axis=1)
         return extrinsic
 
@@ -548,6 +560,11 @@ class StarCameraCalibrationTestCam(ArtificialStarCam):
         ct.add_arg("theta", -np.pi / 2, np.pi / 2, dtype=float)
         ct.add_arg("epsilon", -np.pi, np.pi, dtype=float)
         ct.run()
+
+
+def angle_diff(a: float, b: float) -> float:
+    """Absolute difference between angles in rad."""
+    return (a - b + np.pi) % (2 * np.pi) - np.pi
 
 
 if __name__ == "__main__":

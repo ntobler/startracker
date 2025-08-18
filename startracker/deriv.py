@@ -178,6 +178,7 @@ def optim2():
     intrinsic = sp.Matrix([[fx, 0, tx], [0, fy, ty], [0, 0, 1]])
     intrinsic_inv = intrinsic.inv()
 
+    # Build rotation matrix
     rot = (
         sp.Matrix([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
         * mrp_to_rotm(sp.Matrix([m_theta, 0, 0]))
@@ -185,15 +186,21 @@ def optim2():
     )
     extrinsic = rot.T
 
+    # Correct distortion
     stars_xy, d_undistort = undistort(img_xy, k1, intrinsic)
     stars_dxy = d_undistort * img_dxy
 
+    # Transform image coordinates to normalized 3d coordinates
     stars_xyz = sp.Matrix([[stars_xy[0, 0]], [stars_xy[1, 0]], [1]])
     object_space = (extrinsic.T @ intrinsic_inv) @ stars_xyz
     object_space = object_space / sp.sqrt(object_space.T * object_space)[0, 0]
 
+    # Calculate movement of stars in 3D
+    star_movement_3d = STAR_MOVEMENT_TRANSFORM * object_space
+
+    # Calculate movement of stars in 2D
     _, derivative = project(intrinsic * extrinsic, object_space)
-    star_dir = derivative * STAR_MOVEMENT_TRANSFORM * object_space
+    star_dir = derivative * star_movement_3d
 
     residuals = star_dir - stars_dxy
     rx = residuals[0, 0]

@@ -31,12 +31,12 @@ class MovementRegisterer:
 
         def __init__(self, position: np.ndarray, t: float):
             self.positions = [position]
-            self.thresholds = [50]
+            self.thresholds = [3]
             self.times = [t]
             self.undetected_spree = 0
 
     PERSIST_THRESHOLD = 10
-    MAX_FLOAT = np.finfo(np.float64).max
+    MAX_F64 = np.finfo(np.float64).max
 
     candidates: list[Candidate] = []
 
@@ -77,8 +77,8 @@ class MovementRegisterer:
                 c.thresholds.append(threshold)
                 c.times.append(t)
 
-                distances[new_index, :] = self.MAX_FLOAT
-                distances[:, existing_index] = self.MAX_FLOAT
+                distances[new_index, :] = self.MAX_F64
+                distances[:, existing_index] = self.MAX_F64
                 unmatched_new[new_index] = False
                 unmatched_existing[existing_index] = False
 
@@ -100,17 +100,21 @@ class MovementRegisterer:
 
     def get_results(
         self,
-        residual_threshold: float = 0.1,
-        min_observations: int = 11,
         *,
+        sample_percentile: int = 50,
+        fit_mse_threshold: float = 0.1,
+        min_observations_per_trail: int = 8,
+        return_best_percentile: int = 50,
         plot: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Get Positions of stars and their movement direction.
 
         Args:
-            residual_threshold: Mean squared error threshold for polynomial fit to star trails.
-            min_observations: Minimum number of observations in a star trail for it to be
+            sample_percentile: Percentile of samples in a trail used for the polynomial fit
+            fit_mse_threshold: Mean squared error threshold for polynomial fit to star trails.
+            min_observations_per_trail: Minimum number of observations in a star trail for it to be
                 considered.
+            return_best_percentile: Return a percentile of best fitted stars.
             plot: Plot results with matplotlib.
 
         Returns:
@@ -118,13 +122,15 @@ class MovementRegisterer:
             star movement vector in pixels per second, shape=[n, 2],
             mean squared error of the star trail polynomial fit
         """
-        if plot:
+        good_candidates = [
+            c for c in self.candidates if len(c.positions) >= min_observations_per_trail
+        ]
+
+        if plot and good_candidates:
             import matplotlib.pyplot as plt
 
             fig, ax = plt.subplots()
             ax.set_aspect(1)
-
-        good_candidates = [c for c in self.candidates if len(c.positions) >= min_observations]
 
         stars_xy_list = []
         stars_dxy_list = []
@@ -135,18 +141,27 @@ class MovementRegisterer:
             t -= np.mean(t)
             positions = np.array(c.positions)
 
-            t_poly = np.linspace(t.min(), t.max(), 20)
+            # Fit curve and discard 20% of the points that don't match
+            p, sse, _, _, _ = np.polyfit(t, positions, 2, full=True)
+            fit_positions = np.array([np.polyval(pp, t) for pp in p.T]).T
+            errors = np.abs(np.linalg.norm(positions - fit_positions, axis=-1))
+            mask = errors < np.percentile(errors, sample_percentile)
+            positions = positions[mask]
+            t = t[mask]
+
+            # Fit curve again using 80 % of samples
             p, sse, _, _, _ = np.polyfit(t, positions, 2, full=True)
             mse = sse / len(t)
 
             # Discard fits with high error
-            if np.any(mse > residual_threshold):
+            if mse.size == 0 or np.any(mse > fit_mse_threshold):
                 continue
 
             xy = [np.polyval(pp, 0) for pp in p.T]
             dx_dy = [np.polyval(pp[:-1], 0) for pp in p.T]
 
             if plot:
+                t_poly = np.linspace(t.min(), t.max(), 20)
                 positions_poly = [np.polyval(pp, t_poly) for pp in p.T]
 
                 x, y = positions.T
@@ -163,14 +178,25 @@ class MovementRegisterer:
             stars_dxy_list.append(dx_dy)
             mses_list.append(mse)
 
-        if plot:
+        if plot and good_candidates:
             plt.show()
 
         stars_xy = np.array(stars_xy_list, dtype=np.float64)
         stars_dxy = np.array(stars_dxy_list, dtype=np.float64)
         mses = np.array(mses_list, dtype=np.float64)
 
+        if return_best_percentile < 100:
+            combined_mses = np.linalg.norm(mses, axis=-1)
+            mask = combined_mses < np.percentile(combined_mses, return_best_percentile)
+            stars_xy = stars_xy[mask]
+            stars_dxy = stars_dxy[mask]
+            mses = mses[mask]
+
         return stars_xy, stars_dxy, mses
+
+
+class StarGradientCalibrationError(Exception):
+    pass
 
 
 def star_gradient_calibration(
@@ -182,7 +208,10 @@ def star_gradient_calibration(
     theta0: Optional[float] = None,
     epsilon0: Optional[float] = None,
     *,
+    tol: float = 1e-4,
+    max_iter: int = 20,
     verbose: bool = False,
+    plot: bool = False,
 ) -> tuple[np.ndarray, float, float, float, float]:
     """Estimate intrinsic and partial extrinsic from star image positions and their movement.
 
@@ -194,6 +223,8 @@ def star_gradient_calibration(
         intrinsic0: Optional initial intrinsic matrix
         theta0: Optional declination angle in rads
         epsilon0: Optional roll angle of the camera about its axis in rads.
+        tol: Tolerance for Levenberg-Marquardt algorithm.
+        max_iter: Maximum number of iterations in Levenberg-Marquardt algorithm.
         verbose: Print messages
         plot: Plot using matplotlib
 
@@ -223,12 +254,12 @@ def star_gradient_calibration(
         intrinsic0s = np.array(intrinsic0, dtype=np.float64, copy=False)[np.newaxis]
 
     theta0s = (
-        np.array([np.pi / 4, -np.pi / 4], dtype=np.float64)
+        np.linspace(-0.5, 0.5, 8, dtype=np.float64) * np.pi
         if theta0 is None
         else np.array([theta0], dtype=np.float64)
     )
     epsilon0s = (
-        np.array([3 * np.pi / 4, np.pi / 4, -np.pi / 4, 3 * -np.pi / 4], dtype=np.float64)
+        np.linspace(-1 + 0.125, 1 - 0.125, 4, dtype=np.float64) * np.pi
         if epsilon0 is None
         else np.array([epsilon0], dtype=np.float64)
     )
@@ -249,32 +280,86 @@ def star_gradient_calibration(
         stars_dxy_np / const.EARTH_ANGULAR_VELOCITY, dtype=np.float32, copy=False
     )
 
+    # Try the grid of initial conditions to find a low basin
     prior_errors_list = []
     for theta0, epsilon0, intrinsic0 in zip(theta0s, epsilon0s, intrinsic0s, strict=True):
-        # Build state vector
         residuals, _ = libstartracker.stargradcal_objective_function(
             stars_xy_f32, stars_dxy_f32, intrinsic0, 0.0, float(theta0), float(epsilon0)
         )
-        error = np.square(residuals * const.EARTH_ANGULAR_VELOCITY).mean().item()
-
-        prior_errors_list.append(error)
-    best_index = np.argmin(prior_errors_list)
+        prior_errors_list.append(np.sum(residuals**2))
+    best_indices = np.argsort(prior_errors_list)[:4]
 
     if verbose:
-        print("Starting optimization")
+        print("Starting optimization (preselection)")
 
-    theta0 = float(theta0s[best_index])
-    epsilon0 = float(epsilon0s[best_index])
-    intrinsic0 = intrinsic0s[best_index]
+    # Solve selected indices with a few iterations
+    results = []
+    errors = []
+    for i in best_indices:
+        theta0 = float(theta0s[i])
+        epsilon0 = float(epsilon0s[i])
+        intrinsic0 = intrinsic0s[i]
+        res = libstartracker.stargradcal_calibrate(
+            stars_xy_f32, stars_dxy_f32, intrinsic0, 0.0, theta0, epsilon0, tol, max_iter=10
+        )
+        results.append(res)
+        errors.append(np.sum(res[-1] ** 2))
 
+    # Get best initial values
+    i = best_indices[np.argmin(errors)]
+    theta0 = float(theta0s[i])
+    epsilon0 = float(epsilon0s[i])
+    intrinsic0 = intrinsic0s[i]
+
+    if verbose:
+        print("Starting optimization (final)")
+
+    # Perform the ultimate optimization
     res = libstartracker.stargradcal_calibrate(
-        stars_xy_f32, stars_dxy_f32, intrinsic0, 0.0, theta0, epsilon0
+        stars_xy_f32, stars_dxy_f32, intrinsic0, 0.0, theta0, epsilon0, tol, max_iter
     )
     intrinsic, dist_coef, theta, epsilon, residuals = res
     intrinsic = np.copy(intrinsic.T)
-    residuals *= const.EARTH_ANGULAR_VELOCITY
-    error = np.square(residuals).mean().item()
+    residuals = residuals.reshape((len(stars_dxy_np)), 2) * const.EARTH_ANGULAR_VELOCITY
+    error = (
+        (np.linalg.norm(residuals, axis=-1) / np.linalg.norm(stars_dxy_np, axis=-1)).mean().item()
+    )
 
+    # Check if the intrinsic is valid
+    if intrinsic[0, 0] < 0 or intrinsic[1, 1] < 0:
+        raise StarGradientCalibrationError(
+            "Calibration resulted in invalid negative focal lengths."
+        )
+
+    if plot:
+        import matplotlib.pyplot as plt
+
+        _, ax = plt.subplots(1)
+        ax.quiver(
+            stars_xy_np[..., 0],  # x positions
+            stars_xy_np[..., 1],  # y positions
+            stars_dxy_np[..., 0],  # dx
+            stars_dxy_np[..., 1],  # dy
+            angles="xy",
+            scale_units="xy",
+            scale=100,
+            color="black",
+            width=0.002,
+        )
+        ax.quiver(
+            stars_xy_np[..., 0],  # x positions
+            stars_xy_np[..., 1],  # y positions
+            stars_dxy_np[..., 0] + residuals[..., 0],  # dx
+            stars_dxy_np[..., 1] + residuals[..., 1],  # dy
+            angles="xy",
+            scale_units="xy",
+            scale=100,
+            color="red",
+            width=0.002,
+        )
+        plt.show()
+
+    # Wrap angles
     epsilon = ((epsilon + np.pi) % (2 * np.pi)) - np.pi
     theta = ((theta + np.pi) % (2 * np.pi)) - np.pi
 
@@ -297,8 +382,13 @@ class StarCalibratorConfig:
 
     recalibration_percentile: float = 99.0
     """Percentile of data used for second calibration."""
-    interval: int = 10
+    interval: int = 5
     """Skip calibrations for given number of received samples"""
+
+    min_calibration_points: int = 20
+    """Minimum number of points required for a fine calibration. The problem has 12 DoF."""
+    max_rms_pixel_error: float = 2.0
+    """Maximum pixel RMS error for a fine calibration to be accepted."""
 
 
 class StarCalibrator:
@@ -325,7 +415,7 @@ class StarCalibrator:
     intrinsics: list[np.ndarray]
     dist_coeffs: list[np.ndarray]
 
-    stars_xy: list[np.ndarray]
+    observed_stars_xy: list[np.ndarray]
     """List of image positions of observed star candidates."""
     image_xy_list: list[np.ndarray]
     """List of image positions of matched stars."""
@@ -345,7 +435,7 @@ class StarCalibrator:
         self.intrinsics = []
         self.dist_coeffs = []
 
-        self.stars_xy = []
+        self.observed_stars_xy = []
 
         # These values will be recalculated if the calibration changes
         self.image_xy_list = []
@@ -378,7 +468,7 @@ class StarCalibrator:
             # No stars found in image
             return
 
-        self.stars_xy.append(stars_xy)
+        self.observed_stars_xy.append(stars_xy)
         self.times.append(t)
         self.star_match_fraction.append(
             0 if not self.star_match_fraction else self.star_match_fraction[-1]
@@ -412,7 +502,7 @@ class StarCalibrator:
             # across the sky.
 
             # Get star positions and their gradient in image coordinates.
-            stars_xy, stars_dxy, mses = self.movement_registerer.get_results(min_observations=4)
+            stars_xy, stars_dxy, mses = self.movement_registerer.get_results()
 
             # Check if there is enough points with good quality fits
             if (
@@ -423,9 +513,13 @@ class StarCalibrator:
 
             # Fit calibration to star movement
             height, width = image.shape
-            intrinsic, dist_coef, theta, epsilon, error = star_gradient_calibration(
-                stars_xy, stars_dxy, width, height
-            )
+            try:
+                intrinsic, dist_coef, theta, epsilon, error = star_gradient_calibration(
+                    stars_xy, stars_dxy, width, height, tol=1e-6, max_iter=20
+                )
+            except StarGradientCalibrationError:
+                # This calibration can sometimes fail
+                return
 
             r = scipy.spatial.transform.Rotation.from_euler(
                 "zxz", (epsilon, np.pi / 2 - theta, 0), degrees=False
@@ -453,7 +547,7 @@ class StarCalibrator:
             # Set a filter for the attitude estimator to reduce the number of potential stars
             # Since the declination angle is known, the star catalog can be reduced to a band around
             # the night sky
-            angle_margin_factor = 1.5
+            angle_margin_factor = 1.5  # Generic enough to be hardcoded
             half_fov_rad = angle_margin_factor * np.arctan(
                 np.hypot(width, height) / intrinsic[0, 0] / 2
             )
@@ -463,19 +557,20 @@ class StarCalibrator:
                 cat_theta = np.arcsin(cat_xyz[..., 2])
                 mask: npt.NDArray[np.bool_] = np.abs(cat_theta - theta) < half_fov_rad
                 # Only consider bright stars
-                mask *= mag < 5.5
+                mask *= mag < 6.0
                 return mask
 
             # Calibration needs to be set before filter,
             # As initialization fails with a dummy camera calibration
-            self.ae.cal = cal
-            self.ae.cat_filter = filt
+            self.ae.update(cal=cal, cat_filter=filt)
 
         if self.first_estimate_acquired:
             # Estimate rotations
             already_calculated = len(self._match_fractions)
             for xy, t in zip(
-                self.stars_xy[already_calculated:], self.times[already_calculated:], strict=True
+                self.observed_stars_xy[already_calculated:],
+                self.times[already_calculated:],
+                strict=True,
             ):
                 result = self.ae.estimate_from_image_positions(xy)
 
@@ -526,34 +621,33 @@ class StarCalibrator:
 
             # Rotate catalog coordinates such they result in smaller rotation values in the
             # calibration problem
-            cat_xyz = r.inv().apply(cat_xyz).astype(np.float32)
+            cat_xyz_camera = r.inv().apply(cat_xyz).astype(np.float32)
 
             if False:
                 import matplotlib.pyplot as plt
 
                 print("Plotting...")
                 fig, axs = plt.subplots(2)
-                s = np.concatenate(self.stars_xy, axis=0)
+                s = np.concatenate(self.observed_stars_xy, axis=0)
                 axs[0].plot(s[..., 0], s[..., 1], ".", alpha=0.2)
                 axs[0].plot(image_xy[..., 0], image_xy[..., 1], "x")
                 axs[0].set_aspect("equal")
                 axs[0].invert_yaxis()
                 axs[0].set_title("Image points")
-                axs[1].plot(cat_xyz[..., 0], cat_xyz[..., 1], "x")
+                axs[1].plot(cat_xyz_camera[..., 0], cat_xyz_camera[..., 1], "x")
                 axs[1].set_aspect("equal")
                 axs[1].invert_yaxis()
                 axs[1].set_title("Object points (x and y axis)")
                 plt.show()
 
             # Don't attempt calibration with very few samples
-            # The optimization problem has 12 DoF, so 40 is reasonable
-            if len(cat_xyz) < 40:
+            if len(cat_xyz_camera) < self._config.min_calibration_points:
                 return
 
             # Calibrate camera
             height, width = image.shape
             intrinsic, dist_coeffs, _, reprojection = starcamcal.calibrate_camera(
-                cat_xyz,
+                cat_xyz_camera,
                 image_xy,
                 (width, height),
                 intrinsic_guess=self.ae.cal.intrinsic,
@@ -566,12 +660,12 @@ class StarCalibrator:
                     squared_error_distances, self._config.recalibration_percentile
                 )
                 mask = squared_error_distances < threshold
-                cat_xyz = cat_xyz[mask]
+                cat_xyz_camera = cat_xyz_camera[mask]
                 image_xy = image_xy[mask]
 
                 # Calibrate camera with filtered set
                 intrinsic, dist_coeffs, _, reprojection = starcamcal.calibrate_camera(
-                    cat_xyz,
+                    cat_xyz_camera,
                     image_xy,
                     (width, height),
                     intrinsic_guess=intrinsic,
@@ -596,7 +690,7 @@ class StarCalibrator:
             )
 
             # Don't use parameters if the error is very large
-            if rms_error > 2.0:
+            if rms_error > self._config.max_rms_pixel_error:
                 return
 
             self.starbased_calibration_acquired = True
@@ -617,14 +711,9 @@ class StarCalibrator:
                 # Update the star tolerance with the estimated maximum error
                 ae_config = self.ae.config
                 ae_config.star_match_pixel_tol = rms_error * 3.0
-                self.ae.config = ae_config
 
-                # Set the updated calibration
-                self.ae.cal = cal
-
-                # Remove the filter on the catalog if present
-                if self.ae.cat_filter is not None:
-                    self.ae.cat_filter = None
+                # Set the updated calibration and remove the filter on the catalog
+                self.ae.update(cal=cal, cat_filter=None, config=ae_config)
 
                 # Reset calculated values, so they will be recalculated
                 self.image_xy_list = []

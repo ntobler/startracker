@@ -9,7 +9,6 @@ import pathlib
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import PIL.Image
 import scipy.spatial
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
@@ -21,12 +20,14 @@ from startracker import (
     kalkam,
     testing_utils,
 )
+from startracker.demo import demo_utils
 
 
 class Animation:
     """Animation of the internal works of StarCalibrator."""
 
     FONT_SIZE = 20
+    MAX_N = 200
 
     def __init__(self) -> None:
         """Setup animation figure."""
@@ -57,32 +58,26 @@ class Animation:
             lw=2,
             alpha=0.6,
         )
-        n_quivers = 100
         self._arrows = self._ax.quiver(
-            np.full(n_quivers, 10),  # x positions
-            np.full(n_quivers, 10),  # y positions
-            np.full(n_quivers, 10),  # dx
-            np.full(n_quivers, 10),  # dy
+            np.full(self.MAX_N, 10),  # x positions
+            np.full(self.MAX_N, 10),  # y positions
+            np.full(self.MAX_N, 10),  # dx
+            np.full(self.MAX_N, 10),  # dy
             angles="xy",
             scale_units="xy",
             scale=1,
             color="yellow",
             width=0.002,
             alpha=0.5,
+            zorder=999,
         )
-        self._gradient_tracked_lines = self._ax.plot(
-            np.full((2, 100), np.nan),
-            np.full((2, 100), np.nan),
-            color="white",
-            lw=3,
-            alpha=0.5,
-        )
+
         self._detected_stars = self._ax.plot(
             np.full((2, 1), np.nan),
             np.full((2, 1), np.nan),
             ".",
             color="purple",
-            alpha=0.5,
+            alpha=0.3,
             markersize=12,
         )
         self._matched_stars = self._ax.plot(
@@ -90,8 +85,15 @@ class Animation:
             np.full((2, 1), np.nan),
             ".",
             color="green",
-            alpha=0.5,
+            alpha=0.3,
             markersize=12,
+        )
+        self._gradient_tracked_lines = self._ax.plot(
+            np.full((2, self.MAX_N), np.nan),
+            np.full((2, self.MAX_N), np.nan),
+            color="white",
+            lw=3,
+            alpha=0.5,
         )
 
         margin = self.FONT_SIZE
@@ -126,7 +128,9 @@ class Animation:
         with contextlib.suppress(cv2.error):
             cv2.destroyWindow("window")
 
-    def update(self, image: np.ndarray, sc: initial_starcal.StarCalibrator) -> np.ndarray:
+    def update(
+        self, image: np.ndarray, sc: initial_starcal.StarCalibrator, *, gui: bool = False
+    ) -> np.ndarray:
         """Plot current state of the StarCalibrator object."""
         self._image.set_data(image)
 
@@ -174,14 +178,13 @@ class Animation:
         offsets = np.full((n_quivers, 2), np.nan)
         u = np.full(n_quivers, np.nan)
         v = np.full(n_quivers, np.nan)
-        if not sc.starbased_calibration_acquired:
-            stars_xy, stars_dxy, mses = sc.movement_registerer.get_results(min_observations=4)
-            if len(stars_xy):
-                n = min(len(stars_xy), n_quivers)
-                if n > 0:
-                    offsets[:n] = stars_xy[:n]
-                    u[:n] = stars_dxy[:n, 0] * 300
-                v[:n] = stars_dxy[:n, 1] * 300
+        stars_xy, stars_dxy, mses = sc.movement_registerer.get_results()
+        if len(stars_xy):
+            n = min(len(stars_xy), n_quivers)
+            if n > 0:
+                offsets[:n] = stars_xy[:n]
+                u[:n] = stars_dxy[:n, 0] * 300
+            v[:n] = stars_dxy[:n, 1] * 300
         self._arrows.set_offsets(offsets)
         self._arrows.set_UVC(u, v)
 
@@ -196,8 +199,8 @@ class Animation:
                 line.set_xdata([])
                 line.set_ydata([])
 
-        if sc.stars_xy:
-            detected_stars = np.concatenate(sc.stars_xy, axis=0)
+        if sc.observed_stars_xy:
+            detected_stars = np.concatenate(sc.observed_stars_xy, axis=0)
             self._detected_stars[0].set_xdata(detected_stars[:, 0])
             self._detected_stars[0].set_ydata(detected_stars[:, 1])
 
@@ -224,84 +227,40 @@ class Animation:
         w, h = self._canvas.get_width_height()
         img_rgba = np.frombuffer(buf, dtype=np.uint8).reshape((h, w, 4))
 
-        cv2.imshow("window", cv2.cvtColor(img_rgba, cv2.COLOR_RGBA2BGR))
-        cv2.waitKey(10)
+        if gui:
+            cv2.imshow("window", cv2.cvtColor(img_rgba, cv2.COLOR_RGBA2BGR))
+            cv2.waitKey(10)
 
         return img_rgba
-
-
-class WebpVideoCreator:
-    """Convert frames to a video."""
-
-    def __init__(self):
-        """Initialize."""
-        self.frames = []
-
-    def push(self, image: np.ndarray) -> None:
-        """Push image to frame stack."""
-        self.frames.append(image.copy())
-
-    def save_webp(self, file: pathlib.Path) -> None:
-        """Save .webp video."""
-        pil_frames = [PIL.Image.fromarray(x) for x in self.frames]
-        # Save as animated WebP
-        pil_frames[0].save(
-            file,
-            format="WEBP",
-            save_all=True,
-            append_images=pil_frames[1:],
-            duration=200,  # milliseconds per frame
-            loop=0,  # loop forever
-        )
-
-    def save_mp4(self, file: pathlib.Path) -> None:
-        """Save .mp4 video."""
-        # Ensure there are frames to write
-        if not self.frames:
-            raise ValueError("No frames to write to video.")
-        height, width = self.frames[0].shape[:2]
-        # OpenCV expects (width, height) for VideoWriter
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
-        out = cv2.VideoWriter(str(file), fourcc, 5, (width, height))
-        for frame in self.frames:
-            # Ensure frame is 3-channel BGR and uint8 for VideoWriter
-            if frame.shape[2] == 4:
-                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
-            elif frame.shape[2] == 1:
-                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-            else:
-                frame_bgr = frame
-            # Ensure dtype is uint8
-            if frame_bgr.dtype != np.uint8:
-                frame_bgr = frame_bgr.astype(np.uint8)
-            out.write(frame_bgr)
-        out.release()
 
 
 def demo():
     """Example script estimating camera calibration from artificial star data."""
     settings = camera.CameraSettings()
-    config = testing_utils.StarImageGeneratorConfig(exposure=100)
+    config = testing_utils.StarImageGeneratorConfig(exposure=100, catalog_max_magnitude=7)
     cam = testing_utils.StarCameraCalibrationTestCam(settings, config=config)
     cam.theta = 0.5
-    cam.theta = -1.2
+    # cam.theta = -1.2
     # cam.theta = -1.4
+    # cam.theta = 0.0
+    # cam.cal.dist_coeffs[1:] *= 0.1
 
-    ae_config = attitude_estimation.AttitudeEstimatorConfig(star_match_pixel_tol=10, n_match=8)
+    ae_config = attitude_estimation.AttitudeEstimatorConfig(
+        star_match_pixel_tol=5, n_match=10, max_candidates=100
+    )
     star_cal_config = initial_starcal.StarCalibratorConfig(
-        ae_config, interval=1, movement_register_mse_threshold=10
+        ae_config, interval=1, movement_register_mse_threshold=2
     )
     sc = initial_starcal.StarCalibrator(star_cal_config, (960, 540))
 
-    vc = WebpVideoCreator()
+    vc = demo_utils.VideoCreator()
 
     with Animation() as anim:
-        for t in list(range(0, 60 * 60 * 2, 60 * 2)):
-            # Record images every 10 seconds for 5 minutes
+        for t in list(range(0, 60 * 5, 10)):
             cam.t = t
             image = cam.capture()
             sc.put_image(image, t)
-            frame = anim.update(image, sc)
+            frame = anim.update(image, sc, gui=False)
             vc.push(frame)
 
     vc.save_webp(pathlib.Path("video.webp"))

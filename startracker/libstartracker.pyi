@@ -14,6 +14,8 @@ def starcal_calibrate(
     *,
     intrinsic_guess: npt.NDArray[np.float64] | None = None,
     dist_coefs_guess: npt.NDArray[np.float64] | None = None,
+    tol: float | None = None,
+    max_iter: float | None = None,
 ) -> CalibrationResult: ...
 def starcal_objective_function(
     params: tuple[float, ...],
@@ -27,6 +29,8 @@ def stargradcal_calibrate(
     dist_coef_guess: float,
     theta_guess: float,
     epsilon_guess: float,
+    tol: float,
+    max_iter: int,
 ) -> tuple[npt.NDArray[np.float64], float, float, float, npt.NDArray[np.float64]]: ...
 def stargradcal_objective_function(
     image_points: npt.NDArray[np.float32],
