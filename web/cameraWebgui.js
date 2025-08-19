@@ -43,42 +43,37 @@ export default {
         }
     },
     methods: {
-        connectImageWebSocket() {
-            let url = 'ws://' + window.location.host + "/api/image"
-            var ws = new WebSocket(url);
-            var img = document.getElementById('image');
-            const self = this;
-            ws.onmessage = async function (response) {
-                //Find out mime type from the image header
-                const headerBlob = response.data.slice(0, 16);  // 16 bytes is enough for PNG and JPEG magic numbers
-                const headerBuffer = await headerBlob.arrayBuffer();
-                const headerBytes = new Uint8Array(headerBuffer);
-                let mimeType = '';
-                if (headerBytes[0] === 0x89 && headerBytes[1] === 0x50) {
-                    mimeType = 'image/png';
-                } else if (headerBytes[0] === 0xFF && headerBytes[1] === 0xD8) {
-                    mimeType = 'image/jpeg';
-                } else {
-                    console.error("Unknown image type");
-                    return;
-                }
+        showImage(data) {
+            let img = document.getElementById('image');
 
-                self.image_size = parseSize(response.data.size);
+            this.image_size = parseSize(data.length);
 
-                // Display image
-                const blob = new Blob([response.data], { type: mimeType });
-                img.src = URL.createObjectURL(blob);
-                img.style.display = "block"
-            };
-            ws.onclose = function (event) {
-                ws.close()
-            };
-            ws.onerror = function (event) {
-                ws.close()
-            };
-            window.addEventListener("beforeunload", () => {
-                ws.close(1000, "Page is unloading");
-            });
+            // clear image if data not present
+            if (data.length == 0) {
+                img.style.display = "none"
+                return;
+            }
+
+            // Find out mime type from the image header
+            let mimeType = '';
+            if (data[0] === 0x89 && data[1] === 0x50) {
+                mimeType = 'image/png';
+            } else if (data[0] === 0xFF && data[1] === 0xD8) {
+                mimeType = 'image/jpeg';
+            } else {
+                console.error("Unknown image type");
+                return;
+            }
+
+            // Free old image if present
+            if (img.src) {
+                URL.revokeObjectURL(img.src);
+            }
+
+            // Display image
+            const blob = new Blob([data], { type: mimeType });
+            img.src = URL.createObjectURL(blob);
+            img.style.display = "block"
         },
         onmessage(response) {
             this.stream = unpack(response.data);
@@ -88,6 +83,8 @@ export default {
 
             this.redraw()
             document.getElementById('footer-bar').style.display = "flex"
+
+            this.showImage(this.stream.encoded_frame);
         },
         connectStreamWebSocket() {
             let url = 'ws://' + window.location.host + "/api/stream";
@@ -428,9 +425,9 @@ export default {
         },
     },
     mounted() {
-        this.connectImageWebSocket();
         this.connectStreamWebSocket();
 
+        api('/api/set_settings', {send_image: true}, null);
         api('/api/get_state', null, this.updateState);
 
         getKatex(() => { });

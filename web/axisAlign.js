@@ -144,6 +144,7 @@ export default {
     mounted() {
         this.connectWebSocket();
 
+        api('/api/set_settings', {send_image: false}, null);
         api('/api/get_state', null, this.updateState);
 
         window.onresize = this.resize

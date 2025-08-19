@@ -20,6 +20,7 @@ mod cam;
 mod cam_cal;
 mod opencvutils;
 mod testingutils;
+mod utils;
 mod webutils;
 
 #[derive(Debug)]
@@ -119,7 +120,7 @@ async fn main() {
     let set_settings_post_handler = warp::post()
         .and(warp::path!("api" / "set_settings"))
         .and(warp::body::json())
-        .and_then(move |rx: app::Persistent| {
+        .and_then(move |rx: app::Settings| {
             let app_cloned_for_fut = Arc::clone(&app_clone);
             async move {
                 println!("api/set_settings");
@@ -199,16 +200,6 @@ async fn main() {
             }
         });
 
-    // WebSocket handler
-    let app_clone = Arc::clone(&application);
-    let image_ws_route =
-        warp::path!("api" / "image")
-            .and(warp::ws())
-            .map(move |ws: warp::ws::Ws| {
-                let a = Arc::clone(&app_clone);
-                ws.on_upgrade(move |s| handle_image_ws(s, a))
-            });
-
     let app_clone = Arc::clone(&application);
     let stream_ws_route =
         warp::path!("api" / "stream")
@@ -226,7 +217,6 @@ async fn main() {
         .or(capture_post_handler)
         .or(axis_calibration_post_handler)
         .or(auto_calibration_post_handler)
-        .or(image_ws_route)
         .or(stream_ws_route)
         .recover(handle_rejection);
 
@@ -275,42 +265,6 @@ async fn main() {
     match camera_thread_handle.join() {
         Ok(_) => println!("Camera thread joined successfully"),
         Err(e) => eprintln!("Camera thread panicked: {:?}", e),
-    }
-}
-
-async fn handle_image_ws(ws: WebSocket, application: Arc<app::App>) {
-    let (mut tx, mut rx) = ws.split();
-
-    println!("WebSocket image connected");
-
-    let dispatcher = &application.image_dispatcher;
-
-    while application.running.load(Ordering::Acquire) {
-        // We need to copy the Vector inside the Arc to send it over WebSocket
-        // Copying here is better as we don't block the mutex
-        let d = Duration::from_millis(100);
-        let encoded = match dispatcher.get_blocking_with_timeout(d) {
-            Ok(data) => data.as_ref().clone(),
-            Err(webutils::TimeoutError) => {
-                // Timeout, continue to next iteration
-                if let Ok(None) = tokio::time::timeout(Duration::from_millis(0), rx.next()).await {
-                    println!("WebSocket stream disconnected by client");
-                    return;
-                }
-                continue;
-            }
-        };
-        // Send over WebSocket as binary
-        if let Err(_) = tx.send(warp::ws::Message::binary(encoded)).await {
-            println!("WebSocket image disconnected by client.");
-            return;
-        }
-    }
-
-    if let Err(e) = tx.close().await {
-        eprintln!("Error closing WebSocket image: {}", e);
-    } else {
-        println!("WebSocket image disconnected by server.");
     }
 }
 

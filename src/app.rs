@@ -11,6 +11,7 @@ use crate::attitude_estimation;
 use crate::cam;
 use crate::cam_cal;
 use crate::opencvutils;
+use crate::utils;
 use crate::webutils;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
@@ -87,11 +88,20 @@ impl ViewSettings {
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
-pub struct Persistent {
+pub struct Settings {
+    camera_config: Option<cam::CameraConfig>,
+    view_settings: Option<ViewSettings>,
+    attitude_est_config: Option<attitude_estimation::AttitudeEstimationConfig>,
+    send_image: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone)]
+struct Persistent {
     camera_config: cam::CameraConfig,
     view_settings: ViewSettings,
     attitude_est_config: attitude_estimation::AttitudeEstimationConfig,
     cal: Option<cam_cal::CameraParameters>,
+    send_image: bool,
 }
 
 impl Persistent {
@@ -115,6 +125,7 @@ impl Default for Persistent {
             view_settings: ViewSettings::default(),
             attitude_est_config: attitude_estimation::AttitudeEstimationConfig::default(),
             cal: None,
+            send_image: false,
         }
     }
 }
@@ -194,8 +205,23 @@ pub struct PublicState {
 }
 
 impl State {
-    fn set_persistent(&mut self, persistent: Persistent) -> Result<(), String> {
-        self.persistent = persistent.validate()?;
+    fn set_persistent(&mut self, settings: Settings) -> Result<(), String> {
+        self.persistent = Persistent {
+            camera_config: settings
+                .camera_config
+                .unwrap_or_else(|| self.persistent.camera_config),
+            view_settings: settings
+                .view_settings
+                .unwrap_or_else(|| self.persistent.view_settings),
+            attitude_est_config: settings
+                .attitude_est_config
+                .unwrap_or_else(|| self.persistent.attitude_est_config),
+            cal: self.persistent.cal,
+            send_image: settings
+                .send_image
+                .unwrap_or_else(|| self.persistent.send_image),
+        }
+        .validate()?;
         Ok(())
     }
 }
@@ -203,7 +229,6 @@ impl State {
 pub struct App {
     config_path: PathBuf,
     state: Mutex<State>,
-    pub image_dispatcher: webutils::DataDispatcher<std::sync::Arc<Vec<u8>>>,
     pub stream_dispatcher: webutils::DataDispatcher<Vec<u8>>,
     pub running: AtomicBool,
     attitude_estimation: ArcSwap<Option<attitude_estimation::AttitudeEstimation>>,
@@ -239,7 +264,6 @@ impl App {
         App {
             config_path: filename.as_ref().to_path_buf(),
             state: Mutex::new(state),
-            image_dispatcher: webutils::DataDispatcher::<std::sync::Arc<Vec<u8>>>::new(),
             stream_dispatcher: webutils::DataDispatcher::<Vec<u8>>::new(),
             running: AtomicBool::new(true),
             attitude_estimation: ArcSwap::new(Arc::new(None)),
@@ -256,7 +280,7 @@ impl App {
         })
     }
 
-    pub fn set_settings(&self, settings: Persistent) -> Result<PublicState, String> {
+    pub fn set_settings(&self, settings: Settings) -> Result<PublicState, String> {
         {
             let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
             state_ref.set_persistent(settings)?;
@@ -383,6 +407,8 @@ impl Drop for App {
 
 #[derive(Serialize)]
 struct StreamObject {
+    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
+    encoded_frame: Vec<u8>,
     image_size: (usize, usize),
     image_quality: String,
     auto_calibrator: AutoCalibrationState,
@@ -393,6 +419,7 @@ struct StreamObject {
 
 impl StreamObject {
     fn new(
+        encoded_frame: Vec<u8>,
         image_size: (usize, usize),
         image_quality: String,
         attitude_estimation: Result<attitude_estimation::AttitudeEstimationResult, String>,
@@ -400,6 +427,7 @@ impl StreamObject {
     ) -> Self {
         let auto_calibrator = AutoCalibrationState { active: false };
         StreamObject {
+            encoded_frame: encoded_frame,
             image_size: image_size,
             image_quality: image_quality,
             auto_calibrator: auto_calibrator,
@@ -429,7 +457,6 @@ where
 }
 
 pub fn tick(app: &App) -> Result<(), String> {
-    let image_dispatcher = &app.image_dispatcher;
     let stream_dispatcher = &app.stream_dispatcher;
     let running = &app.running;
 
@@ -453,7 +480,7 @@ pub fn tick(app: &App) -> Result<(), String> {
 
     while running.load(Ordering::Acquire) {
         //Update config
-        let (acquisition_request, image_type) = {
+        let (acquisition_request, image_type, send_image) = {
             let mut state_ref = app.state.lock().map_err(|e| e.to_string())?;
 
             match state_ref.persistent.view_settings.target_quality_kb {
@@ -475,7 +502,11 @@ pub fn tick(app: &App) -> Result<(), String> {
                 CameraMode::Darkframe => CameraMode::Stop,
             };
 
-            (request_mode, state_ref.persistent.view_settings.image_type)
+            (
+                request_mode,
+                state_ref.persistent.view_settings.image_type,
+                state_ref.persistent.send_image,
+            )
         };
 
         // Acquire image from camera
@@ -516,8 +547,30 @@ pub fn tick(app: &App) -> Result<(), String> {
             None => Err("attitude estimation not available".to_string()),
         };
 
-        // Send stream.
+        let encoded_frame = if send_image {
+            // Chose image to send
+            let send_image = match image_type {
+                ImageType::Raw => &raw,
+                ImageType::Processed => &preprocessed,
+                ImageType::Crop2x => {
+                    // TODO crop to 2x
+                    // let crop = opencvutils::crop_to_2x(&raw);
+                    &raw
+                }
+            };
+
+            // Encode image
+            match ie.encode(send_image) {
+                Some(v) => v,
+                None => vec![],
+            }
+        } else {
+            vec![]
+        };
+
+        // Send stream
         let stream_object = StreamObject::new(
+            encoded_frame,
             (raw.width, raw.height),
             ie.quality_str(),
             att_result,
@@ -526,29 +579,6 @@ pub fn tick(app: &App) -> Result<(), String> {
         let encoded = rmp_serde::to_vec_named(&stream_object)
             .expect("Failed to serialize stream in MessagePack format");
         stream_dispatcher.put(encoded);
-
-        // Chose image to send
-        let send_image = match image_type {
-            ImageType::Raw => &raw,
-            ImageType::Processed => &preprocessed,
-            ImageType::Crop2x => {
-                // TODO crop to 2x
-                // let crop = opencvutils::crop_to_2x(&raw);
-                &raw
-            }
-        };
-
-        // Encode image
-        let encoded = match ie.encode(send_image) {
-            Some(v) => v,
-            None => {
-                eprintln!("Error encoding image");
-                continue;
-            }
-        };
-
-        // Send image
-        image_dispatcher.put(std::sync::Arc::new(encoded));
     }
 
     println!("Camera thread stopped gracefully");

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cam;
 use crate::cam_cal;
+use crate::utils;
 use ruststartracker::star::{MatchResult, StarMatcher};
 use ruststartracker::starcat::StarCatalog;
 use ruststartracker::starextraction::extract_observations;
@@ -64,19 +65,19 @@ pub struct AttitudeEstimationResult {
     pub alignment_error: f64,
     // pub north_south: to_rounded_list(north_south, 2),
     // pub frame_points: self._camera_frame,
-    #[serde(serialize_with = "contiguous_serialize_2d")]
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
     pub obs_xy: Vec<[f32; 2]>,
-    #[serde(serialize_with = "contiguous_serialize_2d")]
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
     pub obs_xyz: Vec<[f32; 3]>,
-    #[serde(serialize_with = "contiguous_serialize_1d")]
+    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
     pub obs_matched_mask: Vec<bool>,
-    #[serde(serialize_with = "contiguous_serialize_2d")]
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
     pub cat_xy: Vec<[f32; 2]>,
-    #[serde(serialize_with = "contiguous_serialize_2d")]
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
     pub cat_xyz: Vec<[f32; 3]>,
-    #[serde(serialize_with = "contiguous_serialize_1d")]
+    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
     pub cat_mags: Vec<f32>,
-    #[serde(serialize_with = "contiguous_serialize_1d")]
+    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
     pub frame_points: Vec<[f32; 2]>,
 
     pub processing_time: f32,
@@ -87,31 +88,6 @@ pub struct AttitudeEstimationResult {
     pub intrinsic: Vec<f64>,
     pub dist_coeffs: Vec<f64>,
     pub error_string: Option<String>,
-}
-
-fn contiguous_serialize_2d<S, const N: usize, T>(
-    val: &Vec<[T; N]>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-    T: serde::Serialize + bytemuck::NoUninit,
-{
-    let len = val.len();
-    let ptr = val.as_ptr() as *const T;
-    let total_len = len * N;
-    let contiguous_slice = unsafe { std::slice::from_raw_parts(ptr, total_len) };
-    let bytes: &[u8] = bytemuck::cast_slice(contiguous_slice);
-    serializer.serialize_bytes(&bytes)
-}
-
-fn contiguous_serialize_1d<S, T>(val: &Vec<T>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-    T: serde::Serialize + bytemuck::NoUninit,
-{
-    let bytes: &[u8] = bytemuck::cast_slice(&val);
-    serializer.serialize_bytes(&bytes)
 }
 
 impl AttitudeEstimation {

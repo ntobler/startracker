@@ -70,7 +70,7 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn test_image_dispatcher() {
+    fn test_data_dispatcher() {
         let dispatcher = DataDispatcher::<Arc<Vec<u8>>>::new();
         let dispatcher_clone_1 = dispatcher.clone();
         let dispatcher_clone_2 = dispatcher.clone();
