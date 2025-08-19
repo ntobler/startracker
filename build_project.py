@@ -12,6 +12,7 @@ urls = {
     "vue.esm-browser.prod.min.js": "https://cdnjs.cloudflare.com/ajax/libs/vue/3.5.4/vue.esm-browser.prod.min.js",
     "katex.mjs": "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.mjs",
     "katex.min.css": "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css",
+    "msgpackr.js": "https://cdn.jsdelivr.net/npm/msgpackr@1.11.5/+esm",
 }
 """URL for JavaScript dependency production builds."""
 

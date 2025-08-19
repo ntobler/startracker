@@ -1,6 +1,7 @@
 
-import { ZoomHandler, api, HelpDisplay, parseSize } from './util.js';
+import { ZoomHandler, api, HelpDisplay, parseSize, toF32Array } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
+import { pack, unpack } from './msgpackr.js'
 
 export default {
     setup() {
@@ -19,8 +20,8 @@ export default {
     },
     methods: {
         onmessage(response) {
-            this.stream = JSON.parse(response.data);
-            this.packet_size = parseSize(response.data.length);
+            this.stream = unpack(response.data);
+            this.packet_size = parseSize(response.data.byteLength);
 
             let attitude_estimation = this.stream.attitude_estimation;
             if (attitude_estimation) {
@@ -37,6 +38,7 @@ export default {
         connectWebSocket() {
             let url = 'ws://' + window.location.host + "/api/stream";
             let ws = new WebSocket(url);
+            ws.binaryType = "arraybuffer"
             ws.onmessage = this.onmessage.bind(this);
         },
         updateState(data) {
@@ -59,6 +61,9 @@ export default {
             let canvas = document.getElementById('canvas')
             let ctx = canvas.getContext("2d")
 
+            let font_size = parseFloat(window.getComputedStyle(document.body).fontSize) * window.devicePixelRatio;
+            ctx.font = `${font_size}px Consolas, monospace`;
+
             ctx.setTransform(1, 0, 0, 1, 0, 0)
             ctx.clearRect(0, 0, canvas.width, canvas.height)
             ctx.save()
@@ -74,7 +79,7 @@ export default {
 
             ctx.scale(s, s)
             ctx.lineWidth = 10 / scale
-            ctx.font = "1px Consolas";
+            ctx.font = `${font_size / s}px Consolas, monospace`;
             drawRings(ctx, ui_zoom);
 
             if (this.stream?.attitude_estimation) {
@@ -199,14 +204,13 @@ function drawCameraFrame(ctx, state, ui_zoom) {
         ctx.fillStyle = "#f004"
     }
 
-    if (state.frame_points.length >= 2) {
-        let x = state.frame_points[0]
-        let y = state.frame_points[1]
-        ctx.fillText("Camera frame", x[0] * ui_zoom, y[0] * ui_zoom - R_MARGIN);
+    let frame_points = toF32Array(state.frame_points);
+
+    if (frame_points.length >= 2) {
         ctx.beginPath()
-        ctx.moveTo(x[0] * ui_zoom, y[0] * ui_zoom)
-        for (let i = 1; i < x.length; i++) {
-            ctx.lineTo(x[i] * ui_zoom, y[i] * ui_zoom)
+        ctx.moveTo(frame_points[0] * ui_zoom, frame_points[1] * ui_zoom)
+        for (let i2 = 2; i2 < frame_points.length; i2 += 2) {
+            ctx.lineTo(frame_points[i2] * ui_zoom, frame_points[i2 + 1] * ui_zoom)
         }
         ctx.closePath()
         ctx.stroke()
@@ -221,22 +225,25 @@ function drawStars(ctx, state, ui_zoom) {
 
     ctx.save()
 
-    for (let i = 0; i < state.cat_xyz.length; i++) {
-        let coord = state.cat_xyz[i]
-        let mag = state.cat_mags[i]
+    let cat_xyz = toF32Array(state.cat_xyz);
+    let cat_mags = toF32Array(state.cat_mags);
+
+    for (let i = 0; i < cat_mags.length; i++) {
+        let mag = cat_mags[i]
         mag = Math.pow(100, (-mag / 5 / 2)) * ui_zoom * 0.7
         ctx.beginPath()
-        ctx.arc(coord[0] * ui_zoom, coord[1] * ui_zoom, mag, 0, 2 * Math.PI)
+        ctx.arc(cat_xyz[i*2] * ui_zoom, cat_xyz[i*2 + 1] * ui_zoom, mag, 0, 2 * Math.PI)
         ctx.fill()
     }
 
     ctx.strokeStyle = "red"
     ctx.fillStyle = "red"
 
-    for (let i = 0; i < state.star_coords.length; i++) {
-        let coord = state.star_coords[i]
+    let star_coords = toF32Array(state.star_coords);
+
+    for (let i2 = 0; i2 < star_coords.length; i2 += 2) {
         ctx.beginPath()
-        ctx.arc(coord[0] * ui_zoom, coord[1] * ui_zoom, ui_zoom, 0, 2 * Math.PI)
+        ctx.arc(star_coords[i2] * ui_zoom, star_coords[i2 + 1] * ui_zoom, ui_zoom, 0, 2 * Math.PI)
         ctx.stroke()
     }
 
@@ -276,6 +283,10 @@ function drawStars(ctx, state, ui_zoom) {
 
 function drawPlot(ctx, history) {
 
+    if (history.length == 0) {
+        return
+    }
+
     let width = 300
     let height = 200
 
@@ -284,38 +295,58 @@ function drawPlot(ctx, history) {
 
     ctx.save()
 
-    ctx.translate(20, 20)
-
-    ctx.lineWidth = 3
+    let em = parseFloat(ctx.font) / 0.8;
+    ctx.translate(em, em)
 
     ctx.save()
+    ctx.lineWidth = 3
     ctx.beginPath();
     ctx.rect(0, 0, width, height);
     ctx.clip();
-    for (let [label, color, lw] of [["n_matches", "red", 3]]) {
 
-        if (history.length < 1) break;
 
-        ctx.save()
-        ctx.lineWidth = lw
-        ctx.strokeStyle = color
-        ctx.fillStyle = color
-        ctx.globalAlpha = 0.4;
-        ctx.save()
 
-        ctx.translate(0, height)
-        ctx.scale(width / (history.length - 1), -height / 40)
-        ctx.beginPath();
-        for (let i = 0; i < history.length; i++) {
-            ctx.lineTo(i, history[i][label])
+    ctx.lineWidth = 3
+    ctx.strokeStyle = "red"
+    ctx.fillStyle = "red"
+    ctx.save()
+    ctx.translate(0, height)
+    ctx.scale(width / (history.length - 1), -height)
+    ctx.scale(1, 1 / ( Math.log10(100) - Math.log10(1)))
+    ctx.translate(0, -Math.log10(1))
+    ctx.beginPath();
+    for (let i = 0; i < history.length; i++) {
+        ctx.lineTo(i, Math.max(Math.log10(history[i]["n_matches"]), 1))
+    }
+    ctx.restore()
+    ctx.globalAlpha = 1;
+    ctx.stroke()
+    ctx.globalAlpha = 0.2;
+    ctx.lineTo(width, height)
+    ctx.lineTo(0, height)
+    ctx.fill()
+
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "gray"
+    for (let base of [1, 10, 100]) {
+        for (let digit of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+            let log_y = Math.log10(base * digit);
+            if (Math.abs(Math.round(log_y) - log_y) < 0.0001) {
+                ctx.lineWidth = 1.5
+            } else {
+                ctx.lineWidth = 0.5
+            }
+            ctx.save()
+            ctx.translate(0, height)
+            ctx.scale(width, -height)
+            ctx.scale(1, 1 / ( Math.log10(100) - Math.log10(1)))
+            ctx.translate(0, -Math.log10(1))
+            ctx.beginPath();
+            ctx.moveTo(0, log_y);
+            ctx.lineTo(1, log_y);
+            ctx.restore()
+            ctx.stroke()
         }
-        ctx.lineTo(history.length - 1, 0)
-        ctx.lineTo(0, 0)
-        ctx.restore()
-        ctx.fill()
-        ctx.globalAlpha = 1;
-        ctx.stroke()
-        ctx.restore()
     }
     ctx.restore()
 
@@ -324,6 +355,9 @@ function drawPlot(ctx, history) {
     ctx.beginPath();
     ctx.rect(0, 0, width, height);
     ctx.stroke()
+
+    let font_size = parseFloat(ctx.font);
+    ctx.fillText(`Matches: ${history[history.length - 1]["n_matches"]}`, font_size / 2, height - font_size / 2)
 
     ctx.restore()
 }
