@@ -45,7 +45,7 @@ export default {
             });
         },
         updateState(data) {
-            this.calibration_orientations = data.axis_calibration.calibration_orientations;
+            this.calibration_orientations = data.axis_calibration.orientations;
             this.cameraMode = data.camera_mode;
 
             const el = document.getElementById("toggle_cam");

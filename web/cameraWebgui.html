@@ -157,10 +157,10 @@
                     off.
                 </div>
             </div>
-            <div v-if="stream?.attitude_estimation" title="Attitude estimation results">
+            <div v-if="stream?.attitude_estimation?.post_processing_time" title="Attitude estimation results">
                 Tracked: {{stream.attitude_estimation.n_matches}}
-                Times: {{stream.pre_processing_time}}ms, {{stream.attitude_estimation.processing_time}}ms,
-                {{stream.attitude_estimation.post_processing_time}}ms
+                Times: {{stream.pre_processing_time.toFixed(1)}}ms, {{stream.attitude_estimation.processing_time.toFixed(1)}}ms,
+                {{stream.attitude_estimation.post_processing_time.toFixed(1)}}ms
                 <div class="help">
                     <b>Attitude estimation results</b><br>
                     The number of stars detected (encircled in red), and the time taken for each processing step (image

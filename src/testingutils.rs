@@ -9,23 +9,32 @@ pub trait ImageSource {
 }
 
 pub struct FileImageSource {
-    data_row_major: Vec<u16>,
+    data_row_major: Vec<Vec<u16>>,
     width: usize,
     height: usize,
+    index: usize,
 }
 
 impl FileImageSource {
     pub fn new() -> Result<Self, String> {
         // Open the image file
-        let img = image::open("test.png").map_err(|e| e.to_string())?;
-        let gray: ImageBuffer<Luma<u8>, Vec<u8>> = img.to_luma8();
-        let (width, height) = gray.dimensions();
-        let buffer: Vec<u16> = gray.pixels().map(|&Luma([v])| v as u16).collect();
+
+        let (mut width, mut height) = (0, 0);
+
+        let mut buffers = Vec::new();
+        for i in 0..9 {
+            let img = image::open(format!("test_{}.png", i)).map_err(|e| e.to_string())?;
+            let gray: ImageBuffer<Luma<u8>, Vec<u8>> = img.to_luma8();
+            (width, height) = gray.dimensions();
+            let buffer: Vec<u16> = gray.pixels().map(|&Luma([v])| v as u16).collect();
+            buffers.push(buffer);
+        }
 
         Ok(FileImageSource {
-            data_row_major: buffer,
+            data_row_major: buffers,
             width: width as usize,
             height: height as usize,
+            index: 0,
         })
     }
 }
@@ -35,8 +44,14 @@ impl ImageSource for FileImageSource {
         let _ = exposure_us; // Unused in mock, but kept for interface compatibility
         let _ = analogue_gain; // Unused in mock, but kept for interface compatibility
 
+        self.index = if self.index >= self.data_row_major.len() - 1 {
+            0
+        } else {
+            self.index + 1
+        };
+
         cam::Frame {
-            data_row_major: self.data_row_major.clone(),
+            data_row_major: self.data_row_major[self.index].clone(),
             width: self.width,
             height: self.height,
             timestamp_ns,

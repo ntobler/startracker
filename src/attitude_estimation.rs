@@ -15,6 +15,7 @@ pub struct AttitudeEstimationConfig {
     min_area: usize,
     max_area: usize,
     max_magnitude: f32,
+    max_lookup_magnitude: f32,
 }
 
 impl Default for AttitudeEstimationConfig {
@@ -26,7 +27,8 @@ impl Default for AttitudeEstimationConfig {
             threshold_value: 2,
             min_area: 3,
             max_area: 100,
-            max_magnitude: 6.5,
+            max_magnitude: 7.5,
+            max_lookup_magnitude: 5.5,
         }
     }
 }
@@ -51,6 +53,7 @@ pub struct AttitudeEstimation {
     cal: cam_cal::CameraParameters,
     catalog: StarCatalog,
     star_matcher: StarMatcher,
+    frame_points: Vec<[f32; 2]>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -61,21 +64,54 @@ pub struct AttitudeEstimationResult {
     pub alignment_error: f64,
     // pub north_south: to_rounded_list(north_south, 2),
     // pub frame_points: self._camera_frame,
-    pub obs_xy: Vec<[f64; 2]>,
-    pub obs_xyz: Vec<[f64; 3]>,
-    pub obs_matched_indices: Vec<usize>,
-    pub cat_xy: Vec<[f64; 2]>,
-    pub cat_xyz: Vec<[f64; 3]>,
-    pub cat_mags: Vec<f64>,
+    #[serde(serialize_with = "contiguous_serialize_2d")]
+    pub obs_xy: Vec<[f32; 2]>,
+    #[serde(serialize_with = "contiguous_serialize_2d")]
+    pub obs_xyz: Vec<[f32; 3]>,
+    #[serde(serialize_with = "contiguous_serialize_1d")]
+    pub obs_matched_mask: Vec<bool>,
+    #[serde(serialize_with = "contiguous_serialize_2d")]
+    pub cat_xy: Vec<[f32; 2]>,
+    #[serde(serialize_with = "contiguous_serialize_2d")]
+    pub cat_xyz: Vec<[f32; 3]>,
+    #[serde(serialize_with = "contiguous_serialize_1d")]
+    pub cat_mags: Vec<f32>,
+    #[serde(serialize_with = "contiguous_serialize_1d")]
+    pub frame_points: Vec<[f32; 2]>,
 
-    pub processing_time: f64,
-    pub post_processing_time: f64,
+    pub processing_time: f32,
+    pub post_processing_time: f32,
 
     pub image_size: [usize; 2],
     pub extrinsic: Vec<f64>,
     pub intrinsic: Vec<f64>,
     pub dist_coeffs: Vec<f64>,
     pub error_string: Option<String>,
+}
+
+fn contiguous_serialize_2d<S, const N: usize, T>(
+    val: &Vec<[T; N]>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    T: serde::Serialize + bytemuck::NoUninit,
+{
+    let len = val.len();
+    let ptr = val.as_ptr() as *const T;
+    let total_len = len * N;
+    let contiguous_slice = unsafe { std::slice::from_raw_parts(ptr, total_len) };
+    let bytes: &[u8] = bytemuck::cast_slice(contiguous_slice);
+    serializer.serialize_bytes(&bytes)
+}
+
+fn contiguous_serialize_1d<S, T>(val: &Vec<T>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    T: serde::Serialize + bytemuck::NoUninit,
+{
+    let bytes: &[u8] = bytemuck::cast_slice(&val);
+    serializer.serialize_bytes(&bytes)
 }
 
 impl AttitudeEstimation {
@@ -85,15 +121,22 @@ impl AttitudeEstimation {
     ) -> Result<Self, String> {
         let config = config.validate()?;
 
-        let catalog = StarCatalog::from_gaia(Some(config.max_magnitude as f64))?;
+        let catalog: StarCatalog =
+            StarCatalog::new_from_hipparcos(Some(config.max_magnitude as f64))?;
 
         let stars_xyz: Vec<[f32; 3]> = catalog.normalized_positions(None, None);
+        let stars_mag: Vec<f32> = catalog.magnitudes();
 
         let max_inter_star_angle = cal.diagonal_angle() as f32;
         let inter_star_angle_tolerance = config.pixel_tolerance * cal.max_angle_per_pixel() as f32;
 
+        // TODO populate
+        let frame_points = vec![];
+
         let star_matcher = StarMatcher::new(
             stars_xyz,
+            &stars_mag,
+            config.max_lookup_magnitude,
             max_inter_star_angle,
             inter_star_angle_tolerance,
             config.min_matches as usize,
@@ -105,6 +148,7 @@ impl AttitudeEstimation {
             cal,
             catalog,
             star_matcher,
+            frame_points,
         })
     }
 
@@ -113,6 +157,11 @@ impl AttitudeEstimation {
         obs_xy: Vec<[f64; 2]>,
     ) -> Result<AttitudeEstimationResult, String> {
         let start_instant = std::time::Instant::now();
+
+        let obs_xy_f32: Vec<[f32; 2]> = obs_xy
+            .iter()
+            .map(|xy| [xy[0] as f32, xy[1] as f32])
+            .collect();
 
         // Convert 2D observations to 3D by adding a z-coordinate
         let obs_xyz_camera: Vec<[f64; 3]> = obs_xy
@@ -125,7 +174,7 @@ impl AttitudeEstimation {
             .map(|xyz| [xyz[0] as f32, xyz[1] as f32, xyz[2] as f32])
             .collect();
 
-        let (res, error_string) = match self.star_matcher.find(obs_xyz_camera_f32) {
+        let (res, error_string) = match self.star_matcher.find(&obs_xyz_camera_f32) {
             Ok(res) => (res, None),
             Err(e) => (
                 MatchResult {
@@ -139,7 +188,7 @@ impl AttitudeEstimation {
             ),
         };
 
-        let processing_time = start_instant.elapsed().as_secs_f64();
+        let processing_time = start_instant.elapsed().as_secs_f32();
 
         let quat_vec = [
             res.quat[0] as f64,
@@ -161,32 +210,38 @@ impl AttitudeEstimation {
             .column_iter()
             .map(|xyz| {
                 let array_ref: &[f64; 3] = xyz.as_slice().try_into().unwrap();
-                [array_ref[0], array_ref[1], array_ref[2]]
+                [
+                    array_ref[0] as f32,
+                    array_ref[1] as f32,
+                    array_ref[2] as f32,
+                ]
             })
             .collect();
 
         // Calculate catalog star coordinates
         let all_cat_xyz = self.star_matcher.stars_xyz();
-        let cat_xyz: Vec<[f64; 3]> = res
+        let cat_xyz: Vec<[f32; 3]> = res
             .match_ids
             .iter()
-            .map(|&i| {
-                let [x, y, z] = all_cat_xyz[i as usize];
-                [x as f64, y as f64, z as f64]
-            })
+            .map(|&i| all_cat_xyz[i as usize])
             .collect();
-        let cat_camera = extrinsic.transpose() * view_as_dmatrix(&cat_xyz);
-        let cat_xy: Vec<[f64; 2]> = cat_camera
+        let cat_xyz_f64: Vec<[f64; 3]> = cat_xyz
+            .iter()
+            .map(|&i| [i[0] as f64, i[1] as f64, i[2] as f64])
+            .collect();
+        let cat_camera = extrinsic.transpose() * view_as_dmatrix(&cat_xyz_f64);
+        let cat_xy: Vec<[f32; 2]> = cat_camera
             .column_iter()
             .map(|xyz| {
                 let array_ref: &[f64; 3] = xyz.as_slice().try_into().unwrap();
-                self.cal.camera_to_pixels(array_ref)
+                let xy = self.cal.camera_to_pixels(array_ref);
+                [xy[0] as f32, xy[1] as f32]
             })
             .collect();
         let cat_mags = res
             .match_ids
             .iter()
-            .map(|&i| self.catalog.magnitude[i as usize])
+            .map(|&i| self.catalog.stars[i as usize].magnitude as f32)
             .collect();
 
         let alignment_error = 0.0; // Placeholder for alignment error calculation
@@ -198,20 +253,26 @@ impl AttitudeEstimation {
         };
         let extrinsic = extrinsic.transpose().matrix().as_slice().to_vec();
 
-        let post_processing_time = start_instant.elapsed().as_secs_f64() - processing_time;
+        let post_processing_time = start_instant.elapsed().as_secs_f32() - processing_time;
+
+        let mut obs_matched_mask = vec![false; obs_xy.len()];
+        for i in res.obs_indices {
+            obs_matched_mask[i as usize] = true;
+        }
 
         Ok(AttitudeEstimationResult {
             quat: quat_vec,
             n_matches: res.n_matches as u32,
             alignment_error: alignment_error,
-            obs_xy: obs_xy,
+            obs_xy: obs_xy_f32,
             obs_xyz: obs_xyz,
-            obs_matched_indices: res.obs_indices.iter().map(|&i| i as usize).collect(),
+            obs_matched_mask: obs_matched_mask,
             cat_xy: cat_xy,
             cat_xyz: cat_xyz,
             cat_mags: cat_mags,
-            processing_time: (processing_time * 1000.0).round() / 1000.0,
-            post_processing_time: (post_processing_time * 1000.0).round() / 1000.0,
+            frame_points: self.frame_points.clone(),
+            processing_time: processing_time * 1000.0,
+            post_processing_time: post_processing_time * 1000.0,
             image_size: [self.cal.width(), self.cal.height()],
             extrinsic: extrinsic,
             intrinsic: intrinsic,

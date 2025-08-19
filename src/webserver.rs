@@ -323,7 +323,7 @@ async fn handle_stream_ws(ws: WebSocket, application: Arc<app::App>) {
 
     while application.running.load(Ordering::Acquire) {
         let d = Duration::from_millis(100);
-        let json_str = match dispatcher.get_blocking_with_timeout(d) {
+        let encoded_bytes = match dispatcher.get_blocking_with_timeout(d) {
             Ok(data) => data,
             Err(webutils::TimeoutError) => {
                 // Timeout, continue to next iteration
@@ -336,7 +336,7 @@ async fn handle_stream_ws(ws: WebSocket, application: Arc<app::App>) {
         };
 
         // Send over WebSocket as json
-        if let Err(_) = tx.send(warp::ws::Message::text(json_str)).await {
+        if let Err(_) = tx.send(warp::ws::Message::binary(encoded_bytes)).await {
             println!("WebSocket stream disconnected by client");
             return;
         }

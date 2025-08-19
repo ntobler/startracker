@@ -1,6 +1,7 @@
 use arc_swap::ArcSwap;
 use opencv;
 use opencv::prelude::*;
+use rmp_serde;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -158,6 +159,11 @@ impl AxisCalibration {
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
+struct AutoCalibrationState {
+    active: bool,
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone)]
 struct AutoCalibration {
     active: bool,
 }
@@ -165,6 +171,10 @@ struct AutoCalibration {
 impl AutoCalibration {
     fn new() -> Self {
         AutoCalibration { active: false }
+    }
+
+    pub fn get_state(&self) -> AutoCalibrationState {
+        AutoCalibrationState { active: false }
     }
 }
 
@@ -180,6 +190,7 @@ struct State {
 pub struct PublicState {
     persistent: Persistent,
     camera_mode: CameraMode,
+    axis_calibration: AxisCalibrationState,
 }
 
 impl State {
@@ -193,7 +204,7 @@ pub struct App {
     config_path: PathBuf,
     state: Mutex<State>,
     pub image_dispatcher: webutils::DataDispatcher<std::sync::Arc<Vec<u8>>>,
-    pub stream_dispatcher: webutils::DataDispatcher<String>,
+    pub stream_dispatcher: webutils::DataDispatcher<Vec<u8>>,
     pub running: AtomicBool,
     attitude_estimation: ArcSwap<Option<attitude_estimation::AttitudeEstimation>>,
 }
@@ -229,7 +240,7 @@ impl App {
             config_path: filename.as_ref().to_path_buf(),
             state: Mutex::new(state),
             image_dispatcher: webutils::DataDispatcher::<std::sync::Arc<Vec<u8>>>::new(),
-            stream_dispatcher: webutils::DataDispatcher::<String>::new(),
+            stream_dispatcher: webutils::DataDispatcher::<Vec<u8>>::new(),
             running: AtomicBool::new(true),
             attitude_estimation: ArcSwap::new(Arc::new(None)),
         }
@@ -241,6 +252,7 @@ impl App {
         Ok(PublicState {
             persistent: state_ref.persistent.clone(),
             camera_mode: state_ref.camera_mode,
+            axis_calibration: state_ref.axis_calibration.get_state(),
         })
     }
 
@@ -369,6 +381,53 @@ impl Drop for App {
     }
 }
 
+#[derive(Serialize)]
+struct StreamObject {
+    image_size: (usize, usize),
+    image_quality: String,
+    auto_calibrator: AutoCalibrationState,
+    #[serde(serialize_with = "attitude_serialize")]
+    attitude_estimation: Result<attitude_estimation::AttitudeEstimationResult, String>,
+    pre_processing_time: f32,
+}
+
+impl StreamObject {
+    fn new(
+        image_size: (usize, usize),
+        image_quality: String,
+        attitude_estimation: Result<attitude_estimation::AttitudeEstimationResult, String>,
+        pre_processing_time: f32,
+    ) -> Self {
+        let auto_calibrator = AutoCalibrationState { active: false };
+        StreamObject {
+            image_size: image_size,
+            image_quality: image_quality,
+            auto_calibrator: auto_calibrator,
+            attitude_estimation: attitude_estimation,
+            pre_processing_time: pre_processing_time,
+        }
+    }
+}
+
+fn attitude_serialize<S>(
+    val: &Result<attitude_estimation::AttitudeEstimationResult, String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match val {
+        Ok(v) => v.serialize(serializer),
+        Err(e) => {
+            // serialize as { "error": e }
+            let mut map: std::collections::BTreeMap<&'static str, String> =
+                std::collections::BTreeMap::new();
+            map.insert("error", e.clone());
+            map.serialize(serializer)
+        }
+    }
+}
+
 pub fn tick(app: &App) -> Result<(), String> {
     let image_dispatcher = &app.image_dispatcher;
     let stream_dispatcher = &app.stream_dispatcher;
@@ -447,13 +506,26 @@ pub fn tick(app: &App) -> Result<(), String> {
         };
 
         // Process image
+        let start_instant = std::time::Instant::now();
         let preprocessed = preprocess(&raw)?;
+        let pre_processing_time = start_instant.elapsed().as_secs_f32() * 1000.0;
 
         // Find attitude estimation result
         let att_result = match app.attitude_estimation.load_full().as_ref() {
             Some(att_est) => att_est.estimate_attitude_from_image(&preprocessed),
             None => Err("attitude estimation not available".to_string()),
         };
+
+        // Send stream.
+        let stream_object = StreamObject::new(
+            (raw.width, raw.height),
+            ie.quality_str(),
+            att_result,
+            pre_processing_time,
+        );
+        let encoded = rmp_serde::to_vec_named(&stream_object)
+            .expect("Failed to serialize stream in MessagePack format");
+        stream_dispatcher.put(encoded);
 
         // Chose image to send
         let send_image = match image_type {
@@ -475,21 +547,8 @@ pub fn tick(app: &App) -> Result<(), String> {
             }
         };
 
+        // Send image
         image_dispatcher.put(std::sync::Arc::new(encoded));
-
-        let data = serde_json::json!({
-            "image_size": (raw.width, raw.height),
-            "image_quality": ie.quality_str(),
-            "auto_calibrator": serde_json::json!({
-                "active": false,
-            }),
-            "attitude_estimation": match att_result {
-                Ok(result) => serde_json::to_value(result).unwrap_or(serde_json::json!({"error": "Failed to serialize result"})),
-                Err(e) => serde_json::json!({"error": e}),
-            },
-        });
-
-        stream_dispatcher.put(data.to_string());
     }
 
     println!("Camera thread stopped gracefully");

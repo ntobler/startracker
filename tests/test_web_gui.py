@@ -149,12 +149,12 @@ def test_axis_calibration(tmp_path: pathlib.Path):
     try:
         app.capture(web_gui.CaptureMode.CONTINUOUS)
         app.stream.get_blocking()
-        assert app.axis_calibration("put")["axis_calibration"]["calibration_orientations"] == 1
-        assert app.axis_calibration("put")["axis_calibration"]["calibration_orientations"] == 2
-        assert app.axis_calibration("reset")["axis_calibration"]["calibration_orientations"] == 0
+        assert app.axis_calibration("put")["axis_calibration"]["orientations"] == 1
+        assert app.axis_calibration("put")["axis_calibration"]["orientations"] == 2
+        assert app.axis_calibration("reset")["axis_calibration"]["orientations"] == 0
         for i in range(1, 5):
             app.stream.get_blocking()
-            assert app.axis_calibration("put")["axis_calibration"]["calibration_orientations"] == i
+            assert app.axis_calibration("put")["axis_calibration"]["orientations"] == i
         assert not persistent.Persistent.get_instance().axis_rot_quat_file.is_file()
         assert app.axis_calibration("calibrate")["axis_calibration"]["calibration_error_deg"] < 1.0
         assert persistent.Persistent.get_instance().axis_rot_quat_file.is_file()

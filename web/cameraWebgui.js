@@ -217,8 +217,9 @@ export default {
             ctx.restore()
         },
         drawStars(ctx, state) {
-            if (state.obs_pix === undefined) return
+            if (state.obs_xy === undefined) return
 
+            let obs_matched_mask = state.obs_matched_mask;
             let obs_xy = toF32Array(state.obs_xy);
             let cat_xy = toF32Array(state.cat_xy);
 
@@ -226,15 +227,35 @@ export default {
 
             ctx.lineCap = "round"
 
-            for (let i2 = 0; i2 < Math.min(obs_xy.length, cat_xy.length); i2 += 2) {
-                ctx.beginPath()
-                ctx.arc(obs_xy[i2], obs_xy[i2+1], 5, 0, 2 * Math.PI)
-                ctx.stroke()
+            let cat_i2 = 0;
+            for (let i = 0; i < obs_matched_mask.length; i++) {
+                let obs_i2 = i * 2;
 
-                ctx.beginPath()
-                ctx.moveTo(obs_xy[i2], obs_xy[i2+1])
-                ctx.lineTo(cat_xy[i2], cat_xy[i2+1])
-                ctx.stroke()
+                if (obs_matched_mask[i] != 0) {
+                    // Draw circle over observation
+                    ctx.beginPath()
+                    ctx.arc(obs_xy[obs_i2], obs_xy[obs_i2+1], 5, 0, 2 * Math.PI)
+                    ctx.stroke()
+
+                    // Connect observation with catalog position
+                    ctx.beginPath()
+                    ctx.moveTo(obs_xy[obs_i2], obs_xy[obs_i2+1])
+                    ctx.lineTo(cat_xy[cat_i2], cat_xy[cat_i2+1])
+                    ctx.stroke()
+
+                    // Increase cat index
+                    cat_i2 += 2;
+                } else {
+                    // Draw cross over observation
+                    ctx.beginPath()
+                    ctx.moveTo(obs_xy[obs_i2] - 2, obs_xy[obs_i2+1] - 2)
+                    ctx.lineTo(obs_xy[obs_i2] + 2, obs_xy[obs_i2+1] + 2)
+                    ctx.stroke()
+                    ctx.beginPath()
+                    ctx.moveTo(obs_xy[obs_i2] + 2, obs_xy[obs_i2+1] - 2)
+                    ctx.lineTo(obs_xy[obs_i2] - 2, obs_xy[obs_i2+1] + 2)
+                    ctx.stroke()
+                }
             }
             ctx.restore()
         },

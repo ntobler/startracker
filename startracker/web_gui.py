@@ -127,7 +127,12 @@ def to_rounded_list(x: np.ndarray, decimals: Optional[int] = None) -> list[Any]:
 
 def to_contiguious_f32_blob(x: np.ndarray) -> bytes:
     """Return contiguous f32 blob of the given array."""
-    return np.ascontiguousarray(x.astype(np.float32), dtype=np.float32).tobytes()
+    return np.ascontiguousarray(x, dtype=np.float32).tobytes()
+
+
+def to_contiguious_u8_blob(x: np.ndarray) -> bytes:
+    """Return contiguous u8 blob of the given array."""
+    return np.ascontiguousarray(x, dtype=np.uint8).tobytes()
 
 
 class AxisCalibrator:
@@ -228,6 +233,7 @@ class AttitudeEstimation:
             att_res = self._attitude_est(image)
 
         obs_xy = self._attitude_est.image_xyz_to_xy(att_res.image_xyz_cam)
+        obs_matched_mask = np.ones_like(obs_xy[..., 0], dtype=bool)
         cat_xy = self._attitude_est.image_xyz_to_xy(att_res.cat_xyz_cam)
         image_size = (image.shape[1], image.shape[0])
 
@@ -287,6 +293,7 @@ class AttitudeEstimation:
             "n_matches": att_res.n_matches,
             "obs_xy": to_contiguious_f32_blob(obs_xy),
             "cat_xy": to_contiguious_f32_blob(cat_xy),
+            "obs_matched_mask": to_contiguious_u8_blob(obs_matched_mask),
             "image_size": image_size,
             "processing_time": int(tm2.t * 1000),
             "post_processing_time": int(tm3.t * 1000),
@@ -566,7 +573,7 @@ class App(webutil.QueueAbstractionClass):
         if self._axis_calibrator is not None:
             axis_calibration = {
                 "calibration_error_deg": np.degrees(self._axis_calibrator.error_rad),
-                "calibration_orientations": self._axis_calibrator.count(),
+                "orientations": self._axis_calibrator.count(),
             }
         else:
             axis_calibration = {}
