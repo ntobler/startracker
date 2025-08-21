@@ -4,6 +4,7 @@ use nalgebra;
 use crate::optim::OptimizableProblem;
 
 pub const PARAM_COUNT: usize = 7;
+pub const RESIDUAL_COUNT: usize = 2;
 
 pub struct StarGradCalibrationProblem<'a> {
     params: nalgebra::SVector<f64, PARAM_COUNT>,
@@ -20,8 +21,9 @@ impl<'a> StarGradCalibrationProblem<'a> {
         image_gradients: &'a [[f32; 2]],
     ) -> Self {
         let num_points = image_points.len();
-        let residuals = nalgebra::DVector::zeros(num_points * 2);
-        let jacobian_transposed = nalgebra::DMatrix::zeros(PARAM_COUNT, num_points * 2);
+        let residuals = nalgebra::DVector::zeros(num_points * RESIDUAL_COUNT);
+        let jacobian_transposed =
+            nalgebra::DMatrix::zeros(PARAM_COUNT, num_points * RESIDUAL_COUNT);
         StarGradCalibrationProblem {
             params: nalgebra::SVector::<f64, PARAM_COUNT>::from_row_slice(params),
             image_points,
@@ -36,22 +38,21 @@ impl<'a> OptimizableProblem<PARAM_COUNT> for StarGradCalibrationProblem<'a> {
     fn calc_residuals(&mut self) -> () {
         let params = self.params.as_slice();
 
-        let stride = 2;
+        let m_epsilon = params[0];
+        let m_theta = params[1];
+
+        let fx = params[2];
+        let tx = params[3];
+        let fy = params[4];
+        let ty = params[5];
+
+        let k1 = params[6];
+
         let res_slice = self.residuals.as_mut_slice();
 
         for i in 0..self.image_points.len() {
             let image_point = &self.image_points[i];
             let image_gradient = &self.image_gradients[i];
-
-            let m_epsilon = params[0];
-            let m_theta = params[1];
-
-            let fx = params[2];
-            let tx = params[3];
-            let fy = params[4];
-            let ty = params[5];
-
-            let k1 = params[6];
 
             let img_x = image_point[0] as f64;
             let img_y = image_point[1] as f64;
@@ -121,7 +122,7 @@ impl<'a> OptimizableProblem<PARAM_COUNT> for StarGradCalibrationProblem<'a> {
             let x56 = fy * x30 + ty * x36;
 
             // value entries
-            let base = i * stride;
+            let base = i * RESIDUAL_COUNT;
             res_slice[base + 0] = -1.0 * fx * img_dx * x9 * (-1.0 * k1 * x20 * x21 + x19 * x8)
                 + fx * x24 * x37 * x47 * x51
                 + img_dy * k1 * x0 * x18 * x9
@@ -142,22 +143,21 @@ impl<'a> OptimizableProblem<PARAM_COUNT> for StarGradCalibrationProblem<'a> {
     fn calc_jacobian(&mut self) -> () {
         let params = self.params.as_slice();
 
-        let stride = self.jacobian_transposed.nrows() * 2;
+        let m_epsilon = params[0];
+        let m_theta = params[1];
+
+        let fx = params[2];
+        let tx = params[3];
+        let fy = params[4];
+        let ty = params[5];
+
+        let k1 = params[6];
+
         let jac_slice = self.jacobian_transposed.as_mut_slice();
 
         for i in 0..self.image_points.len() {
             let image_point = &self.image_points[i];
             let image_gradient = &self.image_gradients[i];
-
-            let m_epsilon = params[0];
-            let m_theta = params[1];
-
-            let fx = params[2];
-            let tx = params[3];
-            let fy = params[4];
-            let ty = params[5];
-
-            let k1 = params[6];
 
             let img_x = image_point[0] as f64;
             let img_y = image_point[1] as f64;
@@ -760,7 +760,7 @@ impl<'a> OptimizableProblem<PARAM_COUNT> for StarGradCalibrationProblem<'a> {
             let x416 = x267 * x410;
 
             // Jacobian:
-            let base = i * stride;
+            let base = i * PARAM_COUNT * RESIDUAL_COUNT;
             jac_slice[base + 0] = -1.0 * x101 * x89 - 1.0 * x102 * x86 + x111 * x113
                 - 1.0 * x114 * x117
                 - 1.0

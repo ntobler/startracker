@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 
-class CalibrationResult:
+class StarcalCalibrationResult:
     @property
     def params(self) -> list[float]: ...
     @property
@@ -16,12 +16,15 @@ def starcal_calibrate(
     dist_coefs_guess: npt.NDArray[np.float64] | None = None,
     tol: float | None = None,
     max_iter: float | None = None,
-) -> CalibrationResult: ...
+) -> StarcalCalibrationResult: ...
 def starcal_objective_function(
     params: tuple[float, ...],
     image_point: npt.NDArray[np.float32],
     object_point: npt.NDArray[np.float32],
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+def find_common_axis(
+    rot_mats: npt.NDArray[np.float64], tol: float, max_iter: float
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64], float]: ...
 def stargradcal_calibrate(
     image_points: npt.NDArray[np.float32],
     image_gradients: npt.NDArray[np.float32],

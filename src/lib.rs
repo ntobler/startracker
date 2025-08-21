@@ -8,6 +8,7 @@ use std::usize;
 
 use crate::optim::OptimizableProblem;
 
+mod common_axis;
 mod optim;
 mod poisson_disk;
 mod starcal;
@@ -22,20 +23,21 @@ fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(starcal_objective_function, m)?)?;
     m.add_function(wrap_pyfunction!(stargradcal_calibrate, m)?)?;
     m.add_function(wrap_pyfunction!(stargradcal_objective_function, m)?)?;
+    m.add_function(wrap_pyfunction!(find_common_axis, m)?)?;
     m.add_function(wrap_pyfunction!(even_spaced_indices, m)?)?;
-    m.add_class::<CalibrationResult>()?;
+    m.add_class::<StarcalCalibrationResult>()?;
     m.add_class::<CameraConfig>()?;
     m.add_class::<Camera>()?;
     Ok(())
 }
 
 #[pyclass]
-pub struct CalibrationResult {
+pub struct StarcalCalibrationResult {
     inner: starcal::CalibrationResult,
 }
 
 #[pymethods]
-impl CalibrationResult {
+impl StarcalCalibrationResult {
     #[getter]
     pub fn params(&self) -> Vec<f64> {
         self.inner.params.to_vec()
@@ -50,7 +52,7 @@ impl CalibrationResult {
     #[new]
     fn new() -> PyResult<Self> {
         Err(PyRuntimeError::new_err(
-            "CalibrationResult cannot be constructed from Python",
+            "StarcalCalibrationResult cannot be constructed from Python",
         ))
     }
 }
@@ -89,7 +91,7 @@ fn starcal_calibrate<'py>(
     dist_coefs_guess: Option<numpy::PyReadonlyArray1<'py, f64>>,
     tol: Option<f64>,
     max_iter: Option<usize>,
-) -> PyResult<CalibrationResult> {
+) -> PyResult<StarcalCalibrationResult> {
     let image_points_view = numpy_to_slice_2d(&image_points)?;
     let object_points_view = numpy_to_slice_2d(&object_points)?;
 
@@ -151,7 +153,7 @@ fn starcal_calibrate<'py>(
         max_iter_value,
     );
 
-    Ok(CalibrationResult { inner: result })
+    Ok(StarcalCalibrationResult { inner: result })
 }
 
 #[pyfunction]
@@ -211,6 +213,28 @@ fn stargradcal_objective_function<'py>(
         ))
         .expect("Shape mismatch in jacobian reshape");
     Ok((residuals, jacobian))
+}
+
+#[pyfunction]
+fn find_common_axis<'py>(
+    py: Python<'py>,
+    rot_mats: numpy::PyReadonlyArray2<'py, f64>,
+    tol: f64,
+    max_iter: usize,
+) -> PyResult<(
+    Bound<'py, numpy::PyArray1<f64>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+    f64,
+)> {
+    let rot_mats_view: &[[f64; 9]] = numpy_to_slice_2d(&rot_mats)?;
+    let (axis, mrp, residuals, estimated_std_rad) =
+        common_axis::find_common_axis(rot_mats_view, tol, max_iter)
+            .map_err(PyRuntimeError::new_err)?;
+    let axis_np = axis.as_slice().to_pyarray_bound(py);
+    let mrp_np = mrp.as_slice().to_pyarray_bound(py);
+    let residuals_np = residuals.as_slice().to_pyarray_bound(py);
+    Ok((axis_np, mrp_np, residuals_np, estimated_std_rad))
 }
 
 #[pyfunction]

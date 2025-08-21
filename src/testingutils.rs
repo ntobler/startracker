@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::cam;
 use numpy::PyArrayMethods;
 use pyo3::prelude::*;
@@ -16,14 +18,35 @@ pub struct FileImageSource {
 }
 
 impl FileImageSource {
-    pub fn new() -> Result<Self, String> {
-        // Open the image file
-
+    pub fn new<P>(path: P) -> Result<Self, String>
+    where
+        P: AsRef<Path>,
+    {
         let (mut width, mut height) = (0, 0);
 
+        // Get all png files in directory
+        let mut files = std::fs::read_dir(path)
+            .map_err(|e| e.to_string())?
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.extension().map_or(false, |ext| ext == "png") {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+        if files.len() == 0 {
+            return Err("Folder does not contain any PNG images".to_string());
+        }
+
         let mut buffers = Vec::new();
-        for i in 0..9 {
-            let img = image::open(format!("test_{}.png", i)).map_err(|e| e.to_string())?;
+        for file in files {
+            let img = image::open(file).map_err(|e| e.to_string())?;
             let gray: ImageBuffer<Luma<u8>, Vec<u8>> = img.to_luma8();
             (width, height) = gray.dimensions();
             let buffer: Vec<u16> = gray.pixels().map(|&Luma([v])| v as u16).collect();

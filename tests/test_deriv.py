@@ -70,5 +70,22 @@ def test_distortion():
         np.testing.assert_allclose(value, value_gt, atol=0.03)
 
 
+def test_param():
+    a = 0.1
+    b = 0.2
+
+    x, y, z = deriv.params_to_vec(a, b)
+    np.testing.assert_allclose(np.linalg.norm((x, y, z)), 1)
+    a2, b2 = deriv.vec_to_params(x, y, z)
+    np.testing.assert_allclose([a, b], [a2, b2])
+
+    np.testing.assert_allclose(deriv.params_to_vec(0, 0), [0, 0, 1])
+    np.testing.assert_allclose(deriv.params_to_vec(0, 1e20), [0, 0, -1], atol=1e-10)
+    np.testing.assert_allclose(deriv.params_to_vec(0, -1e20), [0, 0, -1], atol=1e-10)
+    np.testing.assert_allclose(deriv.params_to_vec(1e20, 0), [0, 0, -1], atol=1e-10)
+    np.testing.assert_allclose(deriv.params_to_vec(-1e20, 0), [0, 0, -1], atol=1e-10)
+    np.testing.assert_allclose(deriv.params_to_vec(1e20, 1e20), [0, 0, -1], atol=1e-10)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

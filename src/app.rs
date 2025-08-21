@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use crate::attitude_estimation;
 use crate::cam;
 use crate::cam_cal;
+use crate::common_axis;
 use crate::opencvutils;
 use crate::utils;
 use crate::webutils;
@@ -130,16 +131,18 @@ impl Default for Persistent {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct AxisCalibrationState {
     error_deg: Option<f64>,
     orientations: u32,
+    error_string: Option<String>,
 }
 
 struct AxisCalibration {
     rotations: Vec<nalgebra::Rotation<f64, 3>>,
     calibrated_rotation: nalgebra::Rotation<f64, 3>,
     error_deg: Option<f64>,
+    error_string: Option<String>,
 }
 
 impl AxisCalibration {
@@ -148,6 +151,7 @@ impl AxisCalibration {
             rotations: Vec::new(),
             calibrated_rotation: nalgebra::Rotation::identity(),
             error_deg: None,
+            error_string: None,
         }
     }
 
@@ -159,12 +163,35 @@ impl AxisCalibration {
         self.rotations.push(rot.clone());
     }
 
-    pub fn calibrate(&mut self) {}
+    pub fn calibrate(&mut self) {
+        // Convert rotations to matrices
+        let rot_mats: Vec<[f64; 9]> = self
+            .rotations
+            .iter()
+            .map(|r| r.matrix().transpose().as_slice().try_into().unwrap())
+            .collect();
+
+        // Find common axis
+        match common_axis::find_common_axis(&rot_mats, 1e-6, 20) {
+            Ok((axis, _, _, estimated_std_rad)) => {
+                let target = nalgebra::Vector3::new(axis[0], axis[1], axis[2]); // what it looks at
+                let up = nalgebra::Vector3::new(0.0, -1.0, 0.0);
+                self.calibrated_rotation = nalgebra::Rotation3::look_at_rh(&target, &up);
+
+                self.error_deg = Some(estimated_std_rad * (180.0 / std::f64::consts::PI));
+                self.error_string = None;
+            }
+            Err(e) => {
+                self.error_string = Some(e.to_string());
+            }
+        }
+    }
 
     pub fn get_state(&self) -> AxisCalibrationState {
         AxisCalibrationState {
             error_deg: self.error_deg,
             orientations: self.rotations.len() as u32,
+            error_string: self.error_string.clone(),
         }
     }
 }
@@ -184,6 +211,43 @@ impl AutoCalibration {
         AutoCalibration { active: false }
     }
 
+    pub fn restart(&mut self) {
+        // TODO implement
+        self.active = true;
+    }
+
+    pub fn discard(&mut self) {
+        // TODO implement
+        self.active = false;
+    }
+
+    pub fn stop_and_get(&mut self) -> Option<cam_cal::CameraParameters> {
+        // TODO implement
+        self.active = false;
+        // TODO Example calibration parameters, replace with actual calibration logic
+        Some(cam_cal::CameraParameters::new(
+            nalgebra::Matrix3::new(
+                2126.9433827817543,
+                0.0,
+                471.5660270698475,
+                0.0,
+                2125.4878604007063,
+                310.73929485280405,
+                0.0,
+                0.0,
+                1.0,
+            ),
+            (960, 540),
+            Some([
+                -0.4412080745099301,
+                -0.159542022464492,
+                0.007670124986859448,
+                -0.002132920872628578,
+                -1.6478824652916775,
+            ]),
+        ))
+    }
+
     pub fn get_state(&self) -> AutoCalibrationState {
         AutoCalibrationState { active: false }
     }
@@ -197,11 +261,12 @@ struct State {
     attitude: Option<nalgebra::Rotation<f64, 3>>,
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PublicState {
     persistent: Persistent,
     camera_mode: CameraMode,
     axis_calibration: AxisCalibrationState,
+    auto_calibration: AutoCalibrationState,
 }
 
 impl State {
@@ -277,6 +342,7 @@ impl App {
             persistent: state_ref.persistent.clone(),
             camera_mode: state_ref.camera_mode,
             axis_calibration: state_ref.axis_calibration.get_state(),
+            auto_calibration: state_ref.auto_calibration.get_state(),
         })
     }
 
@@ -330,42 +396,20 @@ impl App {
     pub fn auto_calibration(&self, request: AutoCalibrationRequest) -> Result<PublicState, String> {
         match request {
             AutoCalibrationRequest::Restart => {
-                // TODO implement
+                let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
+                state_ref.auto_calibration.restart();
             }
             AutoCalibrationRequest::Discard => {
                 // Discard current calibration
-                // TODO implement
+                let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
+                state_ref.auto_calibration.discard();
             }
             AutoCalibrationRequest::Accept => {
                 // Accept current calibration
-                // TODO Example calibration parameters, replace with actual calibration logic
-                let instance1 = cam_cal::CameraParameters::new(
-                    nalgebra::Matrix3::new(
-                        2126.9433827817543,
-                        0.0,
-                        471.5660270698475,
-                        0.0,
-                        2125.4878604007063,
-                        310.73929485280405,
-                        0.0,
-                        0.0,
-                        1.0,
-                    ),
-                    (960, 540),
-                    Some([
-                        -0.4412080745099301,
-                        -0.159542022464492,
-                        0.007670124986859448,
-                        -0.002132920872628578,
-                        -1.6478824652916775,
-                    ]),
-                );
-
                 {
                     let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
-                    state_ref.persistent.cal = Some(instance1);
+                    state_ref.persistent.cal = state_ref.auto_calibration.stop_and_get();
                 }
-
                 self.init_attitude_estimation()?;
             }
         }

@@ -4,6 +4,8 @@ import numpy as np
 import scipy.optimize
 import scipy.spatial.transform
 
+import startracker.libstartracker
+
 
 def azel2nwu(az_el: np.ndarray, axis: int = -1, *, degrees: bool = False) -> np.ndarray:
     """Convert azimuth, elevation to a unit vector in the north west up frame."""
@@ -82,15 +84,15 @@ def find_common_rotation_axis(quats: np.ndarray) -> tuple[np.ndarray, float]:
     if len(axis_vecs) > 2:
         cos_error = np.clip(np.sum(axis_vecs * axis_vec[None], axis=-1), -1, 1)
         angular_errors = np.arccos(cos_error)
-        std_rad = float(np.sqrt(np.mean(angular_errors**2) / len(angular_errors)))
+        estimated_std_rad = np.sqrt(np.mean(angular_errors**2) / len(angular_errors)).item()
     else:
-        # Error cannot be calculated from two rotations
-        std_rad = np.nan
+        # Error cannot be estimated from two rotations
+        estimated_std_rad = np.nan
 
-    return axis_vec, std_rad
+    return axis_vec, estimated_std_rad
 
 
-def find_common_rotation_axis_alt(quats: np.ndarray) -> tuple[np.ndarray, float]:
+def find_common_rotation_axis_backend(quats: np.ndarray) -> tuple[np.ndarray, float]:
     """Find the common rotation axis of a set of rotations.
 
     Find solution by solving minimization problem.
@@ -104,39 +106,11 @@ def find_common_rotation_axis_alt(quats: np.ndarray) -> tuple[np.ndarray, float]
             - Angular standard deviation in rads
     """
     rots = scipy.spatial.transform.Rotation.from_quat(quats)
-    inv_rots = rots.inv()
 
-    mag_matrix_list = [(r * r_inv).magnitude() for r_inv in inv_rots for r in rots]  # type: ignore[attr-defined]
-    mag_matrix = np.array(mag_matrix_list, dtype=np.float64).reshape((len(rots), len(rots)))
+    rotmats = np.ascontiguousarray(rots.as_matrix().reshape((-1, 9)), dtype=np.float64)
 
-    dist_to_90_deg = np.abs(np.abs(mag_matrix % np.pi) - np.pi / 2)
-    np.fill_diagonal(mag_matrix, 100)
+    axis_vec, _, _, estimated_std_rad = startracker.libstartracker.find_common_axis(
+        rotmats, 1e-6, 20
+    )
 
-    a, b = np.unravel_index(np.argmin(dist_to_90_deg), (len(quats), len(quats)))
-
-    # Get rotation difference between pairs
-    axis_vec = (inv_rots[b] * rots[a]).as_rotvec()
-    axis_vec /= np.linalg.norm(axis_vec)
-
-    inv_mrp = inv_rots[b].as_mrp()
-    x0 = np.concatenate((axis_vec, inv_mrp + 0.1), axis=0)
-
-    rot_mats = rots.as_matrix()
-
-    def func(x):
-        a, inv_mrp = x.reshape((2, 3))
-        a /= np.linalg.norm(a)
-        inv_rot = scipy.spatial.transform.Rotation.from_mrp(inv_mrp).as_matrix()
-        error = (inv_rot[None] @ rot_mats @ a[None, :, None])[..., 0] - a
-        return np.mean(error**2)
-
-    res = scipy.optimize.minimize(func, x0=x0)
-    error = res.fun
-
-    axis_vec, _ = res.x.reshape((2, 3))
-    axis_vec /= np.linalg.norm(axis_vec, axis=-1)
-
-    angular_errors = np.sqrt(error) * np.pi
-    std_rad = float(np.sqrt(angular_errors**2 / len(rot_mats)))
-
-    return axis_vec, std_rad
+    return axis_vec, estimated_std_rad

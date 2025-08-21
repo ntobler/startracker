@@ -13,7 +13,13 @@ pub fn camera_thread(
 ) -> Result<(), String> {
     println!("Camera thread: starting");
 
-    let mut random_image_generator = testingutils::FileImageSource::new().unwrap();
+    let home = dirs::home_dir().expect("Could not find home directory");
+    let app_path = home.join(".startracker");
+    let image_path = app_path.join("testing_material/axis_align");
+
+    println!("image_path: {:?}", image_path);
+
+    let mut random_image_generator = testingutils::FileImageSource::new(image_path)?;
 
     let mut timestamp_ns = 0;
 

@@ -60,7 +60,7 @@ def mrp_to_rotm(p: sp.Matrix) -> sp.Matrix:
     return sp.eye(3) + numerator / (1 + p_norm2) ** 2
 
 
-def optim1():
+def optim_starcal():
     """Optimization problem used in starcal.rs."""
     # Define all symbols
     # Intrinsic camera parameters
@@ -162,7 +162,7 @@ def project(mat: sp.Matrix, x: sp.Matrix) -> tuple[sp.Matrix, sp.Matrix]:
     return y, dy_dx
 
 
-def optim2():
+def optim_stargradcal():
     """Optimization problem used in stargradcal.rs."""
     # Define all symbols
     params = sp.symbols("m_epsilon m_theta fx tx fy ty k1")
@@ -213,6 +213,54 @@ def optim2():
     print_rust_code(jacobian, "Jacobian")
 
 
+def params_to_vec(a, b):
+    """Convert a 2D representation to a unit vector on the 3d sphere."""
+    s2 = a * a + b * b
+    return (
+        2 * a / (s2 + 1),
+        2 * b / (s2 + 1),
+        (1 - s2) / (s2 + 1),
+    )
+
+
+def vec_to_params(x, y, z):
+    """Convert a unit vector on the 3D sphere to a 2D representation."""
+    return (
+        x / (z + 1),
+        y / (z + 1),
+    )
+
+
+def optim_common_axis():
+    """Optimization problem used in common_axis.rs."""
+    params = sp.symbols("a b mrp_0 mrp_1 mrp_2")
+    [a, b, mrp_0, mrp_1, mrp_2] = params
+
+    r1, r2, r3, r4, r5, r6, r7, r8, r9 = sp.symbols("r1 r2 r3 r4 r5 r6 r7 r8 r9")
+
+    base_rot = mrp_to_rotm(sp.Matrix([mrp_0, mrp_1, mrp_2]))
+
+    rot = base_rot * sp.Matrix([[r1, r2, r3], [r4, r5, r6], [r7, r8, r9]])
+    x, y, z = params_to_vec(a, b)
+    vec = sp.Matrix([[x], [y], [z]])
+    residuals = vec - (rot * vec)
+
+    rx = residuals[0, 0]
+    ry = residuals[1, 0]
+    rz = residuals[2, 0]
+
+    residuals = [rx, ry, rz]
+    jacobian = (
+        [sp.diff(rx, p) for p in params]
+        + [sp.diff(ry, p) for p in params]
+        + [sp.diff(rz, p) for p in params]
+    )
+
+    print_rust_code(residuals, "Residual")
+    print_rust_code(jacobian, "Jacobian")
+
+
 if __name__ == "__main__":
-    optim1()
-    optim2()
+    # optim_starcal()
+    # optim_stargradcal()
+    optim_common_axis()

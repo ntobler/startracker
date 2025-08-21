@@ -329,6 +329,8 @@ class CameraTester:
         import matplotlib.pyplot as plt
         import matplotlib.widgets
 
+        cam = self._cam
+
         # Create a figure and axes
         fig, ax = plt.subplots()
         plt.subplots_adjust(bottom=0.25)
@@ -501,7 +503,6 @@ class AxisAlignCalibrationTestCam(ArtificialStarCam):
     @override
     def _capture(self) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
         self.axis_angle = (self.axis_angle + 0.1) % (2 * np.pi)
-        self.axis_angle = (self.capture_time * const.EARTH_ANGULAR_VELOCITY) % (2 * np.pi)
         rotvec = np.array([0, 0, 1.0]) * self.axis_angle
         around_axis_rot = scipy.spatial.transform.Rotation.from_rotvec(rotvec, degrees=False)
 
@@ -567,7 +568,7 @@ def angle_diff(a: float, b: float) -> float:
     return (a - b + np.pi) % (2 * np.pi) - np.pi
 
 
-if __name__ == "__main__":
+def gui():
     settings = camera.CameraSettings()
     cam = StarCameraCalibrationTestCam(settings)
     cam.theta = np.pi / 2
@@ -575,3 +576,35 @@ if __name__ == "__main__":
     cam.grid = True
 
     cam.gui()
+
+
+def generate_test_set():
+    root = persistent.APPLICATION_USER_DIR / "testing_material"
+    root.mkdir(exist_ok=True)
+
+    cams = {
+        "axis_align": (AxisAlignCalibrationTestCam, range(0, 100, 10)),
+        "star_cal": (StarCameraCalibrationTestCam, range(0, 60 * 4, 10)),
+    }
+
+    # cam = testing_utils.RandomStarCam
+    for dir_name, (cam, it) in cams.items():
+        cam.theta = -np.pi / 2 * 0.8
+        cam.time_warp_factor = 100
+        cam.simulate_exposure_time = False
+        cam.default_config = StarImageGeneratorConfig(exposure=200, catalog_max_magnitude=6.5)
+
+        instance = cam(camera.CameraSettings())
+
+        folder = root / dir_name
+        folder.mkdir(exist_ok=True)
+
+        for t in it:
+            instance.t = t
+            img = instance.capture()
+            cv2.imwrite(str(folder / f"frame_{t:002d}.png"), img)
+
+
+if __name__ == "__main__":
+    # generate_test_set()
+    gui()

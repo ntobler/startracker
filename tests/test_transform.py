@@ -1,5 +1,7 @@
 """Transform module tests."""
 
+import time
+
 import numpy as np
 import pytest
 import scipy.spatial.transform
@@ -28,7 +30,10 @@ def test_azel_nwu(*, degrees: bool):
 
 @pytest.mark.parametrize(
     "func",
-    [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
+    [
+        transform.find_common_rotation_axis,
+        transform.find_common_rotation_axis_backend,
+    ],
 )
 def test_find_common_rotation_axis(func):
     n = 128
@@ -54,14 +59,24 @@ def test_find_common_rotation_axis(func):
     rots += rng.normal(size=rots.shape) * 0.001
     rots /= np.linalg.norm(rots, axis=-1, keepdims=True)
 
+    t = time.monotonic()
     axis, std = func(rots)
+    print("time: ", time.monotonic() - t)
 
+    print("estimated std rad:", std)
+    print(
+        "error distance rad",
+        np.minimum(np.linalg.norm(axis - rot_axis), np.linalg.norm(axis + rot_axis)) * np.pi,
+    )
     assert std < 0.01
 
 
 @pytest.mark.parametrize(
     "func",
-    [transform.find_common_rotation_axis, transform.find_common_rotation_axis_alt],
+    [
+        transform.find_common_rotation_axis,
+        transform.find_common_rotation_axis_backend,
+    ],
 )
 def test_find_common_rotation_axis_convergence(func):
     n = 10
