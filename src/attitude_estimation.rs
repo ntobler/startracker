@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cam;
 use crate::cam_cal;
+use crate::common_axis;
 use crate::utils;
 use ruststartracker::star::{MatchResult, StarMatcher};
 use ruststartracker::starcat::StarCatalog;
@@ -54,38 +55,25 @@ pub struct AttitudeEstimation {
     cal: cam_cal::CameraParameters,
     catalog: StarCatalog,
     star_matcher: StarMatcher,
-    frame_points: Vec<[f32; 2]>,
+    stars_mag: Vec<f32>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
 pub struct AttitudeEstimationResult {
     pub quat: [f64; 4],
     pub n_matches: u32,
-    // pub star_coords: to_rounded_list(star_coords, 2),
-    pub alignment_error: f64,
-    // pub north_south: to_rounded_list(north_south, 2),
-    // pub frame_points: self._camera_frame,
-    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
     pub obs_xy: Vec<[f32; 2]>,
-    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
-    pub obs_xyz: Vec<[f32; 3]>,
-    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
+    pub obs_xyz: Vec<[f64; 3]>,
     pub obs_matched_mask: Vec<bool>,
-    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
-    pub cat_xy: Vec<[f32; 2]>,
-    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
-    pub cat_xyz: Vec<[f32; 3]>,
-    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
-    pub cat_mags: Vec<f32>,
-    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
-    pub frame_points: Vec<[f32; 2]>,
+    pub matched_cat_xy: Vec<[f32; 2]>,
+    pub matched_cat_xyz: Vec<[f64; 3]>,
+    pub matched_cat_mags: Vec<f32>,
 
     pub processing_time: f32,
     pub post_processing_time: f32,
 
     pub image_size: [usize; 2],
-    pub extrinsic: Vec<f64>,
-    pub intrinsic: Vec<f64>,
+    pub extrinsic: nalgebra::Matrix3<f64>,
+    pub intrinsic: nalgebra::Matrix3<f64>,
     pub dist_coeffs: Vec<f64>,
     pub error_string: Option<String>,
 }
@@ -106,9 +94,6 @@ impl AttitudeEstimation {
         let max_inter_star_angle = cal.diagonal_angle() as f32;
         let inter_star_angle_tolerance = config.pixel_tolerance * cal.max_angle_per_pixel() as f32;
 
-        // TODO populate
-        let frame_points = vec![];
-
         let star_matcher = StarMatcher::new(
             stars_xyz,
             &stars_mag,
@@ -124,8 +109,26 @@ impl AttitudeEstimation {
             cal,
             catalog,
             star_matcher,
-            frame_points,
+            stars_mag,
         })
+    }
+
+    pub fn extract_cat_stars(&self, max_magnitude: f32) -> (Vec<[f64; 3]>, Vec<f32>) {
+        let xyz = self
+            .star_matcher
+            .stars_xyz()
+            .iter()
+            .zip(self.stars_mag.iter())
+            .filter(|(_, &mag)| mag <= max_magnitude)
+            .map(|(&xyz, _)| [xyz[0] as f64, xyz[1] as f64, xyz[2] as f64])
+            .collect();
+        let mags = self
+            .stars_mag
+            .iter()
+            .filter(|&mag| *mag <= max_magnitude)
+            .map(|&mag| mag)
+            .collect();
+        (xyz, mags)
     }
 
     pub fn estimate_attitude(
@@ -180,33 +183,23 @@ impl AttitudeEstimation {
                 quat_vec[2],
             ));
 
-        let extrinsic: nalgebra::Rotation<f64, 3> = quat.to_rotation_matrix();
+        let extrinsic: nalgebra::Matrix3<f64> = quat.to_rotation_matrix().inverse().into_inner();
 
-        let obs_xyz = (extrinsic.transpose() * view_as_dmatrix(&obs_xyz_camera))
-            .column_iter()
-            .map(|xyz| {
-                let array_ref: &[f64; 3] = xyz.as_slice().try_into().unwrap();
-                [
-                    array_ref[0] as f32,
-                    array_ref[1] as f32,
-                    array_ref[2] as f32,
-                ]
-            })
-            .collect();
+        let obs_xyz = dmatrix_to_array(extrinsic.transpose() * array_to_dmatrix(obs_xyz_camera));
 
         // Calculate catalog star coordinates
         let all_cat_xyz = self.star_matcher.stars_xyz();
-        let cat_xyz: Vec<[f32; 3]> = res
+        let matched_cat_xyz: Vec<[f32; 3]> = res
             .match_ids
             .iter()
             .map(|&i| all_cat_xyz[i as usize])
             .collect();
-        let cat_xyz_f64: Vec<[f64; 3]> = cat_xyz
+        let matched_cat_xyz_f64: Vec<[f64; 3]> = matched_cat_xyz
             .iter()
             .map(|&i| [i[0] as f64, i[1] as f64, i[2] as f64])
             .collect();
-        let cat_camera = extrinsic.transpose() * view_as_dmatrix(&cat_xyz_f64);
-        let cat_xy: Vec<[f32; 2]> = cat_camera
+        let matched_cat_xyz_camera = extrinsic * slice_to_matrix(&matched_cat_xyz_f64);
+        let matched_cat_xy: Vec<[f32; 2]> = matched_cat_xyz_camera
             .column_iter()
             .map(|xyz| {
                 let array_ref: &[f64; 3] = xyz.as_slice().try_into().unwrap();
@@ -214,20 +207,17 @@ impl AttitudeEstimation {
                 [xy[0] as f32, xy[1] as f32]
             })
             .collect();
-        let cat_mags = res
+        let matched_cat_mags = res
             .match_ids
             .iter()
             .map(|&i| self.catalog.stars[i as usize].magnitude as f32)
             .collect();
 
-        let alignment_error = 0.0; // Placeholder for alignment error calculation
-
-        let intrinsic = self.cal.intrinsic_matrix().as_slice().to_vec();
+        let intrinsic = self.cal.intrinsic_matrix();
         let dist_coeffs = match self.cal.dist_coefs {
             Some(coefs) => coefs.to_vec(),
             None => vec![],
         };
-        let extrinsic = extrinsic.transpose().matrix().as_slice().to_vec();
 
         let post_processing_time = start_instant.elapsed().as_secs_f32() - processing_time;
 
@@ -239,14 +229,12 @@ impl AttitudeEstimation {
         Ok(AttitudeEstimationResult {
             quat: quat_vec,
             n_matches: res.n_matches as u32,
-            alignment_error: alignment_error,
             obs_xy: obs_xy_f32,
             obs_xyz: obs_xyz,
             obs_matched_mask: obs_matched_mask,
-            cat_xy: cat_xy,
-            cat_xyz: cat_xyz,
-            cat_mags: cat_mags,
-            frame_points: self.frame_points.clone(),
+            matched_cat_xy,
+            matched_cat_xyz: matched_cat_xyz_f64,
+            matched_cat_mags,
             processing_time: processing_time * 1000.0,
             post_processing_time: post_processing_time * 1000.0,
             image_size: [self.cal.width(), self.cal.height()],
@@ -274,15 +262,271 @@ impl AttitudeEstimation {
     }
 }
 
-pub fn view_as_dmatrix<'a, const N: usize, T>(points: &'a [[T; N]]) -> nalgebra::DMatrix<T>
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AttitudeEstimationPayload {
+    pub quat: [f64; 4],
+    pub n_matches: u32,
+    pub alignment_error: f64,
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
+    pub matched_obs_radial: Vec<[f32; 2]>,
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
+    pub north_south: Vec<[f32; 2]>,
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
+    pub obs_xy: Vec<[f32; 2]>,
+    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
+    pub obs_matched_mask: Vec<bool>,
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
+    pub cat_xy: Vec<[f32; 2]>,
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
+    pub cat_radial: Vec<[f32; 2]>,
+    #[serde(serialize_with = "utils::contiguous_serialize_1d")]
+    pub cat_mags: Vec<f32>,
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
+    pub frame_points_radial: Vec<[f32; 2]>,
+
+    pub processing_time: f32,
+    pub post_processing_time: f32,
+
+    pub image_size: [usize; 2],
+    pub extrinsic: Vec<f64>,
+    pub intrinsic: Vec<f64>,
+    pub dist_coeffs: Vec<f64>,
+    pub error_string: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AxisCalibrationState {
+    error_deg: Option<f64>,
+    orientations: u32,
+    error_string: Option<String>,
+}
+
+pub struct AxisCalibration {
+    rotations: Vec<nalgebra::Rotation<f64, 3>>,
+    calibrated_rotation: nalgebra::Rotation<f64, 3>,
+    error_deg: Option<f64>,
+    error_string: Option<String>,
+}
+
+impl AxisCalibration {
+    pub fn new() -> Self {
+        AxisCalibration {
+            rotations: Vec::new(),
+            calibrated_rotation: nalgebra::Rotation::identity(),
+            error_deg: None,
+            error_string: None,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.rotations.clear();
+    }
+
+    pub fn put(&mut self, rot: &nalgebra::Rotation<f64, 3>) {
+        self.rotations.push(rot.clone());
+    }
+
+    pub fn calibrate(&mut self) {
+        // Convert rotations to matrices
+        let rot_mats: Vec<[f64; 9]> = self
+            .rotations
+            .iter()
+            .map(|r| r.matrix().transpose().as_slice().try_into().unwrap())
+            .collect();
+
+        // Find common axis
+        match common_axis::find_common_axis(&rot_mats, 1e-6, 20) {
+            Ok((axis, _, _, estimated_std_rad)) => {
+                let target = nalgebra::Vector3::new(axis[0], axis[1], axis[2]); // what it looks at
+                let up = nalgebra::Vector3::new(0.0, -1.0, 0.0);
+                self.calibrated_rotation = nalgebra::Rotation3::look_at_lh(&target, &up)
+                    * nalgebra::Rotation3::from_matrix_unchecked(nalgebra::Matrix3::<f64>::new(
+                        -1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 1.0,
+                    ));
+
+                self.error_deg = Some(estimated_std_rad * (180.0 / std::f64::consts::PI));
+                self.error_string = None;
+            }
+            Err(e) => {
+                self.error_string = Some(e.to_string());
+            }
+        }
+    }
+
+    pub fn get_state(&self) -> AxisCalibrationState {
+        AxisCalibrationState {
+            error_deg: self.error_deg,
+            orientations: self.rotations.len() as u32,
+            error_string: self.error_string.clone(),
+        }
+    }
+
+    /// Transform points from celestial to corrected camera frame
+    pub fn transform_to_corrected(
+        &self,
+        xyz: &[[f64; 3]],
+        extrinsic: &nalgebra::Matrix3<f64>,
+    ) -> Vec<[f64; 3]> {
+        let xyz_mat = slice_to_matrix(&xyz);
+        let rot_mat = self.calibrated_rotation.matrix().transpose() * extrinsic;
+        dmatrix_to_array(rot_mat * xyz_mat)
+    }
+
+    pub fn correct_attitude_estimation_result(
+        &self,
+        att: &AttitudeEstimation,
+        res: AttitudeEstimationResult,
+    ) -> AttitudeEstimationPayload {
+        //Find alignment error
+        let alignment_error = nalgebra::Rotation3::from_matrix_unchecked(
+            res.extrinsic * self.calibrated_rotation.matrix().transpose(),
+        )
+        .angle()
+            * 180.0
+            / std::f64::consts::PI;
+
+        // TODO populate
+        let frame_points_xyz = att.cal.get_distorted_camera_frame(10);
+        let frame_points_aligned =
+            self.transform_to_corrected(&frame_points_xyz, &nalgebra::Matrix3::identity());
+
+        let matched_obs_xyz = res
+            .obs_matched_mask
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &m)| if m { Some(res.obs_xyz[i]) } else { None })
+            .collect::<Vec<_>>();
+
+        let matched_obs_xyz_aligned = self.transform_to_corrected(&matched_obs_xyz, &res.extrinsic);
+        let matched_cat_xyz_aligned =
+            self.transform_to_corrected(&res.matched_cat_xyz, &res.extrinsic);
+
+        let (bright_cat_xyz, bright_cat_mags) = att.extract_cat_stars(4.0);
+        let bright_cat_xyz_aligned = self.transform_to_corrected(&bright_cat_xyz, &res.extrinsic);
+
+        let cat_xyz_aligned = [matched_cat_xyz_aligned, bright_cat_xyz_aligned].concat();
+        let cat_mags = [res.matched_cat_mags, bright_cat_mags].concat();
+
+        let north_south_aligned =
+            self.transform_to_corrected(&vec![[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]], &res.extrinsic);
+
+        let matched_obs_radial = to_radial_vec(&matched_obs_xyz_aligned);
+        let cat_radial = to_radial_vec(&cat_xyz_aligned);
+        let north_south_radial = to_radial_vec(&north_south_aligned);
+        let frame_points_radial = to_radial_vec(&frame_points_aligned);
+
+        AttitudeEstimationPayload {
+            quat: res.quat,
+            n_matches: res.n_matches,
+            alignment_error,
+            matched_obs_radial: matched_obs_radial,
+            north_south: north_south_radial,
+            obs_xy: res.obs_xy,
+            obs_matched_mask: res.obs_matched_mask,
+            cat_xy: res.matched_cat_xy,
+            cat_radial: cat_radial,
+            cat_mags: cat_mags,
+            frame_points_radial: frame_points_radial,
+            processing_time: res.processing_time,
+            post_processing_time: res.post_processing_time,
+            image_size: res.image_size,
+            extrinsic: res.extrinsic.transpose().as_slice().to_vec(),
+            intrinsic: res.intrinsic.transpose().as_slice().to_vec(),
+            dist_coeffs: res.dist_coeffs,
+            error_string: res.error_string,
+        }
+    }
+}
+
+fn to_radial_vec(xyz: &[[f64; 3]]) -> Vec<[f32; 2]> {
+    xyz.iter()
+        .map(|xyz| {
+            let r = (xyz[0] * xyz[0] + xyz[1] * xyz[1]).sqrt();
+            let s = f64::atan2(r, xyz[2]) * 180.0 / std::f64::consts::PI / r;
+            [(xyz[0] * s) as f32, (xyz[1] * s) as f32]
+        })
+        .collect()
+}
+
+fn flatten_vec_reinterpret<T, const N: usize>(mut v: Vec<[T; N]>) -> Vec<T> {
+    let len = v.len() * N;
+    let cap = v.capacity() * N;
+    let ptr = v.as_mut_ptr() as *mut T;
+    // Prevent Vec<[T; N]> from dropping its elements
+    std::mem::forget(v);
+    unsafe { Vec::from_raw_parts(ptr, len, cap) }
+}
+
+pub fn array_to_dmatrix<'a, const N: usize, T>(v: Vec<[T; N]>) -> nalgebra::DMatrix<T>
 where
     T: nalgebra::Scalar,
 {
-    let len = points.len(); // n
-    let ptr = points.as_ptr() as *const T;
-    let total_len = len * N;
+    let len = v.len();
+    let flat = flatten_vec_reinterpret(v);
+    let storage = nalgebra::VecStorage::new(
+        nalgebra::Dim::from_usize(N),
+        nalgebra::Dim::from_usize(len),
+        flat,
+    );
+    nalgebra::DMatrix::from_vec_storage(storage)
+}
 
-    let flat: &'a [T] = unsafe { std::slice::from_raw_parts(ptr, total_len) };
+pub fn dmatrix_to_array<'a, const N: usize, T>(
+    m: nalgebra::Matrix<
+        T,
+        nalgebra::Const<N>,
+        nalgebra::Dyn,
+        nalgebra::VecStorage<T, nalgebra::Const<N>, nalgebra::Dyn>,
+    >,
+) -> Vec<[T; N]>
+where
+    T: nalgebra::Scalar,
+{
+    let v: Vec<T> = m.data.as_slice().to_vec();
+    let len = v.len() / N;
+    let cap = v.capacity() / N;
+    let ptr = v.as_ptr() as *mut [T; N];
+    // Prevent Vec<T> from dropping its elements
+    std::mem::forget(v);
+    unsafe { Vec::from_raw_parts(ptr, len, cap) }
+}
 
-    nalgebra::DMatrix::from_column_slice(N, len, flat)
+pub fn slice_to_matrix<'a, const N: usize, T>(
+    v: &'a [[T; N]],
+) -> nalgebra::MatrixView<'a, T, nalgebra::Const<N>, nalgebra::Dyn>
+where
+    T: nalgebra::Scalar,
+{
+    let rows = v.len();
+    let total_len = rows * N;
+
+    // safe because &[ [T; N] ] is contiguous
+    let flat: &'a [T] = unsafe { std::slice::from_raw_parts(v.as_ptr() as *const T, total_len) };
+
+    nalgebra::MatrixView::<T, nalgebra::Const<N>, nalgebra::Dyn>::from_slice(flat, rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::{Const, Dyn, MatrixView};
+
+    #[test]
+    fn test_slice_to_matrix() {
+        let data = [[1, 2, 3], [4, 5, 6]];
+
+        let mat: MatrixView<'_, _, Const<3>, Dyn> = slice_to_matrix(&data);
+
+        // Check dimensions
+        assert_eq!(mat.nrows(), 2);
+        assert_eq!(mat.ncols(), 3);
+
+        // Check values
+        assert_eq!(mat[(0, 0)], 1);
+        assert_eq!(mat[(0, 1)], 2);
+        assert_eq!(mat[(0, 2)], 3);
+        assert_eq!(mat[(1, 0)], 4);
+        assert_eq!(mat[(1, 1)], 5);
+        assert_eq!(mat[(1, 2)], 6);
+    }
 }

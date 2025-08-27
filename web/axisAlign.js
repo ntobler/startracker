@@ -97,23 +97,22 @@ export default {
             drawPlot(ctx, this.history)
         },
         addToCalibration() {
-            api('/api/axis_calibration', { command: "put" }, this.updateState);
+            api('/api/axis_calibration', "Put", this.updateState);
         },
         resetCalibration() {
-            api('/api/axis_calibration', { command: "reset" }, this.updateState);
+            api('/api/axis_calibration', "Reset", this.updateState);
         },
         calibrate() {
             if (this.calibration_orientations < 1) return;
             document.getElementById("calibrate").classList.add("pending");
-            api('/api/axis_calibration', { command: "calibrate" }, (state) => {
+            api('/api/axis_calibration', "Calibrate", (state) => {
                 this.updateState(state);
                 document.getElementById("calibrate").classList.remove("pending");
             });
         },
         capture(mode) {
             document.getElementById("toggle_cam").classList.add("pending");
-            let payload = { mode: mode };
-            api('/api/capture', payload, this.updateState);
+            api('/api/capture', mode, this.updateState);
         },
         showHelp() {
             this.helpDisplay = new HelpDisplay(document.getElementById('footer-bar'))
@@ -208,7 +207,7 @@ function drawCameraFrame(ctx, state, ui_zoom) {
         ctx.fillStyle = "#f004"
     }
 
-    let frame_points = toF32Array(state.frame_points);
+    let frame_points = toF32Array(state.frame_points_radial);
 
     if (frame_points.length >= 2) {
         ctx.beginPath()
@@ -225,18 +224,18 @@ function drawCameraFrame(ctx, state, ui_zoom) {
 
 function drawStars(ctx, state, ui_zoom) {
 
-    if (state.cat_xyz === undefined) return
+    if (state.cat_radial === undefined) return
 
     ctx.save()
 
-    let cat_xyz = toF32Array(state.cat_xyz);
+    let cat_radial = toF32Array(state.cat_radial);
     let cat_mags = toF32Array(state.cat_mags);
 
     for (let i = 0; i < cat_mags.length; i++) {
         let mag = cat_mags[i]
         mag = Math.pow(100, (-mag / 5 / 2)) * ui_zoom * 0.7
         ctx.beginPath()
-        ctx.arc(cat_xyz[i*2] * ui_zoom, cat_xyz[i*2 + 1] * ui_zoom, mag, 0, 2 * Math.PI)
+        ctx.arc(cat_radial[i*2] * ui_zoom, cat_radial[i*2 + 1] * ui_zoom, mag, 0, 2 * Math.PI)
         ctx.fill()
     }
 
@@ -244,23 +243,24 @@ function drawStars(ctx, state, ui_zoom) {
     ctx.strokeStyle = "red"
     ctx.fillStyle = "red"
 
-    let star_coords = toF32Array(state.star_coords);
+    let matched_obs_radial = toF32Array(state.matched_obs_radial);
 
-    for (let i2 = 0; i2 < star_coords.length; i2 += 2) {
+    for (let i2 = 0; i2 < matched_obs_radial.length; i2 += 2) {
         ctx.beginPath()
-        ctx.arc(star_coords[i2] * ui_zoom, star_coords[i2 + 1] * ui_zoom, ui_zoom, 0, 2 * Math.PI)
+        ctx.arc(matched_obs_radial[i2] * ui_zoom, matched_obs_radial[i2 + 1] * ui_zoom, ui_zoom, 0, 2 * Math.PI)
         ctx.stroke()
     }
 
     // Draw poles
     const w = 10
     const h = 10
+
+    let north_south = toF32Array(state.north_south);
     for (let i of [0, 1]) {
-        let pos = state.north_south[i]
         let name = ["North", "South"][i]
 
-        let x = pos[0]
-        let y = pos[1]
+        let x = north_south[i*2 + 0]
+        let y = north_south[i*2 + 1]
 
         if (x * x + y * y > 90 * 90) continue;
 

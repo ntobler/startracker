@@ -115,6 +115,38 @@ impl CameraParameters {
     pub fn max_angle_per_pixel(&self) -> f64 {
         f64::atan(1.0 / f64::min(self.fx, self.fy))
     }
+
+    /// Get a set of points on the image border, undistorted and back-projected to the
+    /// camera frame
+    pub fn get_distorted_camera_frame(&self, segments_per_side: usize) -> Vec<[f64; 3]> {
+        let num_points = segments_per_side * 4;
+
+        let x0 = -0.5;
+        let x1 = self.width() as f64 - 0.5;
+        let y0 = -0.5;
+        let y1 = self.height() as f64 - 0.5;
+
+        let corners_x = [x0, x1, x1, x0, x0];
+        let corners_y = [y0, y0, y1, y1, y0];
+
+        (0..num_points)
+            .map(|i| {
+                // t in [0, 4)
+                let t = i as f64 / segments_per_side as f64;
+
+                let idx = t.floor() as usize;
+                let frac = t - idx as f64;
+                let x = corners_x[idx] + frac * (corners_x[idx + 1] - corners_x[idx]);
+                let y = corners_y[idx] + frac * (corners_y[idx + 1] - corners_y[idx]);
+
+                let [x_undist, y_undist] = self.undistort(&[x, y]);
+                let x = (x_undist - self.tx) / self.fx;
+                let y = (y_undist - self.ty) / self.fy;
+
+                [x, y, 1.0]
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]

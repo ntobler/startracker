@@ -55,7 +55,7 @@
             <div v-if="stream?.attitude_estimation?.post_processing_time" title="Attitude estimation results">
                 Stars:
                 Tracked {{stream.attitude_estimation.n_matches}}
-                Alignment error {{stream.attitude_estimation.alignment_error.toFixed(3)}}°
+                Alignment error {{stream.attitude_estimation.alignment_error.toFixed(3)}}deg
                 Times {{stream.pre_processing_time.toFixed(1)}}ms, {{stream.attitude_estimation.processing_time.toFixed(1)}}ms
                 {{stream.attitude_estimation.post_processing_time.toFixed(1)}}ms
                 <div class="help">

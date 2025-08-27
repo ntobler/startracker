@@ -251,7 +251,7 @@ class AttitudeEstimation:
             # Rotate into camera coordinate frame
             cat_xyz = inverse_rotation.apply(self._cat_xyz)
             north_south = inverse_rotation.apply([[0, 0, 1], [0, 0, -1]])
-            star_coords = att_res.image_xyz_cam
+            matched_obs_xyz = att_res.image_xyz_cam
 
             # Merge catalog stars and detected stars (so both are displayed in the GUI)
             cat_xyz = np.concatenate((cat_xyz, att_res.cat_xyz_cam), axis=0)
@@ -259,7 +259,7 @@ class AttitudeEstimation:
 
             # Rotate into the axis coordinate frame if the axis has been calibrated
             if self._axis_calibrator is not None:
-                star_coords = self._axis_calibrator.axis_rot.apply(star_coords)
+                matched_obs_xyz = self._axis_calibrator.axis_rot.apply(matched_obs_xyz)
                 cat_xyz = self._axis_calibrator.axis_rot.apply(cat_xyz)
                 north_south = self._axis_calibrator.axis_rot.apply(north_south)
 
@@ -272,8 +272,8 @@ class AttitudeEstimation:
             cat_xyz = cat_xyz[pos_z]
             cat_mags = cat_mags[pos_z]
 
-            star_coords_radial = project_radial(star_coords)
-            cat_xyz_radial = project_radial(cat_xyz)
+            matched_obs_radial = project_radial(matched_obs_xyz)
+            cat_radial = project_radial(cat_xyz)
             north_south_radial = project_radial(north_south)
 
             self._update_camera_frame()
@@ -283,12 +283,12 @@ class AttitudeEstimation:
         extrinsic = scipy.spatial.transform.Rotation.from_quat(self.quat).inv().as_matrix()
 
         data = {
-            "star_coords": to_contiguious_f32_blob(star_coords_radial),
+            "matched_obs_radial": to_contiguious_f32_blob(matched_obs_radial),
             "alignment_error": alignment_error,
-            "cat_xyz": to_contiguious_f32_blob(cat_xyz_radial),
+            "cat_radial": to_contiguious_f32_blob(cat_radial),
             "cat_mags": to_contiguious_f32_blob(cat_mags),
             "north_south": to_rounded_list(north_south_radial, 2),
-            "frame_points": self._camera_frame,
+            "frame_points_radial": self._camera_frame,
             "quat": self.quat.tolist(),
             "n_matches": att_res.n_matches,
             "obs_xy": to_contiguious_f32_blob(obs_xy),

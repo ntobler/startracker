@@ -71,6 +71,18 @@ impl<T: PixelType> Frame<T> {
             timestamp_ns,
         })
     }
+
+    pub fn crop(&self, x: usize, y: usize, w: usize, h: usize) -> Result<Frame<T>, String> {
+        if (x + w > self.width) || (y + h > self.height) {
+            return Err("Crop dimensions out of bounds".to_string());
+        }
+        let mut out = Vec::<T>::with_capacity(w * h);
+        for row in 0..h {
+            let in_base = (y + row) * self.width + x;
+            out.extend_from_slice(&self.data_row_major[in_base..in_base + w]);
+        }
+        Frame::new(out, w, h, self.timestamp_ns)
+    }
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

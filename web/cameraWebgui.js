@@ -177,6 +177,10 @@ export default {
 
             ctx.translate(canvas.width / 2, canvas.height / 2)
 
+            if (this.stream.image_type == "Crop2x") {
+                ctx.scale(2, 2)
+            }
+
             let s = Math.min(canvas.width / width, canvas.height / height)
             ctx.scale(s, s)
             ctx.translate(0.5 - width / 2, 0.5 - height / 2)
@@ -186,29 +190,34 @@ export default {
             ctx.save()
 
             ctx.beginPath();
-            ctx.rect(-0.5, -0.5, width, height);
+            if (this.stream.image_type == "Crop2x") {
+                ctx.rect(-0.5 + width / 4, -0.5 + height / 4, width / 2, height / 2);
+            } else {
+                ctx.rect(-0.5, -0.5, width, height);
+            }
             ctx.clip();
 
-            if (this.view_settings && (this.view_settings?.image_type != "crop2x")) {
-
-                if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
-                    this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
-                } else if (this.view_settings.coordinate_frame && this.stream.attitude_estimation?.n_matches > 0) {
-                    this.drawCelestialCoordinateFrame(ctx, this.stream.attitude_estimation);
-                }
-
-                if (this.stream.attitude_estimation) {
-                    this.drawStars(ctx, this.stream.attitude_estimation)
-                }
-
-                this.showAutoCalibrationInfo(this.stream.auto_calibrator);
-
+            if (this.stream.auto_calibrator != {} && this.stream.auto_calibrator.active) {
+                this.drawCelestialCoordinateFrame(ctx, this.stream.auto_calibrator);
+            } else if (this.view_settings.coordinate_frame && this.stream.attitude_estimation?.n_matches > 0) {
+                this.drawCelestialCoordinateFrame(ctx, this.stream.attitude_estimation);
             }
+
+            if (this.stream.attitude_estimation) {
+                this.drawStars(ctx, this.stream.attitude_estimation)
+            }
+
+            this.showAutoCalibrationInfo(this.stream.auto_calibrator);
+
 
             ctx.restore()
 
             ctx.beginPath();
-            ctx.rect(-1, -1, width + 1, height + 1);
+            if (this.stream.image_type == "Crop2x") {
+                ctx.rect(-1 + width / 4, -1 + height / 4, width / 2 + 1, height / 2 + 1);
+            } else {
+                ctx.rect(-1, -1, width + 1, height + 1);
+            }
             ctx.stroke()
 
             ctx.restore()
@@ -231,13 +240,13 @@ export default {
                 if (obs_matched_mask[i] != 0) {
                     // Draw circle over observation
                     ctx.beginPath()
-                    ctx.arc(obs_xy[obs_i2], obs_xy[obs_i2+1], 5, 0, 2 * Math.PI)
+                    ctx.arc(obs_xy[obs_i2], obs_xy[obs_i2 + 1], 5, 0, 2 * Math.PI)
                     ctx.stroke()
 
                     // Connect observation with catalog position
                     ctx.beginPath()
-                    ctx.moveTo(obs_xy[obs_i2], obs_xy[obs_i2+1])
-                    ctx.lineTo(cat_xy[cat_i2], cat_xy[cat_i2+1])
+                    ctx.moveTo(obs_xy[obs_i2], obs_xy[obs_i2 + 1])
+                    ctx.lineTo(cat_xy[cat_i2], cat_xy[cat_i2 + 1])
                     ctx.stroke()
 
                     // Increase cat index
@@ -245,12 +254,12 @@ export default {
                 } else {
                     // Draw cross over observation
                     ctx.beginPath()
-                    ctx.moveTo(obs_xy[obs_i2] - 2, obs_xy[obs_i2+1] - 2)
-                    ctx.lineTo(obs_xy[obs_i2] + 2, obs_xy[obs_i2+1] + 2)
+                    ctx.moveTo(obs_xy[obs_i2] - 2, obs_xy[obs_i2 + 1] - 2)
+                    ctx.lineTo(obs_xy[obs_i2] + 2, obs_xy[obs_i2 + 1] + 2)
                     ctx.stroke()
                     ctx.beginPath()
-                    ctx.moveTo(obs_xy[obs_i2] + 2, obs_xy[obs_i2+1] - 2)
-                    ctx.lineTo(obs_xy[obs_i2] - 2, obs_xy[obs_i2+1] + 2)
+                    ctx.moveTo(obs_xy[obs_i2] + 2, obs_xy[obs_i2 + 1] - 2)
+                    ctx.lineTo(obs_xy[obs_i2] - 2, obs_xy[obs_i2 + 1] + 2)
                     ctx.stroke()
                 }
             }
@@ -427,7 +436,7 @@ export default {
     mounted() {
         this.connectStreamWebSocket();
 
-        api('/api/set_settings', {send_image: true}, null);
+        api('/api/set_settings', { send_image: true }, null);
         api('/api/get_state', null, this.updateState);
 
         getKatex(() => { });

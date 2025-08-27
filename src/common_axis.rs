@@ -443,7 +443,7 @@ pub fn find_common_axis(
 
     // Convert a b to axis
     let s2 = a * a + b * b;
-    let axis = [
+    let mut axis = [
         2.0 * a / (s2 + 1.0),
         2.0 * b / (s2 + 1.0),
         (1.0 - s2) / (s2 + 1.0),
@@ -461,6 +461,13 @@ pub fn find_common_axis(
         / angular_errors.len() as f64
         / rot_mats.len() as f64)
         .sqrt();
+
+    // Ensure the z component of the axis is positive
+    if axis[2] < 0.0 {
+        axis[0] = -axis[0];
+        axis[1] = -axis[1];
+        axis[2] = -axis[2];
+    }
 
     Ok((axis, mrp, residuals, estimated_std_rad))
 }

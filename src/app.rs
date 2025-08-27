@@ -131,71 +131,6 @@ impl Default for Persistent {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct AxisCalibrationState {
-    error_deg: Option<f64>,
-    orientations: u32,
-    error_string: Option<String>,
-}
-
-struct AxisCalibration {
-    rotations: Vec<nalgebra::Rotation<f64, 3>>,
-    calibrated_rotation: nalgebra::Rotation<f64, 3>,
-    error_deg: Option<f64>,
-    error_string: Option<String>,
-}
-
-impl AxisCalibration {
-    pub fn new() -> Self {
-        AxisCalibration {
-            rotations: Vec::new(),
-            calibrated_rotation: nalgebra::Rotation::identity(),
-            error_deg: None,
-            error_string: None,
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.rotations.clear();
-    }
-
-    pub fn put(&mut self, rot: &nalgebra::Rotation<f64, 3>) {
-        self.rotations.push(rot.clone());
-    }
-
-    pub fn calibrate(&mut self) {
-        // Convert rotations to matrices
-        let rot_mats: Vec<[f64; 9]> = self
-            .rotations
-            .iter()
-            .map(|r| r.matrix().transpose().as_slice().try_into().unwrap())
-            .collect();
-
-        // Find common axis
-        match common_axis::find_common_axis(&rot_mats, 1e-6, 20) {
-            Ok((axis, _, _, estimated_std_rad)) => {
-                let target = nalgebra::Vector3::new(axis[0], axis[1], axis[2]); // what it looks at
-                let up = nalgebra::Vector3::new(0.0, -1.0, 0.0);
-                self.calibrated_rotation = nalgebra::Rotation3::look_at_rh(&target, &up);
-
-                self.error_deg = Some(estimated_std_rad * (180.0 / std::f64::consts::PI));
-                self.error_string = None;
-            }
-            Err(e) => {
-                self.error_string = Some(e.to_string());
-            }
-        }
-    }
-
-    pub fn get_state(&self) -> AxisCalibrationState {
-        AxisCalibrationState {
-            error_deg: self.error_deg,
-            orientations: self.rotations.len() as u32,
-            error_string: self.error_string.clone(),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Copy, Clone)]
 struct AutoCalibrationState {
     active: bool,
@@ -255,7 +190,7 @@ impl AutoCalibration {
 
 struct State {
     persistent: Persistent,
-    axis_calibration: AxisCalibration,
+    axis_calibration: attitude_estimation::AxisCalibration,
     auto_calibration: AutoCalibration,
     camera_mode: CameraMode,
     attitude: Option<nalgebra::Rotation<f64, 3>>,
@@ -265,7 +200,7 @@ struct State {
 pub struct PublicState {
     persistent: Persistent,
     camera_mode: CameraMode,
-    axis_calibration: AxisCalibrationState,
+    axis_calibration: attitude_estimation::AxisCalibrationState,
     auto_calibration: AutoCalibrationState,
 }
 
@@ -320,7 +255,7 @@ impl App {
 
         let state = State {
             persistent,
-            axis_calibration: AxisCalibration::new(),
+            axis_calibration: attitude_estimation::AxisCalibration::new(),
             auto_calibration: AutoCalibration::new(),
             camera_mode: CameraMode::Stop,
             attitude: None,
@@ -454,10 +389,11 @@ struct StreamObject {
     #[serde(serialize_with = "utils::contiguous_serialize_1d")]
     encoded_frame: Vec<u8>,
     image_size: (usize, usize),
+    image_type: ImageType,
     image_quality: String,
     auto_calibrator: AutoCalibrationState,
     #[serde(serialize_with = "attitude_serialize")]
-    attitude_estimation: Result<attitude_estimation::AttitudeEstimationResult, String>,
+    attitude_estimation: Result<attitude_estimation::AttitudeEstimationPayload, String>,
     pre_processing_time: f32,
 }
 
@@ -465,14 +401,16 @@ impl StreamObject {
     fn new(
         encoded_frame: Vec<u8>,
         image_size: (usize, usize),
+        image_type: ImageType,
         image_quality: String,
-        attitude_estimation: Result<attitude_estimation::AttitudeEstimationResult, String>,
+        attitude_estimation: Result<attitude_estimation::AttitudeEstimationPayload, String>,
         pre_processing_time: f32,
     ) -> Self {
         let auto_calibrator = AutoCalibrationState { active: false };
         StreamObject {
             encoded_frame: encoded_frame,
             image_size: image_size,
+            image_type: image_type,
             image_quality: image_quality,
             auto_calibrator: auto_calibrator,
             attitude_estimation: attitude_estimation,
@@ -482,7 +420,7 @@ impl StreamObject {
 }
 
 fn attitude_serialize<S>(
-    val: &Result<attitude_estimation::AttitudeEstimationResult, String>,
+    val: &Result<attitude_estimation::AttitudeEstimationPayload, String>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -587,7 +525,18 @@ pub fn tick(app: &App) -> Result<(), String> {
 
         // Find attitude estimation result
         let att_result = match app.attitude_estimation.load_full().as_ref() {
-            Some(att_est) => att_est.estimate_attitude_from_image(&preprocessed),
+            Some(att_est) => match att_est.estimate_attitude_from_image(&preprocessed) {
+                Ok(r) => {
+                    let mut state = app.state.lock().map_err(|e| e.to_string())?;
+                    state.attitude = Some(nalgebra::Rotation3::from_matrix_unchecked(
+                        r.extrinsic.transpose(),
+                    ));
+                    Ok(state
+                        .axis_calibration
+                        .correct_attitude_estimation_result(att_est, r))
+                }
+                Err(e) => Err(e),
+            },
             None => Err("attitude estimation not available".to_string()),
         };
 
@@ -597,9 +546,8 @@ pub fn tick(app: &App) -> Result<(), String> {
                 ImageType::Raw => &raw,
                 ImageType::Processed => &preprocessed,
                 ImageType::Crop2x => {
-                    // TODO crop to 2x
-                    // let crop = opencvutils::crop_to_2x(&raw);
-                    &raw
+                    let (w, h) = (raw.width, raw.height);
+                    &raw.crop(w / 4, h / 4, w / 2, h / 2)?
                 }
             };
 
@@ -616,6 +564,7 @@ pub fn tick(app: &App) -> Result<(), String> {
         let stream_object = StreamObject::new(
             encoded_frame,
             (raw.width, raw.height),
+            image_type,
             ie.quality_str(),
             att_result,
             pre_processing_time,
