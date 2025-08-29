@@ -85,9 +85,6 @@ jobs:
     #   run: |
     #     PYTHONFAULTHANDLER=1 pre-commit run --all-files
 
-    # - name: Run pytest
-    #   run: |
-    #     pytest
 
     # - name: Run mypy
     #   run: |
@@ -97,9 +94,17 @@ jobs:
       run: |
         cargo test
 
+    - name: Run pytest
+      run: |
+        pytest
+      env:
+        PATH: "/root/.local/bin:${PATH}"
+
+
   create-release:
     name: Create Release
     needs: test
+    if: always()
     runs-on: ubuntu-22.04
 
     steps:

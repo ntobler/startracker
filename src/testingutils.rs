@@ -38,19 +38,20 @@ impl FileImageSource {
             })
             .collect::<Vec<_>>();
 
-        files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-
-        if files.len() == 0 {
-            return Err("Folder does not contain any PNG images".to_string());
-        }
-
         let mut buffers = Vec::new();
-        for file in files {
-            let img = image::open(file).map_err(|e| e.to_string())?;
-            let gray: ImageBuffer<Luma<u8>, Vec<u8>> = img.to_luma8();
-            (width, height) = gray.dimensions();
-            let buffer: Vec<u16> = gray.pixels().map(|&Luma([v])| v as u16).collect();
-            buffers.push(buffer);
+        if files.len() > 0 {
+            files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+            for file in files {
+                let img = image::open(file).map_err(|e| e.to_string())?;
+                let gray: ImageBuffer<Luma<u8>, Vec<u8>> = img.to_luma8();
+                (width, height) = gray.dimensions();
+                let buffer: Vec<u16> = gray.pixels().map(|&Luma([v])| v as u16).collect();
+                buffers.push(buffer);
+            }
+        } else {
+            height = 1080;
+            width = 1920;
+            buffers.push(vec![0u16; width as usize * height as usize]);
         }
 
         Ok(FileImageSource {
@@ -82,64 +83,64 @@ impl ImageSource for FileImageSource {
     }
 }
 
-struct ArtificialStarCam {
-    camera_instance: Py<PyAny>,
-}
+// struct ArtificialStarCam {
+//     camera_instance: Py<PyAny>,
+// }
 
-impl ArtificialStarCam {
-    /// Create a new instance from a Python class
-    pub fn new(class_name: &'static str) -> Result<Self, String> {
-        pyo3::prepare_freethreaded_python();
+// impl ArtificialStarCam {
+//     /// Create a new instance from a Python class
+//     pub fn new(class_name: &'static str) -> Result<Self, String> {
+//         pyo3::prepare_freethreaded_python();
 
-        let res: PyResult<ArtificialStarCam> = Python::with_gil(|py| {
-            // Add current directory to sys.path
-            let sys = py.import_bound("sys")?;
-            let path = sys.getattr("path")?;
-            let path = path.downcast()?;
-            path.insert(0, ".")?;
+//         let res: PyResult<ArtificialStarCam> = Python::with_gil(|py| {
+//             // Add current directory to sys.path
+//             let sys = py.import_bound("sys")?;
+//             let path = sys.getattr("path")?;
+//             let path = path.downcast()?;
+//             path.insert(0, ".")?;
 
-            // Import module and class
-            let testing_utils_module = py.import_bound("startracker.testing_utils")?;
-            let camera_module = py.import_bound("startracker.camera")?;
+//             // Import module and class
+//             let testing_utils_module = py.import_bound("startracker.testing_utils")?;
+//             let camera_module = py.import_bound("startracker.camera")?;
 
-            // Call Python constructor
-            let cam_config = camera_module.getattr("CameraConfig")?.call0()?;
-            let camera_instance = testing_utils_module
-                .getattr(class_name)?
-                .call1((cam_config,))?;
+//             // Call Python constructor
+//             let cam_config = camera_module.getattr("CameraConfig")?.call0()?;
+//             let camera_instance = testing_utils_module
+//                 .getattr(class_name)?
+//                 .call1((cam_config,))?;
 
-            Ok(Self {
-                camera_instance: camera_instance.into_py(py),
-            })
-        });
-        match res {
-            Ok(instance) => Ok(instance),
-            Err(e) => Err(e.to_string()),
-        }
-    }
+//             Ok(Self {
+//                 camera_instance: camera_instance.into_py(py),
+//             })
+//         });
+//         match res {
+//             Ok(instance) => Ok(instance),
+//             Err(e) => Err(e.to_string()),
+//         }
+//     }
 
-    /// Call the get() method on the Python object
-    pub fn get(&self) -> Result<(Vec<u8>, usize, usize), String> {
-        Python::with_gil(|py| {
-            // Call capture function
-            let result_pyobject: Py<PyAny> = self
-                .camera_instance
-                .call_method_bound(py, "capture", (), None)
-                .map_err(|e| e.to_string())?;
+//     /// Call the get() method on the Python object
+//     pub fn get(&self) -> Result<(Vec<u8>, usize, usize), String> {
+//         Python::with_gil(|py| {
+//             // Call capture function
+//             let result_pyobject: Py<PyAny> = self
+//                 .camera_instance
+//                 .call_method_bound(py, "capture", (), None)
+//                 .map_err(|e| e.to_string())?;
 
-            // Get numpy array
-            let image_numpy_array: &Bound<numpy::PyArrayDyn<u8>> = result_pyobject
-                .downcast_bound(py)
-                .map_err(|e| e.to_string())?;
+//             // Get numpy array
+//             let image_numpy_array: &Bound<numpy::PyArrayDyn<u8>> = result_pyobject
+//                 .downcast_bound(py)
+//                 .map_err(|e| e.to_string())?;
 
-            Ok((
-                image_numpy_array.to_vec().map_err(|e| e.to_string())?,
-                image_numpy_array.dims()[0],
-                image_numpy_array.dims()[1],
-            ))
-        })
-    }
-}
+//             Ok((
+//                 image_numpy_array.to_vec().map_err(|e| e.to_string())?,
+//                 image_numpy_array.dims()[0],
+//                 image_numpy_array.dims()[1],
+//             ))
+//         })
+//     }
+// }
 
 // #[cfg(test)]
 // mod tests {
