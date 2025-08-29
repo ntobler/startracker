@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     pkg-config \
     git \
+    python3-dev \
     python3 \
     python3-pip \
     libjpeg-dev \

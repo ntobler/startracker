@@ -25,7 +25,7 @@ jobs:
   build-docker:
     runs-on: ubuntu-22.04
     needs: check-dockerfile-changes
-    if: needs.check-dockerfile-changes.outputs.docker == 'true'
+    if: needs.check-dockerfile-changes.outputs.docker == 'true_but_not_this_time'
 
     permissions:
       contents: read
