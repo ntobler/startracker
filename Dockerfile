@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopencv-dev \
     curl \
     clang-14 \
-    llvm-dev
+    llvm-dev \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install meson
@@ -40,7 +40,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Build libcamera 0.3.0 from source
 WORKDIR /opt
-RUN git clone https://git.linuxtv.org/libcamera.git
+RUN git clone https://git.linuxtv.org/libcamera.git \
  && cd libcamera \
  && git checkout v0.3.0 \
  && meson setup build \
