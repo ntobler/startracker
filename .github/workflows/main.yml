@@ -1,25 +1,18 @@
 name: Test develop CI/CD Pipeline
 
 on:
-  push:
-    branches:
-      - "**"  # All branches
-    tags-ignore:
-      - "**"  # Ignore all tags
-
+  workflow_run:
+    workflows: ["Build and Push Docker image"]   # depends on the workflow name in build.yml
+    types:
+      - completed          # trigger after completion (success or failure)
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ghcr.io/ntobler/startracker-build:latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libclang-dev libcairo2-dev libopencv-dev
 
     - name: Set up Python
       uses: actions/setup-python@v5

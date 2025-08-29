@@ -2,15 +2,30 @@ name: Build and Push Docker image
 
 on:
   push:
-    branches: [ "main", "feature/rustification" ]
-    paths:
-      - "Dockerfile"
-      - ".github/workflows/docker.yml" # rebuild only if Dockerfile/workflow changes
-  workflow_dispatch: # manual trigger
+    branches:
+      - "**"  # All branches
+    tags-ignore:
+      - "**"  # Ignore all tags
 
 jobs:
+
+  changes:
+    runs-on: ubuntu-22.04
+    outputs:
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            docker:
+              - 'Dockerfile'
+              - '.github/workflows/docker.yml'
+
   build:
     runs-on: ubuntu-22.04
+    if: needs.changes.outputs.docker == 'true'
 
     permissions:
       contents: read
