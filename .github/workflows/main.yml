@@ -75,6 +75,7 @@ jobs:
     # poetry==2.1.4 has a bug
     - name: Install dependencies
       run: |
+        rustup default stable
         pip install poetry==2.1.3
         poetry install
       env:
@@ -96,15 +97,10 @@ jobs:
       run: |
         cargo test
 
-  build-release:
+  create-release:
     name: Create Release
     needs: test
     runs-on: ubuntu-22.04
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
 
@@ -122,12 +118,32 @@ jobs:
         draft: false
         prerelease: false
 
+
+  build-release:
+    name: Build Release
+    needs: create-release
+    strategy:
+      matrix:
+        architecture: [arm64, x86-64]
+    runs-on: ${{ matrix.architecture == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Build in release mode
       run: |
         cargo build --release --features cam
 
     - name: Upload executable
       run: |
-        gh release upload "${{ github.ref_name }}" "target/release/startracker" --clobber
+        mv target/release/startracker target/release/startracker-${{ matrix.architecture }}
+        gh release upload "${{ github.ref_name }}" "target/release/startracker-${{ matrix.architecture }}" --clobber
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
