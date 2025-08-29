@@ -21,7 +21,6 @@ jobs:
           filters: |
             docker:
               - 'Dockerfile'
-              - '.github/workflows/docker.yml'
 
   build-docker:
     runs-on: ubuntu-22.04
