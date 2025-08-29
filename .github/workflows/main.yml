@@ -57,14 +57,15 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/startracker-build:${{ github.sha }}
 
   test:
+    name: Run Tests
     runs-on: ubuntu-22.04
     needs: build-docker
 
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    # container:
+    #   image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+    #   credentials:
+    #     username: ${{ github.actor }}
+    #     password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
     - name: Checkout code
@@ -99,3 +100,39 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
+
+  build-release:
+    name: Create Release
+    needs: test
+    runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+
+    - name: Build in release mode
+      run: |
+        cargo build --release --features cam
+
+    - name: Upload executable
+      run: |
+        gh release upload "${{ github.ref_name }}" "target/release/startracker" --clobber
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
