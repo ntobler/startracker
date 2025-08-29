@@ -1,3 +1,5 @@
+# Dockerfile for building and testing startracker
+
 FROM ubuntu:22.04
 
 # Avoid interactive prompts

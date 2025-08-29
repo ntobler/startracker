@@ -62,21 +62,15 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build-docker
     if: always()
-
-    # container:
-    #   image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
-    #   credentials:
-    #     username: ${{ github.actor }}
-    #     password: ${{ secrets.GITHUB_TOKEN }}
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
 
     # poetry==2.1.4 has a bug
     - name: Install dependencies
@@ -99,9 +93,8 @@ jobs:
         mypy
 
     - name: Run cargo test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
+      run: |
+        cargo test
 
   build-release:
     name: Create Release
