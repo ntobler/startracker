@@ -2,13 +2,19 @@ name: Test develop CI/CD Pipeline
 
 on:
   workflow_run:
-    workflows: ["Build and Push Docker image"]   # depends on the workflow name in build.yml
+    workflows: ["Build and Push Docker image"]
     types:
-      - completed          # trigger after completion (success or failure)
+      - completed
 
 jobs:
   build:
-    runs-on: ghcr.io/ntobler/startracker-build:latest
+    runs-on: ubuntu-22.04
+
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
     - name: Checkout code
