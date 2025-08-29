@@ -518,15 +518,15 @@ mod tests {
         let mat: MatrixView<'_, _, Const<3>, Dyn> = slice_to_matrix(&data);
 
         // Check dimensions
-        assert_eq!(mat.nrows(), 2);
-        assert_eq!(mat.ncols(), 3);
+        assert_eq!(mat.nrows(), 3);
+        assert_eq!(mat.ncols(), 2);
 
         // Check values
         assert_eq!(mat[(0, 0)], 1);
-        assert_eq!(mat[(0, 1)], 2);
-        assert_eq!(mat[(0, 2)], 3);
-        assert_eq!(mat[(1, 0)], 4);
+        assert_eq!(mat[(1, 0)], 2);
+        assert_eq!(mat[(2, 0)], 3);
+        assert_eq!(mat[(0, 1)], 4);
         assert_eq!(mat[(1, 1)], 5);
-        assert_eq!(mat[(1, 2)], 6);
+        assert_eq!(mat[(2, 1)], 6);
     }
 }

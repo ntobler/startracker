@@ -25,18 +25,20 @@ impl FileImageSource {
         let (mut width, mut height) = (0, 0);
 
         // Get all png files in directory
-        let mut files = std::fs::read_dir(path)
-            .map_err(|e| e.to_string())?
-            .filter_map(|entry| {
-                let entry = entry.ok()?;
-                let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "png") {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+        let mut files = match std::fs::read_dir(path) {
+            Ok(dir) => dir
+                .filter_map(|entry| {
+                    let entry = entry.ok()?;
+                    let path = entry.path();
+                    if path.extension().map_or(false, |ext| ext == "png") {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            Err(_) => vec![],
+        };
 
         let mut buffers = Vec::new();
         if files.len() > 0 {
@@ -49,6 +51,7 @@ impl FileImageSource {
                 buffers.push(buffer);
             }
         } else {
+            println!("No files found, using blank images");
             height = 1080;
             width = 1920;
             buffers.push(vec![0u16; width as usize * height as usize]);
