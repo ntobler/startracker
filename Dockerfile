@@ -33,13 +33,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     clang-14 \
     llvm-dev \
+    gnupg \
+    apt-transport-https \
+    ca-certificates \
+    software-properties-common \
+    sudo \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install meson
 
+# Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
+  sudo gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
+  sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+ && apt-get update && apt-get install -y gh
+
 # Install Rust toolchain
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup default stable
 
 # Build libcamera 0.3.0 from source
 WORKDIR /opt

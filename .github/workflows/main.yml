@@ -78,7 +78,6 @@ jobs:
     # poetry==2.1.4 has a bug
     - name: Install dependencies
       run: |
-        rustup default stable
         pip install poetry==2.1.3
         poetry install
       env:
@@ -106,8 +105,8 @@ jobs:
 
   create-release:
     name: Create Release
-    # needs: test
-    # if: always()
+    needs: test
+    if: always()
     runs-on: ubuntu-22.04
 
     steps:
@@ -148,7 +147,6 @@ jobs:
 
     - name: Build in release mode
       run: |
-        rustup default stable
         cargo build --release --features cam
 
     - name: Upload executable
