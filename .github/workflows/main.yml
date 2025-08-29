@@ -106,8 +106,8 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: test
-    if: always()
+    # needs: test
+    # if: always()
     runs-on: ubuntu-22.04
 
     steps:
