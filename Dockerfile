@@ -48,7 +48,7 @@ RUN git clone https://git.linuxtv.org/libcamera.git \
  && ninja -C build install
 
 # Ensure clang-sys can find libclang
-RUN ln -sf /lib/x86_64-linux-gnu/libclang-14.so /lib/x86_64-linux-gnu/libclang.so
+# RUN ln -sf /lib/x86_64-linux-gnu/libclang-14.so /lib/x86_64-linux-gnu/libclang.so
 ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
 ENV LD_LIBRARY_PATH=/usr/lib/llvm-14/lib:$LD_LIBRARY_PATH
 
