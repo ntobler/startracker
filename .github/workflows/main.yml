@@ -131,7 +131,7 @@ jobs:
   build-release:
     name: Build Release
     needs: create-release
-    if: needs.create-release.result == 'success'
+    if: always()
     strategy:
       matrix:
         architecture: [arm64, x86-64]
