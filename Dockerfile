@@ -4,9 +4,8 @@ FROM ubuntu:22.04
 
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-ENV HOME=/root
 
-# Update and install minimal build dependencies
+# Install all system-level dependencies in a single layer for efficiency
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ninja-build \
@@ -34,25 +33,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang-14 \
     llvm-dev \
     gnupg \
-    apt-transport-https \
     ca-certificates \
-    software-properties-common \
-    sudo \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install meson
+# Install system-wide Python tools
+RUN pip3 install meson poetry==2.1.3
 
 # Install GitHub CLI
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
-  sudo gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
- && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
-  sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
  && apt-get update && apt-get install -y gh
-
-# Install Rust toolchain
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup default stable
 
 # Build libcamera 0.3.0 from source
 WORKDIR /opt
@@ -63,19 +53,24 @@ RUN git clone https://git.linuxtv.org/libcamera.git \
  && ninja -C build \
  && ninja -C build install
 
-# Ensure clang-sys can find libclang
-# RUN ln -sf /lib/x86_64-linux-gnu/libclang-14.so /lib/x86_64-linux-gnu/libclang.so
+# Set up environment for libclang and update library cache
 ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
 ENV LD_LIBRARY_PATH=/usr/lib/llvm-14/lib:$LD_LIBRARY_PATH
-
-# Update library cache
 RUN ldconfig
 
+# Create a non-root user for CI and grant permissions to the workspace directory
+RUN useradd -m -s /bin/bash --home-dir /home/ciuser ciuser \
+ && mkdir -p /github/workspace \
+ && chown -R ciuser:ciuser /home/ciuser /github/workspace
 
-# Create a non-root user for CI
-RUN useradd -m -s /bin/bash -G sudo ciuser \
- && echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Switch to the non-root user
 USER ciuser
+WORKDIR /home/ciuser
+ENV HOME=/home/ciuser
 
-# Set up working directory for Rust project
-WORKDIR /workspace
+# Install Rust toolchain as the non-root user
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/home/ciuser/.cargo/bin:${PATH}"
+
+# Set the final working directory for the CI job
+WORKDIR /github/workspace
