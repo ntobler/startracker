@@ -71,5 +71,11 @@ ENV LD_LIBRARY_PATH=/usr/lib/llvm-14/lib:$LD_LIBRARY_PATH
 # Update library cache
 RUN ldconfig
 
+
+# Create a non-root user for CI
+RUN useradd -m -s /bin/bash -G sudo ciuser \
+ && echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+USER ciuser
+
 # Set up working directory for Rust project
 WORKDIR /workspace
