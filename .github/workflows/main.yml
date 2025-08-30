@@ -64,6 +64,8 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user $(id -u):$(id -g)
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -108,6 +110,8 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user $(id -u):$(id -g)
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
