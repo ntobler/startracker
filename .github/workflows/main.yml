@@ -3,50 +3,139 @@ name: Test develop CI/CD Pipeline
 on:
   push:
     branches:
-      - "**"  # All branches
+      - "**" # All branches
     tags-ignore:
-      - "**"  # Ignore all tags
+      - "**" # Ignore all tags
 
+permissions:
+  contents: write
+  packages: write # Needed for pushing to GHCR
 
 jobs:
-  build:
+  check-dockerfile-changes:
     runs-on: ubuntu-22.04
+    outputs:
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.ref }}
+          filters: |
+            docker:
+              - 'Dockerfile'
+
+  build-docker:
+    runs-on: ubuntu-22.04
+    needs: check-dockerfile-changes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: needs.check-dockerfile-changes.outputs.docker == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: |
+            linux/arm64
+            linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+            ghcr.io/${{ github.repository_owner }}/startracker-build:${{ github.sha }}
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-22.04
+    needs: build-docker
+    if: always()
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libclang-dev libcairo2-dev libopencv-dev
+      - name: Install Python dependencies
+        run: |
+          rustup default stable
+          poetry install
+        env:
+          POETRY_VIRTUALENVS_CREATE: false
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Run Pre-commit
+        run: |
+          export GIT_SAFE_DIRECTORY="*"
+          git config --global --add safe.directory '*'
+          poetry run pre-commit run --all-files
 
-    # poetry==2.1.4 has a bug
-    - name: Install dependencies
-      run: |
-        pip install poetry==2.1.3
-        poetry install
-      env:
-        POETRY_VIRTUALENVS_CREATE: false
+      - name: Run cargo test
+        run: poetry run cargo test
 
-    - name: Pre-commit checks
-      run: |
-        PYTHONFAULTHANDLER=1 pre-commit run --all-files
+      - name: Run pytest
+        run: poetry run pytest
 
-    - name: Run pytest
-      run: |
-        pytest
+      - name: Run MyPy
+        run: poetry run mypy
 
-    - name: Run mypy
-      run: |
-        mypy
+  create-release:
+    name: Create Release
+    needs: build-docker
+    # if: startsWith(github.ref, 'refs/tags/v') # Only run for version tags
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
 
-    - name: Run cargo test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
+  build-release:
+    name: Build Release
+    needs: create-release
+    strategy:
+      matrix:
+        architecture: [arm64, amd64] # Changed x86-64 to amd64 for consistency
+    runs-on: ${{ matrix.architecture == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/startracker-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build in release mode
+        run: |
+          rustup default stable
+          cargo build --release --features cam
+
+      - name: Upload executable
+        run: |
+          git config --global --add safe.directory '*'
+          mv target/release/startracker target/release/startracker-${{ matrix.architecture }}
+          gh release upload "${{ github.ref_name }}" "target/release/startracker-${{ matrix.architecture }}" --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_SAFE_DIRECTORY: "*"

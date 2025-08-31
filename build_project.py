@@ -40,9 +40,20 @@ def rust_build(*, debug: bool) -> None:
     if debug:
         env = {"CARGO_TARGET_DIR": str(cwd / "target"), "PYO3_PYTHON": sys.executable}
         env.update(os.environ)
-        subprocess.check_call(["cargo", "build"], cwd=cwd, env=env)  # noqa: S603, S607
+        subprocess.check_call(  # noqa: S603
+            ["cargo", "build"],  # noqa: S607, S603
+            cwd=cwd,
+            env=env,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
     else:
-        subprocess.check_call(["cargo", "build", "--release"], cwd=cwd)  # noqa: S603, S607
+        subprocess.check_call(  # noqa: S603
+            ["cargo", "build", "--release"],  # noqa: S607, S603
+            cwd=cwd,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
     shutil.copy(cwd / "target/release/libstartracker.so", cwd / "startracker/libstartracker.so")
 
 
