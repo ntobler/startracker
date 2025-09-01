@@ -1,6 +1,7 @@
 # Dockerfile for building and testing startracker
 
-FROM ubuntu:22.04
+# Use same system as Raspberry Pi OS (Debian Bookworm)
+FROM debian:bookworm
 
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -34,11 +35,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     llvm-dev \
     gnupg \
     ca-certificates \
-    libpython3.10-dev \
- && rm -rf /var/lib/apt/lists/*
+    libpython3.11-dev \
+    meson \
+    python3-poetry \
+    wget
+#  && rm -rf /var/lib/apt/lists/*
 
 # Install system-wide Python tools
-RUN pip3 install meson poetry==2.1.3
+# RUN pip3 install meson poetry==2.1.3
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -56,7 +60,6 @@ RUN git clone https://git.linuxtv.org/libcamera.git \
 
 # Set up environment for libclang and update library cache
 ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
-ENV LD_LIBRARY_PATH=/usr/lib/llvm-14/lib:$LD_LIBRARY_PATH
 RUN ldconfig
 
 # Install Rust toolchain as
