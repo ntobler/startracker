@@ -4,7 +4,7 @@ use opencv::prelude::*;
 use rmp_serde;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::attitude_estimation;
@@ -231,6 +231,7 @@ pub struct App {
     pub stream_dispatcher: webutils::DataDispatcher<Vec<u8>>,
     pub running: AtomicBool,
     attitude_estimation: ArcSwap<Option<attitude_estimation::AttitudeEstimation>>,
+    returncode: AtomicI32,
 }
 
 impl App {
@@ -266,7 +267,16 @@ impl App {
             stream_dispatcher: webutils::DataDispatcher::<Vec<u8>>::new(),
             running: AtomicBool::new(true),
             attitude_estimation: ArcSwap::new(Arc::new(None)),
+            returncode: AtomicI32::new(0),
         }
+    }
+
+    pub fn set_returncode(&self, code: i32) {
+        self.returncode.store(code, Ordering::Release);
+    }
+
+    pub fn get_returncode(&self) -> i32 {
+        self.returncode.load(Ordering::Acquire)
     }
 
     pub fn get_state(&self) -> Result<PublicState, String> {
@@ -514,7 +524,7 @@ pub fn tick(app: &App) -> Result<(), String> {
                 }
             }
             AcqusitionRequest::Darkframe => {
-                if let Err(e) = camera.record_darkframe() {
+                if let Err(e) = camera.record_darkframe(4) {
                     eprintln!("Error getting camera image: {}.", e);
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }

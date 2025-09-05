@@ -112,6 +112,7 @@ pub struct Camera {
     trigger_tx: Option<crossbeam_channel::Sender<(u32, u32)>>,
     frame_rx: crossbeam_channel::Receiver<Frame<u16>>,
     config: CameraConfig,
+    darkframe: Option<Frame<u8>>,
 }
 
 impl Camera {
@@ -136,6 +137,7 @@ impl Camera {
             trigger_tx: Some(trigger_tx),
             frame_rx,
             config: config_clone,
+            darkframe: None,
         })
     }
 
@@ -161,11 +163,7 @@ impl Camera {
         self.config = config.clone();
     }
 
-    pub fn capture<T>(&mut self) -> Result<Frame<T>, String>
-    where
-        T: PixelType,
-        u16: Cast<T>,
-    {
+    pub fn capture_internal(&mut self) -> Result<Frame<u16>, String> {
         if let Some(e) = &self.thread_error {
             return Err(e.clone());
         }
@@ -180,12 +178,14 @@ impl Camera {
                 return Err(self.get_thread_error());
             }
         };
-        let frame = match self.frame_rx.recv() {
-            Ok(f) => f,
-            Err(_) => {
-                return Err(self.get_thread_error());
-            }
-        };
+        match self.frame_rx.recv() {
+            Ok(f) => Ok(f),
+            Err(_) => Err(self.get_thread_error()),
+        }
+    }
+
+    pub fn capture(&mut self) -> Result<Frame<u8>, String> {
+        let frame = self.capture_internal()?;
 
         let log2_f = match self.config.digital_gain {
             1 => Ok(-2),
@@ -195,15 +195,55 @@ impl Camera {
             x => Err(format!("Digital gain {:?} not available", x)),
         }?;
 
-        match self.config.binning {
+        // Apply binning and digital gain
+        let mut corrected: Frame<u8> = match self.config.binning {
             1 => Ok(amplify(&frame, log2_f)),
             2 => Ok(amplify(&binning::<1, u16>(&frame)?, log2_f - 2)),
             4 => Ok(amplify(&binning::<2, u16>(&frame)?, log2_f - 4)),
             x => Err(format!("Binning {:?} not available", x)),
+        }?;
+
+        // Compute darkframe subtraction if available
+        match &mut self.darkframe {
+            Some(dark) => {
+                if (dark.width == corrected.width) && (dark.height == corrected.height) {
+                    corrected
+                        .data_row_major
+                        .iter_mut()
+                        .zip(dark.data_row_major.iter())
+                        .for_each(|(a, b)| *a = a.saturating_sub(*b));
+                }
+            }
+            None => {}
         }
+
+        Ok(corrected)
     }
 
-    pub fn record_darkframe(&mut self) -> Result<(), String> {
+    pub fn record_darkframe(&mut self, average: usize) -> Result<(), String> {
+        let frame = self.capture_internal()?;
+        let mut accumulator: Vec<u16> = frame.data_row_major.iter().map(|&v| v as u16).collect();
+
+        if average < 1 {
+            return Err("Average must be at least 1".to_string());
+        }
+
+        for _ in 0..(average - 1) {
+            let f = self.capture_internal()?;
+            for (a, b) in accumulator.iter_mut().zip(f.data_row_major.iter()) {
+                *a += *b as u16;
+            }
+        }
+
+        self.darkframe = Some(Frame::new(
+            accumulator
+                .iter()
+                .map(|&v| (v / (average as u16)) as u8)
+                .collect(),
+            frame.width,
+            frame.height,
+            frame.timestamp_ns,
+        )?);
         Ok(())
     }
 }
@@ -311,7 +351,7 @@ mod tests {
             binning: 1,
         };
         let mut cam = Camera::new(&config).unwrap();
-        let _: Frame<u8> = cam.capture().unwrap();
+        let _: Frame = cam.capture().unwrap();
     }
 
     #[test]

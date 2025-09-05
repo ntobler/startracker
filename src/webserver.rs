@@ -76,7 +76,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), i32> {
     let application = Arc::new(app::App::load_or_default("config.json"));
 
     //Start camera thread
@@ -148,6 +148,7 @@ async fn main() {
                     {
                         println!("Received shutdown command, shutting down...");
                         app_cloned_for_fut.running.store(false, Ordering::Release);
+                        app_cloned_for_fut.set_returncode(31);
                         Ok(warp::reply::json(&serde_json::json!({})))
                     }
                     _ => Err(warp::reject::custom(AppError {
@@ -247,6 +248,8 @@ async fn main() {
         };
     };
 
+    let returncode = application.get_returncode();
+
     let wait_for_signal_and_then_timeout = async move {
         while application.running.load(Ordering::Acquire) {
             tokio::time::sleep(Duration::from_millis(50)).await; // Poll every 50ms
@@ -267,6 +270,11 @@ async fn main() {
     match camera_thread_handle.join() {
         Ok(_) => println!("Camera thread joined successfully"),
         Err(e) => eprintln!("Camera thread panicked: {:?}", e),
+    }
+
+    match returncode {
+        0 => Ok(()),
+        code => Err(code),
     }
 }
 
