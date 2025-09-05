@@ -33,7 +33,7 @@ pub fn camera_thread(
     let cameras = mgr.cameras();
 
     println!("Available cameras:");
-    for i in cameras.len() {
+    for i in 0..cameras.len() {
         let cam = cameras.get(0).ok_or("No cameras found".to_string())?;
         let model = cam
             .properties()
