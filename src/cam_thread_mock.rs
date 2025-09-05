@@ -38,7 +38,13 @@ pub fn camera_thread(
                 exposure_us = new_exposure_ns;
                 analogue_gain = new_analogue_gain;
 
-                let frame = random_image_generator.get(exposure_us, analogue_gain, timestamp_ns);
+                let mut frame =
+                    random_image_generator.get(exposure_us, analogue_gain, timestamp_ns);
+
+                // Add offset
+                frame.data_row_major.iter_mut().for_each(|p| {
+                    *p = p.saturating_add(32);
+                });
 
                 frame_tx.send(frame).ok();
             }

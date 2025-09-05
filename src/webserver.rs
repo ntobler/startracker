@@ -2,6 +2,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::process::ExitCode;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -76,7 +77,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), i32> {
+async fn main() -> ExitCode {
     let application = Arc::new(app::App::load_or_default("config.json"));
 
     //Start camera thread
@@ -147,8 +148,8 @@ async fn main() -> Result<(), i32> {
                             == Some(&serde_json::Value::String("shutdown".to_string())) =>
                     {
                         println!("Received shutdown command, shutting down...");
-                        app_cloned_for_fut.running.store(false, Ordering::Release);
                         app_cloned_for_fut.set_returncode(31);
+                        app_cloned_for_fut.running.store(false, Ordering::Release);
                         Ok(warp::reply::json(&serde_json::json!({})))
                     }
                     _ => Err(warp::reject::custom(AppError {
@@ -248,10 +249,9 @@ async fn main() -> Result<(), i32> {
         };
     };
 
-    let returncode = application.get_returncode();
-
+    let app_clone = Arc::clone(&application);
     let wait_for_signal_and_then_timeout = async move {
-        while application.running.load(Ordering::Acquire) {
+        while app_clone.running.load(Ordering::Acquire) {
             tokio::time::sleep(Duration::from_millis(50)).await; // Poll every 50ms
         }
         println!("Hard shutdown trigger: Detected `running` flag is false. Starting post-signal delay...");
@@ -272,9 +272,9 @@ async fn main() -> Result<(), i32> {
         Err(e) => eprintln!("Camera thread panicked: {:?}", e),
     }
 
-    match returncode {
-        0 => Ok(()),
-        code => Err(code),
+    match application.get_returncode() {
+        0 => ExitCode::SUCCESS,
+        code => ExitCode::from(code),
     }
 }
 

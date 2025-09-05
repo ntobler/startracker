@@ -4,7 +4,7 @@ use opencv::prelude::*;
 use rmp_serde;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::attitude_estimation;
@@ -231,7 +231,7 @@ pub struct App {
     pub stream_dispatcher: webutils::DataDispatcher<Vec<u8>>,
     pub running: AtomicBool,
     attitude_estimation: ArcSwap<Option<attitude_estimation::AttitudeEstimation>>,
-    returncode: AtomicI32,
+    returncode: AtomicU8,
 }
 
 impl App {
@@ -267,15 +267,15 @@ impl App {
             stream_dispatcher: webutils::DataDispatcher::<Vec<u8>>::new(),
             running: AtomicBool::new(true),
             attitude_estimation: ArcSwap::new(Arc::new(None)),
-            returncode: AtomicI32::new(0),
+            returncode: AtomicU8::new(0),
         }
     }
 
-    pub fn set_returncode(&self, code: i32) {
+    pub fn set_returncode(&self, code: u8) {
         self.returncode.store(code, Ordering::Release);
     }
 
-    pub fn get_returncode(&self) -> i32 {
+    pub fn get_returncode(&self) -> u8 {
         self.returncode.load(Ordering::Acquire)
     }
 

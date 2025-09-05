@@ -351,7 +351,7 @@ mod tests {
             binning: 1,
         };
         let mut cam = Camera::new(&config).unwrap();
-        let _: Frame = cam.capture().unwrap();
+        let _: Frame<u8> = cam.capture().unwrap();
     }
 
     #[test]
