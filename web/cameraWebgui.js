@@ -303,10 +303,10 @@ export default {
 
             // Extract intrinsic parameters
             const projection_matrix = matmul3x3(intrinsic, extrinsic);
-            const fx = intrinsic[0][0];
-            const fy = intrinsic[1][1];
-            const tx = intrinsic[0][2];
-            const ty = intrinsic[1][2];
+            const fx = intrinsic[0];
+            const fy = intrinsic[4];
+            const tx = intrinsic[2];
+            const ty = intrinsic[5];
             const k1 = dist_coeffs[0];
             const k2 = dist_coeffs[1];
             const p1 = dist_coeffs[2];

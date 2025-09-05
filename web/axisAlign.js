@@ -320,7 +320,7 @@ function drawPlot(ctx, history) {
     ctx.translate(0, -Math.log10(1))
     ctx.beginPath();
     for (let i = 0; i < history.length; i++) {
-        ctx.lineTo(i, Math.max(Math.log10(history[i]["n_matches"]), 1))
+        ctx.lineTo(i, Math.max(Math.log10(history[i]["n_matches"]), 0))
     }
     ctx.restore()
     ctx.globalAlpha = 1;
