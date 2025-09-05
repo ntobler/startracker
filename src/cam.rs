@@ -163,7 +163,7 @@ impl Camera {
         self.config = config.clone();
     }
 
-    pub fn capture_internal(&mut self) -> Result<Frame<u16>, String> {
+    pub fn capture_internal(&mut self) -> Result<Frame<u8>, String> {
         if let Some(e) = &self.thread_error {
             return Err(e.clone());
         }
@@ -178,14 +178,10 @@ impl Camera {
                 return Err(self.get_thread_error());
             }
         };
-        match self.frame_rx.recv() {
+        let frame = match self.frame_rx.recv() {
             Ok(f) => Ok(f),
             Err(_) => Err(self.get_thread_error()),
-        }
-    }
-
-    pub fn capture(&mut self) -> Result<Frame<u8>, String> {
-        let frame = self.capture_internal()?;
+        }?;
 
         let log2_f = match self.config.digital_gain {
             1 => Ok(-2),
@@ -196,18 +192,22 @@ impl Camera {
         }?;
 
         // Apply binning and digital gain
-        let mut corrected: Frame<u8> = match self.config.binning {
+        match self.config.binning {
             1 => Ok(amplify(&frame, log2_f)),
             2 => Ok(amplify(&binning::<1, u16>(&frame)?, log2_f - 2)),
             4 => Ok(amplify(&binning::<2, u16>(&frame)?, log2_f - 4)),
             x => Err(format!("Binning {:?} not available", x)),
-        }?;
+        }
+    }
+
+    pub fn capture(&mut self) -> Result<Frame<u8>, String> {
+        let mut frame = self.capture_internal()?;
 
         // Compute darkframe subtraction if available
         match &mut self.darkframe {
             Some(dark) => {
-                if (dark.width == corrected.width) && (dark.height == corrected.height) {
-                    corrected
+                if (dark.width == frame.width) && (dark.height == frame.height) {
+                    frame
                         .data_row_major
                         .iter_mut()
                         .zip(dark.data_row_major.iter())
@@ -217,7 +217,7 @@ impl Camera {
             None => {}
         }
 
-        Ok(corrected)
+        Ok(frame)
     }
 
     pub fn record_darkframe(&mut self, average: usize) -> Result<(), String> {
