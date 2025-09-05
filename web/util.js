@@ -107,6 +107,14 @@ export class HelpDisplay {
     }
 }
 
+export function unflatten3x3(a) {
+    return [
+        [a[0], a[1], a[2]],
+        [a[3], a[4], a[5]],
+        [a[6], a[7], a[8]],
+    ]
+}
+
 export function matmul3x3(a, b) {
     const result = [];
     for (let i = 0; i < 3; i++) {

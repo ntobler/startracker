@@ -23,12 +23,12 @@ pub struct AttitudeEstimationConfig {
 impl Default for AttitudeEstimationConfig {
     fn default() -> Self {
         AttitudeEstimationConfig {
-            min_matches: 15,
+            min_matches: 30,
             pixel_tolerance: 1.0,
-            timeout_secs: 0.5,
+            timeout_secs: 0.1,
             threshold_value: 2,
-            min_area: 3,
-            max_area: 16,
+            min_area: 2,
+            max_area: 25,
             max_magnitude: 7.5,
             max_lookup_magnitude: 5.5,
         }

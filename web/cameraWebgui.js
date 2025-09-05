@@ -1,5 +1,5 @@
 
-import { api, HelpDisplay, matmul3x3, matToLaTeX, vecToLaTeX, parseSize, toF32Array } from './util.js';
+import { api, HelpDisplay, unflatten3x3, matmul3x3, matToLaTeX, vecToLaTeX, parseSize, toF32Array } from './util.js';
 import { ref } from './vue.esm-browser.prod.min.js';
 import { pack, unpack } from './msgpackr.js'
 
@@ -287,8 +287,8 @@ export default {
         },
         drawCelestialCoordinateFrame(ctx, state) {
 
-            const extrinsic = state.extrinsic;
-            const intrinsic = state.intrinsic;
+            const extrinsic = unflatten3x3(state.extrinsic);
+            const intrinsic = unflatten3x3(state.intrinsic);
             const dist_coeffs = state.dist_coeffs;
 
             // Return early if data is missing
@@ -303,10 +303,10 @@ export default {
 
             // Extract intrinsic parameters
             const projection_matrix = matmul3x3(intrinsic, extrinsic);
-            const fx = intrinsic[0];
-            const fy = intrinsic[4];
-            const tx = intrinsic[2];
-            const ty = intrinsic[5];
+            const fx = intrinsic[0][0];
+            const fy = intrinsic[1][1];
+            const tx = intrinsic[0][2];
+            const ty = intrinsic[1][2];
             const k1 = dist_coeffs[0];
             const k2 = dist_coeffs[1];
             const p1 = dist_coeffs[2];
