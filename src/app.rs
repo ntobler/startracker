@@ -281,9 +281,14 @@ impl App {
     }
 
     pub fn set_settings(&self, settings: Settings) -> Result<PublicState, String> {
-        {
+        let reinit_attitude_estimation = {
             let mut state_ref = self.state.lock().map_err(|e| e.to_string())?;
+            let reinit_attitude_estimation = settings.attitude_est_config.is_some();
             state_ref.set_persistent(settings)?;
+            reinit_attitude_estimation
+        };
+        if reinit_attitude_estimation {
+            self.init_attitude_estimation()?;
         }
         self.get_state()
     }

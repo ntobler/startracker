@@ -5,6 +5,7 @@ use libcamera::{
     framebuffer::AsFrameBuffer,
     framebuffer_allocator::{FrameBuffer, FrameBufferAllocator},
     framebuffer_map::MemoryMappedFrameBuffer,
+    geometry::Size,
     pixel_format::PixelFormat,
     properties,
     request::Request,
@@ -24,10 +25,22 @@ pub fn camera_thread(
     mut exposure_us: u32,
     mut analogue_gain: u32,
 ) -> Result<(), String> {
+    const WIDTH: u32 = 1920;
+    const HEIGHT: u32 = 1080;
     println!("Camera thread: starting");
     let mgr = CameraManager::new().map_err(|e| format!("CameraManager error: {e:?}"))?;
 
     let cameras = mgr.cameras();
+
+    println!("Available cameras:");
+    for i in cameras.len() {
+        let cam = cameras.get(0).ok_or("No cameras found".to_string())?;
+        let model = cam
+            .properties()
+            .get::<properties::Model>()
+            .map_err(|_| "Failed to get camera model property".to_string())?;
+        println!("- {}: {}", i, *model);
+    }
 
     let cam = cameras.get(0).ok_or("No cameras found".to_string())?;
 
@@ -47,9 +60,19 @@ pub fn camera_thread(
         .ok_or("Failed to generate camera configuration".to_string())?;
 
     // Set stream format
-    cfgs.get_mut(0)
-        .ok_or("No configuration found".to_string())?
-        .set_pixel_format(PIXEL_FORMAT_SRGGB10);
+    {
+        let mut c = cfgs
+            .get_mut(0)
+            .ok_or("No configuration found".to_string())?;
+        c.set_pixel_format(PIXEL_FORMAT_SRGGB10);
+        c.set_size(Size {
+            width: WIDTH,
+            height: HEIGHT,
+        });
+        c.set_stride(WIDTH * 2);
+        c.set_buffer_count(1);
+        c.set_frame_size(WIDTH * HEIGHT * 2);
+    }
     match cfgs.validate() {
         CameraConfigurationStatus::Valid => println!("Camera configuration valid!"),
         CameraConfigurationStatus::Adjusted => {

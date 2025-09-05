@@ -64,7 +64,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Build in debug mode (default: release mode).",
     )
+    parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Don't compile rust code.",
+    )
     args = parser.parse_args()
 
     download_js_dependencies()
-    rust_build(debug=args.debug)
+    if not args.no_compile:
+        rust_build(debug=args.debug)
