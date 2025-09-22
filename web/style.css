@@ -7,6 +7,37 @@ body {
     background-color: #111;
     font-size: 0.8em;
     color: red;
+    font-weight: bold;
+}
+
+@media (max-width: 480px) {
+    body {
+        font-size: 0.8em;
+    }
+}
+
+@media (min-width: 480px) {
+    body {
+        font-size: 0.8em;
+    }
+}
+
+@media (min-width: 768px) {
+    body {
+        font-size: 0.8em;
+    }
+}
+
+@media (min-width: 992px) {
+    body {
+        font-size: 1.0em;
+    }
+}
+
+@media (min-width: 1200px) {
+    body {
+        font-size: 1.0em;
+    }
 }
 
 [v-cloak] {
@@ -72,9 +103,11 @@ input[type=number] {
     color: inherit;
     border: 2px solid currentColor;
     background-color: #000000b0;
+    font-weight: inherit;
+    font-size: inherit;
 }
 
-button[type=button] {
+button {
     font-family: Consolas, monospace;
     color: inherit;
     border: 2px solid currentColor;
@@ -82,19 +115,21 @@ button[type=button] {
     background-color: #000000b0;
     margin: 0 0.25em;
     user-select: none;
+    font-weight: inherit;
+    font-size: inherit;
 }
 
-button[type=button]:hover {
+button:hover {
     border-color: white !important;
     color: white !important;
 }
 
-button[type=button]:active {
+button:active {
     border-color: rgb(182, 182, 182);
     color: rgb(201, 201, 201);
 }
 
-button[type=button].active {
+button.active {
     background-color: red;
     color: black;
     border-color: red;
@@ -114,6 +149,8 @@ select {
     color: inherit;
     border: 2px solid currentColor;
     background-color: #000000b0;
+    font-weight: inherit;
+    font-size: inherit;
 }
 
 .help {
