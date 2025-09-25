@@ -11,6 +11,7 @@ use crate::attitude_estimation;
 use crate::cam;
 use crate::cam_cal;
 use crate::opencvutils;
+use crate::serial;
 use crate::utils;
 use crate::webutils;
 
@@ -452,7 +453,9 @@ where
     }
 }
 
-pub fn tick(app: &App) -> Result<(), String> {
+pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
+    let app = app_arc.as_ref();
+
     let stream_dispatcher = &app.stream_dispatcher;
     let running = &app.running;
 
@@ -469,6 +472,24 @@ pub fn tick(app: &App) -> Result<(), String> {
 
     let mut camera =
         cam::Camera::new(&cam_config).map_err(|e| format!("Error initializing camera: {}.", e))?;
+
+    let serial_rx_callback = {
+        let app_arc = Arc::clone(&app_arc);
+        move |packet: serial::Packet| {
+            if packet.cmd == 0x03 && packet.len == 1 && packet.payload.len() == 1 {
+                let code = packet.payload[0];
+                println!("Received return code {} from serial.", code);
+                app_arc.set_returncode(code);
+                app_arc.running.store(false, Ordering::Release);
+            }
+        }
+    };
+
+    let mut serial = serial::Serial::new(
+        "serial0".to_string(),
+        1000000,
+        Arc::new(move |packet| serial_rx_callback(packet)),
+    )?;
 
     app.init_attitude_estimation()?;
 
@@ -553,6 +574,20 @@ pub fn tick(app: &App) -> Result<(), String> {
             },
             None => Err("attitude estimation not available".to_string()),
         };
+
+        // Send attitude over serial
+        if let Ok(a) = &att_result {
+            let quat_f32 = a.quat.map(|x| x as f32);
+            let q_bytes: [u8; 16] = unsafe { std::mem::transmute(quat_f32) };
+            let packet = serial::Packet {
+                cmd: 0x10,
+                len: 16,
+                payload: q_bytes.to_vec(),
+            };
+            if let Err(e) = serial.send(&packet) {
+                eprintln!("Error sending attitude packet over serial: {}", e);
+            }
+        }
 
         let encoded_frame = if send_image {
             // Chose image to send

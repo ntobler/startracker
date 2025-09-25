@@ -91,7 +91,7 @@ jobs:
   create-release:
     name: Create Release
     needs: build-docker
-    # if: startsWith(github.ref, 'refs/tags/v') # Only run for version tags
+    if: startsWith(github.ref, 'refs/tags/v') # Only run for version tags
     runs-on: ubuntu-22.04
     steps:
       - name: Create Release
@@ -107,7 +107,6 @@ jobs:
 
   build-release:
     name: Build Release
-    needs: create-release
     strategy:
       matrix:
         architecture: [arm64, amd64] # Changed x86-64 to amd64 for consistency
@@ -127,7 +126,26 @@ jobs:
           rustup default stable
           cargo build --release --features cam
 
+      - name: Run build project
+        run: |
+          python3 build_project.py --no-compile
+
+      - name: Bundle app
+        run: |
+          mkdir -p dist/startracker-${{ matrix.architecture }}
+          cp target/release/startracker dist/startracker-${{ matrix.architecture }}/
+          cp -r web dist/startracker-${{ matrix.architecture }}/
+          tar -czf startracker-${{ matrix.architecture }}.tar.gz -C dist startracker-${{ matrix.architecture }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: startracker-${{ matrix.architecture }}
+          path: startracker-${{ matrix.architecture }}.tar.gz
+          retention-days: 3
+
       - name: Upload executable
+        if: startsWith(github.ref, 'refs/tags/v') # Only run for version tags
         run: |
           git config --global --add safe.directory '*'
           mv target/release/startracker target/release/startracker-${{ matrix.architecture }}

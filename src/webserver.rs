@@ -22,6 +22,7 @@ mod cam_cal;
 mod common_axis;
 mod opencvutils;
 mod optim;
+mod serial;
 mod testingutils;
 mod utils;
 mod webutils;
@@ -83,7 +84,8 @@ async fn main() -> ExitCode {
     //Start camera thread
     let app_clone = Arc::clone(&application);
     let camera_thread_handle = thread::spawn(move || {
-        if let Err(res) = app::tick(app_clone.as_ref()) {
+        let app_clone_for_tick = Arc::clone(&app_clone);
+        if let Err(res) = app::tick(app_clone_for_tick) {
             eprintln!("App failed: {:?}", res);
             println!("Shutting down due to app failure");
             app_clone.running.store(false, Ordering::Release);

@@ -22,7 +22,7 @@ flask-sock = "^0.7.0"
 pyserial = "^3.5"
 dynaconf = "^3.2.4"
 pycairo = "^1.26.0"
-ruststartracker = "0.2.4"
+ruststartracker = "0.2.9"
 typing-extensions = "^4.12.2"
 msgpack = "^1.1.1"
 
