@@ -107,7 +107,6 @@ fn serial_thread(
 
 pub struct Serial {
     thread_handle: Option<thread::JoinHandle<Result<(), String>>>,
-    thread_error: Option<String>,
     writer: TTYPort,
     terminate: Arc<AtomicBool>,
 }
@@ -130,7 +129,6 @@ impl Serial {
 
         Ok(Serial {
             thread_handle: Some(thread_handle),
-            thread_error: None,
             writer,
             terminate: terminate,
         })

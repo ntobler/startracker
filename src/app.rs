@@ -486,7 +486,7 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
     };
 
     let mut serial = serial::Serial::new(
-        "serial0".to_string(),
+        "/dev/serial0".to_string(),
         1000000,
         Arc::new(move |packet| serial_rx_callback(packet)),
     )?;
