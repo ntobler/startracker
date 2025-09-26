@@ -453,6 +453,12 @@ where
     }
 }
 
+enum Cmd {
+    QUAT = 0x01,
+    STARQUAT = 0x02,
+    SHUTDOWN_REQUEST = 0x03,
+}
+
 pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
     let app = app_arc.as_ref();
 
@@ -476,15 +482,39 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
     let serial_rx_callback = {
         let app_arc = Arc::clone(&app_arc);
         move |packet: serial::Packet| {
-            if packet.cmd == 0x03 && packet.len == 1 && packet.payload.len() == 1 {
-                let code = packet.payload[0];
-                println!("Received return code {} from serial.", code);
-                app_arc.set_returncode(code);
-                app_arc.running.store(false, Ordering::Release);
+            if packet.cmd == Cmd::QUAT as u8 && packet.payload.len() == 18 {
+                let mut quat = [0f64; 4];
+                for (i, chunk) in packet.payload.chunks_exact(4).enumerate() {
+                    let f32_val = f32::from_ne_bytes(chunk.try_into().unwrap());
+                    quat[i] = f32_val as f64;
+                }
+                let id: u16 = u16::from_ne_bytes(packet.payload[16..18].try_into().unwrap());
+                println!("Received quaternion from serial: {:?}, id={:?}", quat, id);
+            } else if packet.cmd == Cmd::STARQUAT as u8 && packet.payload.len() == 16 {
+                let mut quat = [0f64; 4];
+                for (i, chunk) in packet.payload.chunks_exact(4).enumerate() {
+                    let f32_val = f32::from_ne_bytes(chunk.try_into().unwrap());
+                    quat[i] = f32_val as f64;
+                }
+                println!("Received star quaternion from serial: {:?}", quat);
+            } else if packet.cmd == Cmd::SHUTDOWN_REQUEST as u8 && packet.payload.len() == 1 {
+                if packet.payload[0] == 31 {
+                    println!("Received shutdown request from serial.");
+                    app_arc.set_returncode(31);
+                    app_arc.running.store(false, Ordering::Release);
+                }
+            } else {
+                eprintln!(
+                    "Received unknown packet from serial: cmd={:02X}, payload={:02X?}",
+                    packet.cmd, packet.payload
+                );
             }
         }
     };
 
+    // Can be tested in echo mode with:
+    // `socat -d -d pty,raw,echo=0,link=/tmp/ttyE0,ignoreeof exec:cat`
+    // use `/tmp/ttyE0` as port
     let mut serial = serial::Serial::new(
         "/dev/serial0".to_string(),
         1000000,
@@ -577,12 +607,15 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
 
         // Send attitude over serial
         if let Ok(a) = &att_result {
-            let quat_f32 = a.quat.map(|x| x as f32);
-            let q_bytes: [u8; 16] = unsafe { std::mem::transmute(quat_f32) };
+            let payload: Vec<u8> = a
+                .quat
+                .map(|x| x as f32)
+                .iter()
+                .flat_map(|f| f.to_ne_bytes())
+                .collect();
             let packet = serial::Packet {
-                cmd: 0x10,
-                len: 16,
-                payload: q_bytes.to_vec(),
+                cmd: Cmd::STARQUAT as u8,
+                payload: payload,
             };
             if let Err(e) = serial.send(&packet) {
                 eprintln!("Error sending attitude packet over serial: {}", e);

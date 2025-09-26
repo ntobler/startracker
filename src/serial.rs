@@ -1,6 +1,4 @@
-use serialport::TTYPort;
 use std::io::{self, Read, Write};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -22,32 +20,48 @@ fn calc_crc_ibm(data: &[u8]) -> u16 {
 
 pub struct Packet {
     pub cmd: u8,
-    pub len: u8,
     pub payload: Vec<u8>,
+    pub timestamp: std::time::Instant,
 }
 
 struct PacketReader {
     buffer: Vec<u8>,
+    receive_instant: std::time::Instant,
     callback: Arc<dyn Fn(Packet) + Send + Sync>,
 }
 
 impl PacketReader {
     fn new(callback: Arc<dyn Fn(Packet) + Send + Sync>) -> Self {
         PacketReader {
-            buffer: vec![0; 255 + 4],
+            buffer: Vec::with_capacity(255 + 4),
+            receive_instant: std::time::Instant::now(),
             callback,
         }
     }
 
-    fn check_packet(&mut self, received_bytes: &[u8]) {
+    fn flush(&mut self) {
+        self.buffer.clear();
+    }
+
+    // Returns number of bytes needed to complete a packet
+    fn check_packet(
+        &mut self,
+        received_bytes: &[u8],
+        receive_instant: std::time::Instant,
+    ) -> usize {
         // If there are no new bytes, flush
         if received_bytes.len() == 0 {
             self.buffer.clear();
-            return;
+            return 4;
         }
 
         for &data in received_bytes {
             self.buffer.push(data);
+
+            // Record the time of the first byte
+            if self.buffer.len() == 1 {
+                self.receive_instant = receive_instant;
+            }
 
             if self.buffer.len() < 2 {
                 continue;
@@ -60,12 +74,19 @@ impl PacketReader {
             if crc == ((self.buffer[2 + len] as u16) << 8 | (self.buffer[2 + len + 1] as u16)) {
                 let packet = Packet {
                     cmd: self.buffer[0],
-                    len: self.buffer[1],
                     payload: self.buffer[2..(2 + len)].to_vec(),
+                    timestamp: self.receive_instant,
                 };
                 (self.callback)(packet);
             }
             self.buffer.clear();
+        }
+
+        if self.buffer.len() < 2 {
+            return 4 - self.buffer.len();
+        } else {
+            let len = self.buffer[1] as usize;
+            return 2 + len + 2 - self.buffer.len();
         }
     }
 }
@@ -73,33 +94,49 @@ impl PacketReader {
 fn serial_thread(
     port: String,
     baudrate: u32,
-    terminate: Arc<AtomicBool>,
-    callback: Arc<dyn Fn(Packet) + Send + Sync>,
+    tx_channel: crossbeam_channel::Receiver<Vec<u8>>,
+    rx_callback: Arc<dyn Fn(Packet) + Send + Sync>,
 ) -> Result<(), String> {
     let mut reader = serialport::new(port, baudrate)
         .timeout(Duration::from_millis(10))
         .open_native()
-        .map_err(|e| format!("Failed to open serial port: {}", e))?;
+        .map_err(|e| {
+            eprintln!("Error opening serial port: {}", e);
+            return format!("Failed to open serial port: {}", e);
+        })?;
 
     let mut buffer: Vec<u8> = vec![0; 255 + 4];
-    let mut packet_reader = PacketReader::new(callback);
+    let mut packet_reader = PacketReader::new(rx_callback);
+    let mut bytes_needed = 4;
     loop {
-        match reader.read(buffer.as_mut_slice()) {
-            Ok(t) => {
-                if terminate.load(std::sync::atomic::Ordering::SeqCst) {
-                    println!("Serial thread: terminating as requested.");
-                    return Ok(());
-                }
-                packet_reader.check_packet(&buffer[..t]);
+        bytes_needed = match reader.read_exact(buffer[..bytes_needed].as_mut()) {
+            Ok(()) => {
+                let instant = std::time::Instant::now();
+                packet_reader.check_packet(&buffer[..bytes_needed], instant)
             }
             Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                if terminate.load(std::sync::atomic::Ordering::SeqCst) {
-                    println!("Serial thread: terminating as requested.");
-                    return Ok(());
-                }
+                packet_reader.flush();
+                4
             }
             Err(e) => {
                 return Err(format!("Error reading from serial port: {}", e));
+            }
+        };
+
+        for _ in 0..10 {
+            match tx_channel.try_recv() {
+                Ok(data) => {
+                    if let Err(e) = reader.write_all(&data) {
+                        return Err(format!("Error writing to serial port: {}", e));
+                    }
+                }
+                Err(crossbeam_channel::TryRecvError::Empty) => {
+                    break; // No more data to send
+                }
+                Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                    println!("Serial thread: transmit channel disconnected, terminating.");
+                    return Ok(());
+                }
             }
         }
     }
@@ -107,8 +144,8 @@ fn serial_thread(
 
 pub struct Serial {
     thread_handle: Option<thread::JoinHandle<Result<(), String>>>,
-    writer: TTYPort,
-    terminate: Arc<AtomicBool>,
+    thread_error: Option<String>,
+    tx_channel: Option<crossbeam_channel::Sender<Vec<u8>>>,
 }
 
 impl Serial {
@@ -117,43 +154,60 @@ impl Serial {
         baudrate: u32,
         callback: Arc<dyn Fn(Packet) + Send + Sync>,
     ) -> Result<Self, String> {
-        let terminate = Arc::new(AtomicBool::new(false));
-        let writer = serialport::new(&port, baudrate)
-            .timeout(Duration::from_millis(10))
-            .open_native()
-            .map_err(|e| format!("Failed to open serial port: {}", e))?;
+        let (tx_channel_tx, tx_channel_rx) = crossbeam_channel::bounded::<Vec<u8>>(10); // unbuffered: strictly 1:1 signal
 
-        let terminate_clone = terminate.clone();
         let thread_handle =
-            thread::spawn(move || serial_thread(port, baudrate, terminate_clone, callback));
+            thread::spawn(move || serial_thread(port, baudrate, tx_channel_rx, callback));
 
         Ok(Serial {
             thread_handle: Some(thread_handle),
-            writer,
-            terminate: terminate,
+            thread_error: None,
+            tx_channel: Some(tx_channel_tx),
         })
     }
 
+    fn get_thread_error(&mut self) -> String {
+        if let Some(err) = &self.thread_error {
+            return err.clone();
+        }
+
+        let err = match self.thread_handle.take() {
+            Some(handle) => match handle.join() {
+                Ok(Ok(_)) => "Thread ended without errors.".to_string(),
+                Ok(Err(e)) => e,
+                Err(panic) => format!("Thread panicked: {:?}", panic),
+            },
+            None => "Thread already joined.".to_string(),
+        };
+
+        self.thread_error = Some(err.clone());
+        err
+    }
+
     pub fn send(&mut self, packet: &Packet) -> Result<(), String> {
-        let mut buffer = Vec::with_capacity(2 + packet.len as usize + 2);
+        let mut buffer = Vec::with_capacity(2 + packet.payload.len() + 2);
         buffer.push(packet.cmd);
-        buffer.push(packet.len);
+        buffer.push(packet.payload.len() as u8);
         buffer.extend_from_slice(packet.payload.as_slice());
         let crc = calc_crc_ibm(&buffer);
         buffer.push((crc >> 8) as u8);
         buffer.push((crc & 0xFF) as u8);
-        self.writer
-            .write_all(buffer.as_slice())
-            .map_err(|e| format!("Failed to write to serial port: {}", e))?;
-        Ok(())
+        match self
+            .tx_channel
+            .as_ref()
+            .ok_or("Tx channel has been dropped".to_string())?
+            .send(buffer)
+        {
+            Ok(_) => Ok(()),
+            Err(_) => Err(self.get_thread_error()),
+        }
     }
 }
 
 impl Drop for Serial {
     fn drop(&mut self) {
         // Make the thread exit
-        self.terminate
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        drop(self.tx_channel.take());
 
         if let Some(handle) = self.thread_handle.take() {
             println!("Dropping Serial: joining serial thread...");
