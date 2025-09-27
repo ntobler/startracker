@@ -80,10 +80,12 @@ class Gyro {
     size_t read_index_;
     SPI_HandleTypeDef *hspi_;
 
-    std::array<HpFilter, 3> bias_filters_;
+    std::array<HpFilter, 3> gyro_bias_filters_;
+    std::array<HpFilter, 3> accel_bias_filters_;
     Vec3 gyro_;
     Vec3 accel_;
     Quaternion q_;
+    Quaternion q_correction_;
     std::array<LpIntFilter, 3> pos_filters_;
     Vec3 pos_;
     uint16_t id_;
@@ -100,7 +102,7 @@ class Gyro {
     const Vec3 &get_pos() const { return pos_; };
     const uint16_t get_id() const { return id_; };
     const Quaternion &get_quat() const { return q_; };
-    void set_quat(Quaternion &q) { q_ = q; }
+    void set_correction_quat(Quaternion &q) { q_correction_ = q; }
     void fetch_next();
     void spi_tx_rx_complete_callback(SPI_HandleTypeDef *hspi);
 };

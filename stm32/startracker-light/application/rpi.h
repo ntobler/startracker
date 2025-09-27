@@ -129,9 +129,11 @@ class Rpi {
         }
     }
 
-    void star_quat(Quaternion& q, uint16_t id) {
-    	if (q.is_non_zero()) {
-    		gyro_->set_quat(q);
+    void star_quat(Quaternion& q_req, uint16_t id) {
+        if (q_req.is_non_zero()) {
+            Quaternion q = gyro_->get_quat().inv();
+            q.multiply_left(q_req);
+            gyro_->set_correction_quat(q);
     	} else {
     		__NOP();
     	}

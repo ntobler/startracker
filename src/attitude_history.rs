@@ -26,11 +26,12 @@ impl AttitudeHistory {
 
     pub fn add(&mut self, quat: &[f64; 4], id_raw: u16, rx_time: Instant) {
         // Unwrap id to u64
-        let id = if let Some(attitude) = self.buffer.back() {
-            if attitude.id & 0xffff > id_raw as u64 {
-                (attitude.id & !0xffff) + 1 + id_raw as u64
+        let id = if let Some(last_attitude) = self.buffer.back() {
+            if (id_raw as u64) < (last_attitude.id & 0xffff) {
+                // Overflow happened
+                (last_attitude.id & !0xffff) + 0x10000 + id_raw as u64
             } else {
-                (attitude.id & !0xffff) + id_raw as u64
+                (last_attitude.id & !0xffff) + id_raw as u64
             }
         } else {
             id_raw as u64

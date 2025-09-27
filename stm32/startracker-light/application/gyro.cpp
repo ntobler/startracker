@@ -41,10 +41,12 @@ Gyro::Gyro(SPI_HandleTypeDef *hspi)
       write_index_{0},
       read_index_{0},
       hspi_(hspi),
-      bias_filters_{{HpFilter{0.999f}, HpFilter{0.999f}, HpFilter{0.999f}}},
+      gyro_bias_filters_{{HpFilter{0.999f}, HpFilter{0.999f}, HpFilter{0.999f}}},
+      accel_bias_filters_{{HpFilter{0.999f}, HpFilter{0.999f}, HpFilter{0.999f}}},
       gyro_{0, 0, 0},
       accel_{0, 0, 0},
       q_{},
+      q_correction_{},
       pos_filters_{{LpIntFilter{0.999f}, LpIntFilter{0.999f}, LpIntFilter{0.999f}}},
       pos_{0, 0, 0},
       id_{0} {}
@@ -58,7 +60,7 @@ void Gyro::start() {
     config = 0x8f;  // Power on gyro and accel in low noise mode
     write(Registers::PWR_MGMT0, &config, 1);
 
-    //delay_us(200);  // needed after setting low noise mode
+    // delay_us(200);  // needed after setting low noise mode
 
     config = Registers::GYRO_UI_FS_SEL_500DPS + Registers::GYRO_ODR_200HZ;
     write(Registers::GYRO_CONFIG0, &config, 1);
@@ -106,12 +108,18 @@ void Gyro::tick() {
                                  (((uint16_t)payload.accel_z_higher) << 8))) *
                SCALE_MPSS_PER_DIGIT;
 
-    Vec3 filtered_accel;
-    filtered_accel.x = bias_filters_[0].process(accel_.x);
-    filtered_accel.y = bias_filters_[1].process(accel_.y);
-    filtered_accel.z = bias_filters_[2].process(accel_.z);
+    Vec3 filtered_gyro;
+    filtered_gyro.x = gyro_bias_filters_[0].process(gyro_.x);
+    filtered_gyro.y = gyro_bias_filters_[1].process(gyro_.y);
+    filtered_gyro.z = gyro_bias_filters_[2].process(gyro_.z);
 
-    Quaternion q = Quaternion::from_angular_velocities(gyro_.x, gyro_.y, gyro_.z, DELTA_T);
+    Vec3 filtered_accel;
+    filtered_accel.x = accel_bias_filters_[0].process(accel_.x);
+    filtered_accel.y = accel_bias_filters_[1].process(accel_.y);
+    filtered_accel.z = accel_bias_filters_[2].process(accel_.z);
+
+    Quaternion q = Quaternion::from_angular_velocities(filtered_gyro.x, filtered_gyro.y,
+                                                       filtered_gyro.z, DELTA_T);
     q_.multiply_right(q);
     q_.normalize();
 
@@ -125,8 +133,8 @@ void Gyro::tick() {
 void Gyro::get_xy_images(float &x, float &y) {
     // Rotate z vector with internal quaternion and return x and y images.
     float v[3] = {0.0, 0.0, 1.0};
-    Quaternion qinv = q_.inv();
-    qinv.rotate_vec(v);
+    Quaternion q = Quaternion::multiply(q_correction_, q_);
+    q.rotate_vec(v);
     x = v[0];
     y = v[1];
 }

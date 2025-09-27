@@ -10,36 +10,38 @@
 #include "stm32_hal.h"
 
 void Serial::usart1_isr() {
-    uint32_t isrflags = READ_REG(huart->Instance->SR);
-    uint32_t cr1its = READ_REG(huart->Instance->CR1);
+    uint32_t sr = huart->Instance->SR;    // fired
+    uint32_t cr1 = huart->Instance->CR1;  // enabled
 
-    uint32_t errorflags = (isrflags & (uint32_t)(USART_SR_PE | USART_SR_FE | USART_SR_ORE |
-                                                 USART_SR_NE | USART_SR_IDLE));
-    if (errorflags == 0 || 1) {
-        // handle normal
-        if (((isrflags & USART_SR_RXNE) != 0U) && ((cr1its & USART_CR1_RXNEIE) != 0U)) {
-            uint8_t data = (uint8_t)(huart->Instance->DR & (uint8_t)0x00FF);
-            in.setByte(data);
-        }
-    } else {
-        // handle the errors (receive error)
+    uint32_t errors = (uint32_t)(USART_SR_PE | USART_SR_FE | USART_SR_ORE | USART_SR_NE);
+    if (sr & errors) {
+        // Must read DR to clear errors
+        volatile uint32_t tmp = huart->Instance->DR;
+        (void)tmp;
+    }
+    // UART receive interrupt
+    if ((sr & USART_SR_RXNE) && (cr1 & USART_CR1_RXNEIE)) {
+        uint8_t data = (uint8_t)(huart->Instance->DR & (uint8_t)0x00FF);
+        in.setByte(data);
     }
 
-    if (((isrflags & USART_SR_TXE) != 0U) && ((cr1its & USART_CR1_TXEIE) != 0U)) {
+    // UART Transmit Empty Interrupt
+    if ((sr & USART_SR_TXE) && (cr1 & USART_CR1_TXEIE)) {
         // sent something
         uint8_t outAvail = out.getAvailable();
         if (outAvail == 0) {
-            /* Disable the UART Transmit Complete Interrupt */
+            // Disable the UART Transmit Empty Interrupt
             __HAL_UART_DISABLE_IT(huart, UART_IT_TXE);
 
-            /* Enable the UART Transmit Complete Interrupt */
+            // Enable the UART Transmit Complete Interrupt
             __HAL_UART_ENABLE_IT(huart, UART_IT_TC);
         } else {
             huart->Instance->DR = out.getByte();
         }
     }
 
-    if (((isrflags & USART_SR_TC) != 0U) && ((cr1its & USART_CR1_TCIE) != 0U)) {
+    // Transmit Complete Interrupt
+    if ((sr & USART_SR_TC) && (cr1 & USART_CR1_TCIE)) {
         // transmission ended
 
         /* Disable the UART Transmit Complete Interrupt */
@@ -47,10 +49,6 @@ void Serial::usart1_isr() {
 
         txnComplete = 1;
     }
-    __HAL_UART_DISABLE_IT(huart, USART_CR1_IDLEIE);
-    __HAL_UART_DISABLE_IT(huart, USART_CR1_PEIE);
-
-    //	huart->Instance->ICR = 0b11111111111111111111111111111111;   //clear all flags
 }
 
 /**
@@ -73,8 +71,11 @@ void Serial::init(UART_HandleTypeDef *handler) {
     huart->ErrorCode = HAL_UART_ERROR_NONE;
     huart->RxState = HAL_UART_STATE_BUSY_RX;
 
-    /* Enable the UART Parity Error interrupt and Data Register Not Empty interrupt */
-    SET_BIT(huart->Instance->CR1, USART_CR1_PEIE | USART_CR1_RXNEIE);
+    __disable_irq();
+    __HAL_UART_DISABLE_IT(huart, UART_IT_IDLE);
+    __HAL_UART_ENABLE_IT(huart, UART_IT_PE);
+    __HAL_UART_ENABLE_IT(huart, UART_IT_RXNE);
+    __enable_irq();
 }
 
 uint32_t Serial::available() { return in.getAvailable(); }
@@ -160,8 +161,10 @@ void Serial::enableTx() {
         hook_begin_transmission();
     }
 
-    /* Enable the Transmit Data Register Empty interrupt */
+    // Enable the Transmit Data Register Empty interrupt
+    __disable_irq();
     __HAL_UART_ENABLE_IT(huart, UART_IT_TXE);
+    __enable_irq();
 
     txnComplete = 0;
 }

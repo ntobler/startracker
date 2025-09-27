@@ -104,9 +104,7 @@ class Quaternion {
 
     Quaternion inv() const { return Quaternion{w(), -x(), -y(), -z()}; }
 
-    bool is_non_zero() {
-        return (w() != 0.0) || (x() != 0.0) || (y() != 0.0) || (z() != 0.0);
-    }
+    bool is_non_zero() { return (w() != 0.0) || (x() != 0.0) || (y() != 0.0) || (z() != 0.0); }
 };
 
 #endif /* QUAT_H_ */

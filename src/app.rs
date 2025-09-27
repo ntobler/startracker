@@ -529,6 +529,18 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
         Arc::new(move |packet| serial_rx_callback(packet)),
     )?;
 
+    // Send keepalive
+    {
+        let payload: Vec<u8> = vec![0; 16]; // Send zeros if attitude invalid
+        let packet = serial::TxPacket {
+            cmd: Cmd::StarQuat as u8,
+            payload: payload,
+        };
+        if let Err(e) = serial.send(&packet) {
+            eprintln!("Error sending attitude packet over serial: {}", e);
+        }
+    }
+
     app.init_attitude_estimation()?;
 
     let mut ie = opencvutils::ImageEncoder::new(Some(30.0));
@@ -622,7 +634,7 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
                     .iter()
                     .flat_map(|f| f.to_ne_bytes())
                     .collect(),
-                Err(_) => vec![0; 16],  // Send zeros if attitude invalid
+                Err(_) => vec![0; 16], // Send zeros if attitude invalid
             };
             let packet = serial::TxPacket {
                 cmd: Cmd::StarQuat as u8,

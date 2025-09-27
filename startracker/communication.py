@@ -65,6 +65,7 @@ def calc_crc_ibm(data: bytes) -> int:
             crc = (crc // 2) ^ 0xA001 if crc & 0x0001 else crc // 2
     return crc & 0xFFFF
 
+
 class PacketHandler(serial.Serial):
     """Receive and send protocol packets.
 
