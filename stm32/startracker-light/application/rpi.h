@@ -130,7 +130,11 @@ class Rpi {
     }
 
     void star_quat(Quaternion& q, uint16_t id) {
-        gyro_->set_quat(q);
+    	if (q.is_non_zero()) {
+    		gyro_->set_quat(q);
+    	} else {
+    		__NOP();
+    	}
         switch (state_) {
             case State::OFF:
                 break;
