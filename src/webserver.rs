@@ -17,9 +17,11 @@ use warp::Reply;
 
 mod app;
 mod attitude_estimation;
+mod attitude_history;
 mod cam;
 mod cam_cal;
 mod common_axis;
+mod motion;
 mod opencvutils;
 mod optim;
 mod serial;

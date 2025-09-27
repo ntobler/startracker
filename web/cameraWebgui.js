@@ -207,6 +207,10 @@ export default {
                 this.drawStars(ctx, this.stream.attitude_estimation)
             }
 
+            if (this.stream.motion_xy) {
+                this.drawMotion(ctx, this.stream.motion_xy)
+            }
+
             this.showAutoCalibrationInfo(this.stream.auto_calibrator);
 
 
@@ -263,6 +267,18 @@ export default {
                     ctx.stroke()
                 }
             }
+            ctx.restore()
+        },
+        drawMotion(ctx, motion_raw) {
+            if (motion_raw === undefined) return
+            let motion_xy = toF32Array(motion_raw);
+            ctx.save()
+            ctx.lineCap = "round"
+            ctx.beginPath()
+            for (let i = 0; i < motion_xy.length; i += 2) {
+                ctx.lineTo(motion_xy[i], motion_xy[i + 1])
+            }
+            ctx.stroke()
             ctx.restore()
         },
         showAutoCalibrationInfo(state) {

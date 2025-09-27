@@ -8,8 +8,10 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::attitude_estimation;
+use crate::attitude_history;
 use crate::cam;
 use crate::cam_cal;
+use crate::motion;
 use crate::opencvutils;
 use crate::serial;
 use crate::utils;
@@ -410,6 +412,8 @@ struct StreamObject {
     #[serde(serialize_with = "attitude_serialize")]
     attitude_estimation: Result<attitude_estimation::AttitudeEstimationPayload, String>,
     pre_processing_time: f32,
+    #[serde(serialize_with = "utils::contiguous_serialize_2d")]
+    motion_xy: Vec<[f32; 2]>,
 }
 
 impl StreamObject {
@@ -420,6 +424,7 @@ impl StreamObject {
         image_quality: String,
         attitude_estimation: Result<attitude_estimation::AttitudeEstimationPayload, String>,
         pre_processing_time: f32,
+        motion_xy: Vec<[f32; 2]>,
     ) -> Self {
         let auto_calibrator = AutoCalibrationState { active: false };
         StreamObject {
@@ -430,6 +435,7 @@ impl StreamObject {
             auto_calibrator: auto_calibrator,
             attitude_estimation: attitude_estimation,
             pre_processing_time: pre_processing_time,
+            motion_xy,
         }
     }
 }
@@ -454,9 +460,9 @@ where
 }
 
 enum Cmd {
-    QUAT = 0x01,
-    STARQUAT = 0x02,
-    SHUTDOWN_REQUEST = 0x03,
+    Quat = 0x00,
+    StarQuat = 0x01,
+    ShutdownRequest = 0x02,
 }
 
 pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
@@ -479,25 +485,25 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
     let mut camera =
         cam::Camera::new(&cam_config).map_err(|e| format!("Error initializing camera: {}.", e))?;
 
+    let attitude_history = Arc::new(Mutex::new(attitude_history::AttitudeHistory::new()));
+
     let serial_rx_callback = {
-        let app_arc = Arc::clone(&app_arc);
-        move |packet: serial::Packet| {
-            if packet.cmd == Cmd::QUAT as u8 && packet.payload.len() == 18 {
+        let app_arc = app_arc.clone();
+        let attitude_history = attitude_history.clone();
+        move |packet: serial::RxPacket| {
+            if packet.cmd == Cmd::Quat as u8 && packet.payload.len() == 18 {
                 let mut quat = [0f64; 4];
                 for (i, chunk) in packet.payload.chunks_exact(4).enumerate() {
                     let f32_val = f32::from_ne_bytes(chunk.try_into().unwrap());
                     quat[i] = f32_val as f64;
                 }
                 let id: u16 = u16::from_ne_bytes(packet.payload[16..18].try_into().unwrap());
-                println!("Received quaternion from serial: {:?}, id={:?}", quat, id);
-            } else if packet.cmd == Cmd::STARQUAT as u8 && packet.payload.len() == 16 {
-                let mut quat = [0f64; 4];
-                for (i, chunk) in packet.payload.chunks_exact(4).enumerate() {
-                    let f32_val = f32::from_ne_bytes(chunk.try_into().unwrap());
-                    quat[i] = f32_val as f64;
-                }
-                println!("Received star quaternion from serial: {:?}", quat);
-            } else if packet.cmd == Cmd::SHUTDOWN_REQUEST as u8 && packet.payload.len() == 1 {
+
+                attitude_history
+                    .lock()
+                    .unwrap()
+                    .add(&quat, id, packet.timestamp);
+            } else if packet.cmd == Cmd::ShutdownRequest as u8 && packet.payload.len() == 1 {
                 if packet.payload[0] == 31 {
                     println!("Received shutdown request from serial.");
                     app_arc.set_returncode(31);
@@ -515,6 +521,8 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
     // Can be tested in echo mode with:
     // `socat -d -d pty,raw,echo=0,link=/tmp/ttyE0,ignoreeof exec:cat`
     // use `/tmp/ttyE0` as port
+    // or between two virtual ports with
+    // `socat -d -d pty,raw,echo=0,link=/tmp/ttyV0 pty,raw,echo=0,link=/tmp/ttyV1`
     let mut serial = serial::Serial::new(
         "/dev/serial0".to_string(),
         1000000,
@@ -606,15 +614,18 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
         };
 
         // Send attitude over serial
-        if let Ok(a) = &att_result {
-            let payload: Vec<u8> = a
-                .quat
-                .map(|x| x as f32)
-                .iter()
-                .flat_map(|f| f.to_ne_bytes())
-                .collect();
-            let packet = serial::Packet {
-                cmd: Cmd::STARQUAT as u8,
+        {
+            let payload: Vec<u8> = match &att_result {
+                Ok(a) => a
+                    .quat
+                    .map(|x| x as f32)
+                    .iter()
+                    .flat_map(|f| f.to_ne_bytes())
+                    .collect(),
+                Err(_) => vec![0; 16],  // Send zeros if attitude invalid
+            };
+            let packet = serial::TxPacket {
+                cmd: Cmd::StarQuat as u8,
                 payload: payload,
             };
             if let Err(e) = serial.send(&packet) {
@@ -622,6 +633,24 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             }
         }
 
+        // Extract motion during camera exposure
+        let motion_quats = attitude_history.lock().unwrap().get_between(
+            start_instant - std::time::Duration::from_millis(1000),
+            start_instant,
+        );
+
+        // Convert to trace on camera
+        let motion_xy = {
+            let state_ref = app.state.lock().map_err(|e| e.to_string())?;
+            match state_ref.persistent.cal {
+                Some(cal) => motion::motion_to_pixels(&motion_quats, cal),
+                None => Vec::new(),
+            }
+        };
+
+        println!("motion_xy = {:?}", motion_xy.len());
+
+        // Prepare image for streaming
         let encoded_frame = if send_image {
             // Chose image to send
             let send_image = match image_type {
@@ -650,6 +679,7 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             ie.quality_str(),
             att_result,
             pre_processing_time,
+            motion_xy,
         );
         let encoded = rmp_serde::to_vec_named(&stream_object)
             .expect("Failed to serialize stream in MessagePack format");
