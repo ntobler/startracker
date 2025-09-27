@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::cam;
 use crate::testingutils;
 use crate::testingutils::ImageSource;
+use crate::utils;
 
 pub fn camera_thread(
     trigger_rx: crossbeam_channel::Receiver<(u32, u32)>,
@@ -21,14 +22,12 @@ pub fn camera_thread(
 
     let mut random_image_generator = testingutils::FileImageSource::new(image_path)?;
 
-    let mut timestamp_ns = 0;
-
     let interval = Duration::from_micros(exposure_us as u64);
     _ = analogue_gain; // Unused in mock, but kept for interface compatibility
 
     loop {
         std::thread::sleep(interval);
-        timestamp_ns += interval.as_nanos() as u64;
+        let timestamp_ns = utils::monotonic_time_ns();
 
         match trigger_rx.try_recv() {
             Ok((new_exposure_ns, new_analogue_gain)) => {

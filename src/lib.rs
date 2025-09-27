@@ -14,6 +14,7 @@ mod poisson_disk;
 mod starcal;
 mod stargradcal;
 mod testingutils;
+mod utils;
 
 pub mod cam;
 

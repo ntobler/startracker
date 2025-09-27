@@ -502,7 +502,7 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
                 attitude_history
                     .lock()
                     .unwrap()
-                    .add(&quat, id, packet.timestamp);
+                    .add(&quat, id, packet.rx_time_ns);
             } else if packet.cmd == Cmd::ShutdownRequest as u8 && packet.payload.len() == 1 {
                 if packet.payload[0] == 31 {
                     println!("Received shutdown request from serial.");
@@ -647,8 +647,8 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
 
         // Extract motion during camera exposure
         let motion_quats = attitude_history.lock().unwrap().get_between(
-            start_instant - std::time::Duration::from_millis(1000),
-            start_instant,
+            raw.timestamp_ns,
+            raw.timestamp_ns + (cam_config.exposure_us as u64 * 1000),
         );
 
         // Convert to trace on camera

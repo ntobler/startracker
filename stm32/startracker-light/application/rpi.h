@@ -94,7 +94,10 @@ class Rpi {
         *((uint16_t*)&buffer[16]) = id;
         rpi_serial_->write_command(QUAT, buffer, sizeof(quat.q_) + 2);
     };
-    void send_shutdown_request() { rpi_serial_->write_command(SHUT_DOWN_REQUEST, 0, 0); };
+    void send_shutdown_request() {
+        uint8_t payload = 31;
+        rpi_serial_->write_command(SHUT_DOWN_REQUEST, &payload, 1);
+    };
 
     void tick_10ms() {
         state_time_ms_ += 10;
@@ -134,9 +137,9 @@ class Rpi {
             Quaternion q = gyro_->get_quat().inv();
             q.multiply_left(q_req);
             gyro_->set_correction_quat(q);
-    	} else {
-    		__NOP();
-    	}
+        } else {
+            __NOP();
+        }
         switch (state_) {
             case State::OFF:
                 break;

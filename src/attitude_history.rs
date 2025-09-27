@@ -1,30 +1,34 @@
 use std::collections::VecDeque;
-use std::time::Instant;
+
+fn ns_to_s(ns: u64) -> f64 {
+    (ns as f64) * 1e-9
+}
+
 struct Attitude {
     q: [f64; 4],
     id: u64,
 }
 
 pub struct AttitudeHistory {
-    timeing_optimizer: TimingOptimizer,
+    timing_optimizer: TimingOptimizer,
     buffer: VecDeque<Attitude>,
     sample_period_s: f64,
     delay: f64,
-    reference_instant: Option<Instant>,
+    reference_instant_ns: Option<u64>,
 }
 
 impl AttitudeHistory {
     pub fn new() -> Self {
         Self {
-            timeing_optimizer: TimingOptimizer::new(),
+            timing_optimizer: TimingOptimizer::new(),
             buffer: VecDeque::with_capacity(1000),
             sample_period_s: 1.0,
             delay: 0.0,
-            reference_instant: None,
+            reference_instant_ns: None,
         }
     }
 
-    pub fn add(&mut self, quat: &[f64; 4], id_raw: u16, rx_time: Instant) {
+    pub fn add(&mut self, quat: &[f64; 4], id_raw: u16, rx_time_ns: u64) {
         // Unwrap id to u64
         let id = if let Some(last_attitude) = self.buffer.back() {
             if (id_raw as u64) < (last_attitude.id & 0xffff) {
@@ -57,22 +61,17 @@ impl AttitudeHistory {
             }
         }
 
-        let delta_t = if let Some(r) = self.reference_instant {
-            rx_time.duration_since(r).as_secs_f64()
+        let delta_t = if let Some(r) = self.reference_instant_ns {
+            ns_to_s(rx_time_ns - r)
         } else {
-            self.reference_instant = Some(rx_time);
+            self.reference_instant_ns = Some(rx_time_ns);
             0.0
         };
 
-        if let Some((delay, period)) = self.timeing_optimizer.add_sample(id as f64, delta_t) {
+        if let Some((delay, period)) = self.timing_optimizer.add_sample(id as f64, delta_t) {
             self.delay = delay;
             self.sample_period_s = period;
         }
-
-        // println!(
-        //     "Attitude id: {}, delta_t: {:.6}, delay: {:.6}, period: {:.6}",
-        //     id, delta_t, self.delay, self.sample_period_s
-        // );
 
         let attitude = Attitude { q: *quat, id };
 
@@ -87,12 +86,10 @@ impl AttitudeHistory {
         self.buffer.push_back(attitude);
     }
 
-    pub fn get_between(&self, start: Instant, end: Instant) -> Vec<[f64; 4]> {
-        if let Some(r) = self.reference_instant {
-            let start_id_f =
-                (start.duration_since(r).as_secs_f64() - self.delay) / self.sample_period_s;
-            let end_id_f =
-                (end.duration_since(r).as_secs_f64() - self.delay) / self.sample_period_s;
+    pub fn get_between(&self, start_ns: u64, end_ns: u64) -> Vec<[f64; 4]> {
+        if let Some(r_ns) = self.reference_instant_ns {
+            let start_id_f = (ns_to_s(start_ns - r_ns) - self.delay) / self.sample_period_s;
+            let end_id_f = (ns_to_s(end_ns - r_ns) - self.delay) / self.sample_period_s;
 
             let start_id = start_id_f.floor() as u64;
             let end_id = end_id_f.ceil() as u64;

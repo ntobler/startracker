@@ -1,3 +1,5 @@
+use nix::time::{clock_gettime, ClockId};
+
 pub fn contiguous_serialize_2d<S, const N: usize, T>(
     val: &Vec<[T; N]>,
     serializer: S,
@@ -21,4 +23,9 @@ where
 {
     let bytes: &[u8] = bytemuck::cast_slice(&val);
     serializer.serialize_bytes(&bytes)
+}
+
+pub fn monotonic_time_ns() -> u64 {
+    let ts = clock_gettime(ClockId::CLOCK_MONOTONIC).unwrap();
+    ts.tv_sec() as u64 * 1_000_000_000 + ts.tv_nsec() as u64
 }

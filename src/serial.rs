@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crate::utils;
 use nix::libc::tcflush;
 use nix::sys::termios::FlushArg;
 use serialport::TTYPort;
@@ -26,7 +27,7 @@ fn calc_crc_ibm(data: &[u8]) -> u16 {
 pub struct RxPacket {
     pub cmd: u8,
     pub payload: Vec<u8>,
-    pub timestamp: std::time::Instant,
+    pub rx_time_ns: u64,
 }
 
 pub struct TxPacket {
@@ -36,7 +37,7 @@ pub struct TxPacket {
 
 struct PacketReader {
     buffer: Vec<u8>,
-    receive_instant: std::time::Instant,
+    rx_time_ns: u64,
     callback: Arc<dyn Fn(RxPacket) + Send + Sync>,
 }
 
@@ -44,7 +45,7 @@ impl PacketReader {
     fn new(callback: Arc<dyn Fn(RxPacket) + Send + Sync>) -> Self {
         PacketReader {
             buffer: Vec::with_capacity(255 + 4),
-            receive_instant: std::time::Instant::now(),
+            rx_time_ns: 0,
             callback,
         }
     }
@@ -54,11 +55,7 @@ impl PacketReader {
     }
 
     // Returns number of bytes needed to complete a packet
-    fn check_packet(
-        &mut self,
-        received_bytes: &[u8],
-        receive_instant: std::time::Instant,
-    ) -> usize {
+    fn check_packet(&mut self, received_bytes: &[u8], rx_time_ns: u64) -> usize {
         // If there are no new bytes, flush
         if received_bytes.len() == 0 {
             self.buffer.clear();
@@ -70,7 +67,7 @@ impl PacketReader {
 
             // Record the time of the first byte
             if self.buffer.len() == 1 {
-                self.receive_instant = receive_instant;
+                self.rx_time_ns = rx_time_ns;
             }
 
             if self.buffer.len() < 2 {
@@ -85,7 +82,7 @@ impl PacketReader {
                 let packet = RxPacket {
                     cmd: self.buffer[0],
                     payload: self.buffer[2..(2 + len)].to_vec(),
-                    timestamp: self.receive_instant,
+                    rx_time_ns: self.rx_time_ns,
                 };
                 (self.callback)(packet);
             }
@@ -128,8 +125,8 @@ fn serial_thread(
     loop {
         bytes_needed = match reader.read_exact(buffer[..bytes_needed].as_mut()) {
             Ok(()) => {
-                let instant = std::time::Instant::now();
-                packet_reader.check_packet(&buffer[..bytes_needed], instant)
+                let rx_time_ns = utils::monotonic_time_ns();
+                packet_reader.check_packet(&buffer[..bytes_needed], rx_time_ns)
             }
             Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
                 packet_reader.flush();
