@@ -9,26 +9,6 @@
 
 #include "stm32_hal.h"
 
-Buffer::Buffer() { init(); }
-
-void Buffer::init() {
-    head = 0;
-    tail = 0;
-}
-
-inline uint8_t Buffer::getByte() {
-    uint32_t _tail = tail;
-    uint8_t data = buf[_tail];
-    tail = (_tail + 1) % BUFFER_LEN;
-    return data;
-}
-inline uint32_t Buffer::getAvailable() { return (BUFFER_LEN + head - tail) % BUFFER_LEN; }
-inline void Buffer::setByte(uint8_t data) {
-    uint32_t _head = head;
-    buf[_head] = data;
-    head = (_head + 1) % BUFFER_LEN;
-}
-
 void Serial::usart1_isr() {
     uint32_t isrflags = READ_REG(huart->Instance->SR);
     uint32_t cr1its = READ_REG(huart->Instance->CR1);
@@ -87,8 +67,8 @@ Serial::Serial() {
 
 void Serial::init(UART_HandleTypeDef *handler) {
     huart = handler;
-    in.init();
-    out.init();
+    in.clear();
+    out.clear();
 
     huart->ErrorCode = HAL_UART_ERROR_NONE;
     huart->RxState = HAL_UART_STATE_BUSY_RX;
@@ -97,17 +77,11 @@ void Serial::init(UART_HandleTypeDef *handler) {
     SET_BIT(huart->Instance->CR1, USART_CR1_PEIE | USART_CR1_RXNEIE);
 }
 
-void Serial::initFlow(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin) {
-    flow = 1;
-    flowPort = GPIOx;
-    flowPin = GPIO_Pin;
-}
-
 uint32_t Serial::available() { return in.getAvailable(); }
 
-void Serial::flushRX() { in.init(); }
+void Serial::flushRX() { in.clear(); }
 
-void Serial::flushTX() { out.init(); }
+void Serial::flushTX() { out.clear(); }
 
 void Serial::print(const char *str) {
     const uint8_t *ptr = (uint8_t *)str;
@@ -140,6 +114,42 @@ void Serial::writeBuf(const uint8_t *buf, uint16_t len) {
     enableTx();
 }
 
+static void update_crc16(uint16_t &crc, uint8_t data) {
+#if OPTION__TableCRC == 1
+    uint8_t crc_index;
+    uint16_t crc_lookup;
+
+    crc_index = crc ^ data;
+    crc_lookup = crc_tab16[crc_index];
+
+    crc = ((crc >> 8) ^ crc_lookup);
+#else
+    crc = crc ^ static_cast<uint16_t>(data);
+    for (size_t bit = 0; bit < 8; bit++) {
+        if (crc & 0x0001) {
+            crc = (crc >> 1) ^ POLYNOMIAL_16;
+        } else {
+            crc = (crc >> 1);
+        }
+    }
+#endif
+}
+
+void Serial::write_command(uint8_t cmd, const uint8_t *data, uint8_t len) {
+    uint16_t crc = CRC16_INITIAL_VALUE;
+    out.setByte(cmd);
+    update_crc16(crc, cmd);
+    out.setByte(len);
+    update_crc16(crc, len);
+    for (size_t i = 0; i < len; i++) {
+        out.setByte(data[i]);
+        update_crc16(crc, data[i]);
+    }
+    out.setByte(crc >> 8);
+    out.setByte(crc & 0xff);
+    enableTx();
+}
+
 void Serial::write(const uint8_t data) {
     out.setByte(data);
     enableTx();
@@ -154,4 +164,47 @@ void Serial::enableTx() {
     __HAL_UART_ENABLE_IT(huart, UART_IT_TXE);
 
     txnComplete = 0;
+}
+
+bool PacketReader::check_packet(Serial &serial) {
+    size_t available = serial.available();
+
+    // If there are no new bytes, flush
+    if (available == 0) {
+        index_ = 0;
+        crc_ = CRC16_INITIAL_VALUE;
+        return false;
+    }
+
+    while (available--) {
+        uint8_t data = serial.read();
+
+        buffer_[index_] = data;
+        if (index_ < 2 + static_cast<size_t>(len())) {
+            if ((index_ == 2) && (len() > sizeof(buffer_) - 2)) {
+                index_ = 0;
+                crc_ = CRC16_INITIAL_VALUE;
+            } else {
+                update_crc16(crc_, data);
+                index_++;
+            }
+        } else if (index_ == 2 + static_cast<size_t>(len())) {
+            if (data != crc_ >> 8) {
+                index_ = 0;
+                crc_ = CRC16_INITIAL_VALUE;
+            } else {
+                index_++;
+            }
+        } else {
+            if (data != (crc_ & 0xff)) {
+                index_ = 0;
+                crc_ = CRC16_INITIAL_VALUE;
+            } else {
+                index_ = 0;
+                crc_ = CRC16_INITIAL_VALUE;
+                return true;
+            }
+        }
+    }
+    return false;
 }

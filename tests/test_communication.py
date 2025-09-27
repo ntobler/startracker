@@ -9,9 +9,11 @@ from startracker import communication
 
 
 def test_calc_crc():
-    assert communication.calc_crc(b"123456789") == 0x29B1
-    assert communication.calc_crc(b"foo") == 0x630A
-    assert communication.calc_crc(b"") == 0xFFFF
+    assert communication.calc_crc_ccitt(b"123456789") == 0x29B1
+    assert communication.calc_crc_ccitt(b"foo") == 0x630A
+    assert communication.calc_crc_ccitt(b"") == 0xFFFF
+    assert communication.calc_crc_ibm(b"\x01\x04\x02\xff\xff") == 0x80B8
+    assert communication.calc_crc_ibm(b"") == 0xFFFF
 
 
 def test_messages():

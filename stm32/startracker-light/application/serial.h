@@ -11,22 +11,35 @@
 #include "stdint.h"
 #include "stm32_hal.h"
 
-enum { BUFFER_LEN = 256 };
+constexpr size_t BUFFER_LEN = 256;
 
 typedef void (*serial_hook)();
 
+constexpr uint16_t CRC16_INITIAL_VALUE = 0xFFFF;
+constexpr uint16_t POLYNOMIAL_16 = 0xA001;
+
 class Buffer {
    private:
-    uint32_t head;
-    uint32_t tail;
-    uint8_t buf[BUFFER_LEN];
+    size_t head_;
+    size_t tail_;
+    uint8_t buf_[BUFFER_LEN];
 
    public:
-    Buffer();
-    uint8_t getByte();
-    void init();
-    uint32_t getAvailable();
-    void setByte(uint8_t data);
+    Buffer() : head_{0}, tail_{0} {};
+    void clear() {
+        head_ = 0;
+        tail_ = 0;
+    }
+    uint8_t getByte() {
+        uint8_t data = buf_[tail_];
+        tail_ = (tail_ + 1) % BUFFER_LEN;
+        return data;
+    };
+    uint32_t getAvailable() { return (BUFFER_LEN + head_ - tail_) % BUFFER_LEN; };
+    void setByte(uint8_t data) {
+        buf_[head_] = data;
+        head_ = (head_ + 1) % BUFFER_LEN;
+    };
 };
 
 /**
@@ -38,9 +51,6 @@ class Serial {
     Buffer out;
     Buffer in;
     uint8_t txnComplete;
-    uint8_t flow;
-    GPIO_TypeDef *flowPort;
-    uint16_t flowPin;
     void enableTx();
 
    public:
@@ -59,8 +69,29 @@ class Serial {
     void print(const char *str);
     uint8_t read();
     uint32_t readBuf(uint8_t *buf, uint16_t len);
+    void write_command(uint8_t cmd, const uint8_t *data, uint8_t len);
     void writeBuf(const uint8_t *buf, uint16_t len);
     void write(const uint8_t data);
+};
+
+enum Cmd {
+    QUAT = 0,
+    STARQUAT = 1,
+    SHUT_DOWN_REQUEST = 2,
+};
+
+class PacketReader {
+   private:
+    uint8_t buffer_[64];
+    size_t index_;
+    uint16_t crc_;
+
+   public:
+    PacketReader() : index_{0}, crc_{} {};
+    bool check_packet(Serial &serial);
+    uint8_t cmd() const { return buffer_[0]; };
+    uint8_t len() const { return buffer_[1]; };
+    const uint8_t *payload() const { return &buffer_[2]; };
 };
 
 #endif /* SERIAL_H_ */

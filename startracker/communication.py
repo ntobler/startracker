@@ -16,11 +16,19 @@ import serial.serialutil
 from typing_extensions import Self, override
 
 
-class CommunicationTimeoutError(Exception):
-    """Serial command reached timeout."""
+class CommunicatinoError(Exception):
+    """Base class for communication errors."""
 
 
-def calc_crc(data: bytes) -> int:
+class CommunicationTimeoutError(CommunicatinoError):
+    """Raised when a timeout happens during communication."""
+
+
+class CRCError(CommunicatinoError):
+    """Raised when a CRC check fails."""
+
+
+def calc_crc_ccitt(data: bytes) -> int:
     """Calculate CRC-16/CCITT-FALSE of the data.
 
     Poly=0x1021, Init=0xFFFF, RefIn=False, RefOut=False, XorOut=0x0000
@@ -38,6 +46,24 @@ def calc_crc(data: bytes) -> int:
             crc = (crc * 2) ^ 0x1021 if crc & 0x8000 else crc * 2
     return crc & 0xFFFF
 
+
+def calc_crc_ibm(data: bytes) -> int:
+    """Calculate CRC-16-IBM of the data as used in MODBUS .
+
+    Poly=0x8005, Init=0xFFFF, RefIn=True, RefOut=True, XorOut=0x0000
+
+    Args:
+        data: input data
+
+    Returns:
+        int: crc of the data
+    """
+    crc = 0xFFFF
+    for x in data:
+        crc ^= x
+        for _ in range(8):
+            crc = (crc // 2) ^ 0xA001 if crc & 0x0001 else crc // 2
+    return crc & 0xFFFF
 
 class PacketHandler(serial.Serial):
     """Receive and send protocol packets.
@@ -69,20 +95,24 @@ class PacketHandler(serial.Serial):
         timeout_time = self._ser.timeout if self._ser.timeout is not None else 999
         timeout = serial.serialutil.Timeout(timeout_time)
         # read cmd and length bytes
-        c = self._ser.read(2)
+        cmd_len = self._ser.read(2)
         if timeout.expired():
             raise CommunicationTimeoutError()
-        cmd, length = c
+        cmd, length = cmd_len
 
         # read payload and crc using length
-        payload_and_crc = self._ser.read(length + 2)
+        payload_crc = self._ser.read(length + 2)
         if timeout.expired():
             raise CommunicationTimeoutError()
-        payload = payload_and_crc[:-2]
-        crc = payload_and_crc[-2:]
+        payload = payload_crc[:-2]
+        crc = payload_crc[-2:]
 
         # check crc
-        assert crc == calc_crc(payload).to_bytes(2, "big")
+        cmd_len_and_payload = cmd_len + payload
+        if crc != (crc_expected := calc_crc_ibm(cmd_len_and_payload).to_bytes(2, "big")):
+            raise CRCError(
+                f"Crc mismatch: {crc} instead of {crc_expected}. Data: {cmd} {length} {payload}"
+            )
 
         return cmd, payload
 
@@ -95,15 +125,14 @@ class PacketHandler(serial.Serial):
         """
         length = len(payload)
 
-        assert length < 256, "length does not fit in protocol"
-        assert cmd < 255, "cmd is too high in value"
+        if length >= 256:
+            raise ValueError("length does not fit in protocol")
+        if cmd >= 255:
+            raise ValueError("cmd is too high in value")
 
-        crc = calc_crc(payload).to_bytes(2, "big")
-
-        # combine length and cmd as they share a common byte
-        length_cmd = bytes((cmd, length))
-
-        self._ser.write(length_cmd + payload + crc)
+        cmd_len_payload = bytes((cmd, length)) + payload
+        crc = calc_crc_ibm(cmd_len_payload).to_bytes(2, "big")
+        self._ser.write(cmd_len_payload + crc)
 
     @override
     def reset_input_buffer(self) -> None:
