@@ -14,7 +14,8 @@ extern "C" {
 
 #include "stm32_hal.h"
 
-void writeColor(uint8_t red, uint8_t green, uint8_t blue, uint8_t brightness, GPIO_TypeDef* GPIO_CLK, uint16_t Pin_CLK, GPIO_TypeDef* GPIO_DAT, uint16_t Pin_DAT);
+void writeColor(uint8_t red, uint8_t green, uint8_t blue, uint8_t brightness,
+                GPIO_TypeDef* GPIO_CLK, uint16_t Pin_CLK, GPIO_TypeDef* GPIO_DAT, uint16_t Pin_DAT);
 
 #ifdef __cplusplus
 }

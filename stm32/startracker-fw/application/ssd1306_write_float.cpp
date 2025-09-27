@@ -5,25 +5,25 @@
  *      Author: ftobler
  */
 
-
 #include "ssd1306_write_float.h"
-#include "stdio.h"
+
 #include "math.h"
+#include "stdio.h"
 
 void ssd1306_write_float(float f, int digits, FontDef font) {
-	char buf[25];
-	float_to_str(buf, f, digits);
-	ssd1306_WriteString(buf, font);
+    char buf[25];
+    float_to_str(buf, f, digits);
+    ssd1306_WriteString(buf, font);
 }
 
 void ssd1306_write_int(int num, FontDef font) {
-	char buf[25];
-	sprintf(buf, "%d", num);
-	ssd1306_WriteString(buf, font);
+    char buf[25];
+    sprintf(buf, "%d", num);
+    ssd1306_WriteString(buf, font);
 }
 
 void float_to_str(char* buffer, float num, int precision) {
-    int intPart = (int)num;  // Extract integer part
+    int intPart = (int)num;                                           // Extract integer part
     int fracPart = abs((int)((num - intPart) * pow(10, precision)));  // Extract fractional part
 
     // Convert integer part to string

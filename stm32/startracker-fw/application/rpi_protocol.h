@@ -12,15 +12,12 @@
 extern "C" {
 #endif
 
-
 #include "out.h"
-
 
 Status* rpi_status();
 Acknowledge* rpi_setSettings(Settings* settings);
-Trajectory * rpi_calcTrajectory();
+Trajectory* rpi_calcTrajectory();
 Acknowledge* rpi_shutdown();
-
 
 #ifdef __cplusplus
 }

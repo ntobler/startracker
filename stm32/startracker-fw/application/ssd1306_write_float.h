@@ -8,11 +8,9 @@
 #ifndef SSD1306_WRITE_FLOAT_H_
 #define SSD1306_WRITE_FLOAT_H_
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 #include "ssd1306.h"
 
@@ -23,6 +21,5 @@ void float_to_str(char* buffer, float num, int precision);
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /* SSD1306_WRITE_FLOAT_H_ */

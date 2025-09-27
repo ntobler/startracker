@@ -8,32 +8,30 @@
 #ifndef PERF_H_
 #define PERF_H_
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "stm32_hal.h"
 
-
 typedef struct {
-	uint32_t start;
-	uint32_t sum;
+    uint32_t start;
+    uint32_t sum;
 } Perf_private;
 
 class Perf {
-private:
-	Perf_private _private = {0};
-public:
-	uint32_t last = 0;
-	uint32_t average = 0;
-	uint32_t cycles = 0;
-	uint32_t total;
-	Perf();
-	void start();
-	void end();
-};
+   private:
+    Perf_private _private = {0};
 
+   public:
+    uint32_t last = 0;
+    uint32_t average = 0;
+    uint32_t cycles = 0;
+    uint32_t total;
+    Perf();
+    void start();
+    void end();
+};
 
 #ifdef __cplusplus
 }

@@ -13,25 +13,22 @@
 extern "C" {
 #endif
 
-
 #include "stdint.h"
 
-
 enum {
-	STATE_STOPPED = 0, //task is not started/initialized
-	STATE_RUNNING = 1,     //task is currently running
-	STATE_WAIT_FLAG = 2,   //task is waiting on flags
-	STATE_WAIT_TIME = 3,   //task is waiting time
-	STATE_READY = 4,       //task is ready to run
+    STATE_STOPPED = 0,    // task is not started/initialized
+    STATE_RUNNING = 1,    // task is currently running
+    STATE_WAIT_FLAG = 2,  // task is waiting on flags
+    STATE_WAIT_TIME = 3,  // task is waiting time
+    STATE_READY = 4,      // task is ready to run
 };
 
-
 typedef struct {
-	uint32_t* stackPointer;
-	uint32_t timeout;
-	uint32_t eventMask;
-	uint32_t eventFlags;
-	uint8_t state;
+    uint32_t* stackPointer;
+    uint32_t timeout;
+    uint32_t eventMask;
+    uint32_t eventFlags;
+    uint8_t state;
 } SchedulerTask_t;
 
 typedef void (*SchedulerTaskFunction)();
@@ -50,7 +47,8 @@ void scheduler_init();
  *     [n] has the highest priority
  * is is not allowed to produce gaps between the IDs, each task from 0 to n needs to be initialized.
  */
-void scheduler_addTask(uint32_t id, SchedulerTaskFunction function, uint8_t* stackBuffer, uint32_t stackSize);
+void scheduler_addTask(uint32_t id, SchedulerTaskFunction function, uint8_t* stackBuffer,
+                       uint32_t stackSize);
 
 /**
  * start RTOS
@@ -80,7 +78,6 @@ uint32_t scheduler_event_wait(uint32_t eventWaitMask);
  */
 void scheduler_event_clear(uint32_t eventMask);
 
-
 /**
  * Wait for some event flags
  * If a flag the task is waiting on is set this function exits.
@@ -97,14 +94,11 @@ uint32_t scheduler_event_wait_timeout(uint32_t eventWaitMask, uint32_t time);
  */
 void scheduler_event_set(uint32_t id, uint32_t eventSetMask);
 
-
 void scheduler_systick_handler();
 void scheduler_pendSV_handler();
-
 
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /* SCHEDULER_H_ */

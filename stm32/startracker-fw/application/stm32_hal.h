@@ -11,5 +11,4 @@
 #include "stm32f4xx.h"
 #include "stm32f4xx_hal_def.h"
 
-
 #endif /* STM32_HAL_H_ */

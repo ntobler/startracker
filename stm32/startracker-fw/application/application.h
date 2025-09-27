@@ -14,18 +14,17 @@ extern "C" {
 
 #include "stdint.h"
 
-
 enum {
-	ID_TASK_IDLE = 0,
+    ID_TASK_IDLE = 0,
 
-	ID_TASK_UI = 1,
-	EVENT_TASK_UPDATE = 0x01,
-	EVENT_TASK_I2C_COMPLETE = 0x02,
+    ID_TASK_UI = 1,
+    EVENT_TASK_UPDATE = 0x01,
+    EVENT_TASK_I2C_COMPLETE = 0x02,
 
-	ID_TASK_CONTROL = 2,
+    ID_TASK_CONTROL = 2,
 
-	ID_TASK_MOTOR = 3,
-	EVENT_TASK_MOTOR_TIMER = 0x01,
+    ID_TASK_MOTOR = 3,
+    EVENT_TASK_MOTOR_TIMER = 0x01,
 };
 
 void app_init();
