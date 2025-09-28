@@ -646,10 +646,15 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
         }
 
         // Extract motion during camera exposure
-        let motion_quats = attitude_history.lock().unwrap().get_between(
-            raw.timestamp_ns,
-            raw.timestamp_ns + (cam_config.exposure_us as u64 * 1000),
-        );
+        let (motion_quats, fs, exposure_us) = {
+            let a = attitude_history.lock().unwrap();
+            let state_ref = app.state.lock().map_err(|e| e.to_string())?;
+
+            let exposure_us = state_ref.persistent.camera_config.exposure_us as u64;
+
+            let quats = a.get_between(raw.timestamp_ns - (exposure_us * 1000), raw.timestamp_ns);
+            (quats, a.fs(), exposure_us)
+        };
 
         // Convert to trace on camera
         let motion_xy = {
@@ -660,7 +665,12 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             }
         };
 
-        println!("motion_xy = {:?}", motion_xy.len());
+        println!(
+            "len(motion_xy) = {:?}, exposure={:?}, fs={:?}",
+            motion_xy.len(),
+            exposure_us,
+            fs
+        );
 
         // Prepare image for streaming
         let encoded_frame = if send_image {

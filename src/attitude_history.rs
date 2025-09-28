@@ -103,6 +103,10 @@ impl AttitudeHistory {
             Vec::new()
         }
     }
+
+    pub fn fs(&self) -> f64 {
+        1.0 / self.sample_period_s
+    }
 }
 
 #[derive(Debug, Clone)]

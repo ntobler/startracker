@@ -1,31 +1,31 @@
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v2.3.0
     hooks:
-    -   id: check-yaml
-    -   id: end-of-file-fixer
+      - id: check-yaml
+      - id: end-of-file-fixer
         exclude: ^(stm32/|hardware/)
-    -   id: trailing-whitespace
+      - id: trailing-whitespace
         exclude: ^(stm32/|hardware/)
--   repo: https://github.com/astral-sh/ruff-pre-commit
+  - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.6
     hooks:
-    -   id: ruff
-        args: [ --fix ]
-    -   id: ruff-format
--   repo: https://github.com/doublify/pre-commit-rust
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/doublify/pre-commit-rust
     rev: v1.0
     hooks:
-    -   id: fmt
-    -   id: cargo-check
--   repo: https://github.com/codespell-project/codespell
+      - id: fmt
+      - id: cargo-check
+  - repo: https://github.com/codespell-project/codespell
     rev: v2.2.5
     hooks:
-    -   id: codespell
+      - id: codespell
         args: ["--toml=pyproject.toml"]
         exclude: ^(stm32|hardware)/
         additional_dependencies: [tomli]
--   repo: https://github.com/pre-commit/mirrors-clang-format
+  - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v17.0.6
     hooks:
       - id: clang-format

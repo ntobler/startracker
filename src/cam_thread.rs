@@ -70,7 +70,7 @@ pub fn camera_thread(
             height: HEIGHT,
         });
         c.set_stride(WIDTH * 2);
-        c.set_buffer_count(1);
+        c.set_buffer_count(2);
         c.set_frame_size(WIDTH * HEIGHT * 2);
     }
     match cfgs.validate() {
