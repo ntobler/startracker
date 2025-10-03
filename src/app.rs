@@ -482,6 +482,9 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             .clone()
     };
 
+    let camera_device_quat =
+        nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(0.0, 0.0, 0.0, 1.0));
+
     let mut camera =
         cam::Camera::new(&cam_config).map_err(|e| format!("Error initializing camera: {}.", e))?;
 
@@ -609,32 +612,42 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
         let pre_processing_time = start_instant.elapsed().as_secs_f32() * 1000.0;
 
         // Find attitude estimation result
-        let att_result = match app.attitude_estimation.load_full().as_ref() {
+        let (att_payload, quat) = match app.attitude_estimation.load_full().as_ref() {
             Some(att_est) => match att_est.estimate_attitude_from_image(&preprocessed) {
                 Ok(r) => {
                     let mut state = app.state.lock().map_err(|e| e.to_string())?;
                     state.attitude = Some(nalgebra::Rotation3::from_matrix_unchecked(
                         r.extrinsic.transpose(),
                     ));
-                    Ok(state
-                        .axis_calibration
-                        .correct_attitude_estimation_result(att_est, r))
+                    let quat = if r.n_matches > 0 {
+                        Some(r.quat.clone())
+                    } else {
+                        None
+                    };
+                    (
+                        Ok(state
+                            .axis_calibration
+                            .correct_attitude_estimation_result(att_est, r)),
+                        quat,
+                    )
                 }
-                Err(e) => Err(e),
+                Err(e) => (Err(e), None),
             },
-            None => Err("attitude estimation not available".to_string()),
+            None => (Err("attitude estimation not available".to_string()), None),
         };
 
         // Send attitude over serial
         {
-            let payload: Vec<u8> = match &att_result {
-                Ok(a) => a
-                    .quat
-                    .map(|x| x as f32)
-                    .iter()
-                    .flat_map(|f| f.to_ne_bytes())
-                    .collect(),
-                Err(_) => vec![0; 16], // Send zeros if attitude invalid
+            let payload: Vec<u8> = match &quat {
+                Some(q) => {
+                    let q = camera_device_quat * q * camera_device_quat.inverse();
+                    [q.w, q.i, q.j, q.k]
+                        .map(|x| x as f32)
+                        .iter()
+                        .flat_map(|f| f.to_ne_bytes())
+                        .collect()
+                }
+                None => vec![0; 16], // Send zeros if attitude invalid
             };
             let packet = serial::TxPacket {
                 cmd: Cmd::StarQuat as u8,
@@ -660,7 +673,7 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
         let motion_xy = {
             let state_ref = app.state.lock().map_err(|e| e.to_string())?;
             match state_ref.persistent.cal {
-                Some(cal) => motion::motion_to_pixels(&motion_quats, cal),
+                Some(cal) => motion::motion_to_pixels(&motion_quats, cal, camera_device_quat),
                 None => Vec::new(),
             }
         };
@@ -699,7 +712,7 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             (raw.width, raw.height),
             image_type,
             ie.quality_str(),
-            att_result,
+            att_payload,
             pre_processing_time,
             motion_xy,
         );

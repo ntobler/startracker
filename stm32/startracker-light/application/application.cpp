@@ -97,6 +97,7 @@ void Application::run() {
             }
             float z = gyro_.get_pos().z;
             led_ring_.set_pos(x, y, z);
+            rpi_.on_quat();
         }
         if (events & Events::TICK_1000ms) {
         }

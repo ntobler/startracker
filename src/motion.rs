@@ -1,12 +1,13 @@
 use crate::cam_cal::CameraParameters;
 
-pub fn motion_to_pixels(quats: &[[f64; 4]], camera_params: CameraParameters) -> Vec<[f32; 2]> {
+pub fn motion_to_pixels(
+    quats: &[[f64; 4]],
+    camera_params: CameraParameters,
+    camera_device_quat: nalgebra::UnitQuaternion<f64>,
+) -> Vec<[f32; 2]> {
     if quats.len() == 0 {
         return Vec::new();
     }
-
-    let camera_device_quat =
-        nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(0.0, 0.0, 0.0, 1.0));
 
     let q = &quats[0];
     let fist_quat = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(

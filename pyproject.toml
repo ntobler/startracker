@@ -25,6 +25,8 @@ pycairo = "^1.26.0"
 ruststartracker = "0.2.9"
 typing-extensions = "^4.12.2"
 msgpack = "^1.1.1"
+websocket-client = "^1.8.0"
+pandas = "^2.3.2"
 
 [tool.poetry.group.dev.dependencies]
 viztracer = "^0.16.2"
@@ -40,6 +42,7 @@ ruff = "^0.8.2"
 scipy-stubs = "^1.14.1.5"
 sympy = "^1.14.0"
 types-pyserial = "^3.5.0.20250326"
+ipykernel = "^6.30.1"
 
 [tool.poetry.group.demo.dependencies]
 pillow = "^11.2.1"

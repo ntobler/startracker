@@ -39,14 +39,17 @@ struct PacketReader {
     buffer: Vec<u8>,
     rx_time_ns: u64,
     callback: Arc<dyn Fn(RxPacket) + Send + Sync>,
+    ns_per_byte: u64,
 }
 
 impl PacketReader {
-    fn new(callback: Arc<dyn Fn(RxPacket) + Send + Sync>) -> Self {
+    fn new(baudrate: u32, callback: Arc<dyn Fn(RxPacket) + Send + Sync>) -> Self {
+        let ns_per_byte = (1_000_000_000 * 10) / baudrate as u64;
         PacketReader {
             buffer: Vec::with_capacity(255 + 4),
             rx_time_ns: 0,
             callback,
+            ns_per_byte,
         }
     }
 
@@ -62,12 +65,13 @@ impl PacketReader {
             return 4;
         }
 
-        for &data in received_bytes {
+        for (i, &data) in received_bytes.iter().enumerate() {
             self.buffer.push(data);
 
             // Record the time of the first byte
             if self.buffer.len() == 1 {
-                self.rx_time_ns = rx_time_ns;
+                let time_shift_ns = (received_bytes.len() - i) as u64 * self.ns_per_byte;
+                self.rx_time_ns = rx_time_ns - time_shift_ns;
             }
 
             if self.buffer.len() < 2 {
@@ -120,7 +124,7 @@ fn serial_thread(
     flush_input(&reader);
 
     let mut buffer: Vec<u8> = vec![0; 255 + 4];
-    let mut packet_reader = PacketReader::new(rx_callback);
+    let mut packet_reader = PacketReader::new(baudrate, rx_callback);
     let mut bytes_needed = 4;
     loop {
         bytes_needed = match reader.read_exact(buffer[..bytes_needed].as_mut()) {

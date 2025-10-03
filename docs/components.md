@@ -37,6 +37,10 @@ Lens lock
 - https://aliexpress.com/item/1005005929526811.html
 - USD 1.21
 
+
+
+https://www.aliexpress.com/item/32950560454.html
+
 Cable
 - 22pin MIPI FPC, 0.5mm pitch, 50mm length, Type B
 - https://aliexpress.com/item/1005004140412156.html

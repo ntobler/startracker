@@ -114,10 +114,8 @@ class Rpi {
                 led_ring_->set_progress(1.0f - std::exp(-p * 4.0f));
             } break;
             case State::NO_MATCH:
-                send_quat(gyro_->get_quat(), gyro_->get_id());
                 break;
             case State::MATCH:
-                send_quat(gyro_->get_quat(), gyro_->get_id());
                 break;
             case State::SHUTDOWN: {
                 if (state_time_ms_ > ESTIMATED_SHUTDOWN_TIME_MS) {
@@ -126,6 +124,27 @@ class Rpi {
                 float p = ((float)state_time_ms_) * (1.0f / ESTIMATED_SHUTDOWN_TIME_MS);
                 led_ring_->set_progress(std::exp(-p * 4.0f));
                 send_shutdown_request();
+            } break;
+            default:
+                break;
+        }
+    }
+
+    void on_quat() {
+        state_time_ms_ += 10;
+
+        switch (state_) {
+            case State::OFF:
+                break;
+            case State::BOOT_RPI: {
+            } break;
+            case State::NO_MATCH:
+                send_quat(gyro_->get_quat(), gyro_->get_id());
+                break;
+            case State::MATCH:
+                send_quat(gyro_->get_quat(), gyro_->get_id());
+                break;
+            case State::SHUTDOWN: {
             } break;
             default:
                 break;

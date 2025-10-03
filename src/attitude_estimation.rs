@@ -59,7 +59,7 @@ pub struct AttitudeEstimation {
 }
 
 pub struct AttitudeEstimationResult {
-    pub quat: [f64; 4],
+    pub quat: nalgebra::UnitQuaternion<f64>,
     pub n_matches: u32,
     pub obs_xy: Vec<[f32; 2]>,
     pub obs_xyz: Vec<[f64; 3]>,
@@ -169,18 +169,12 @@ impl AttitudeEstimation {
 
         let processing_time = start_instant.elapsed().as_secs_f32();
 
-        let quat_vec = [
-            res.quat[0] as f64,
-            res.quat[1] as f64,
-            res.quat[2] as f64,
-            res.quat[3] as f64,
-        ];
         let quat: nalgebra::Unit<nalgebra::Quaternion<f64>> =
             nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                quat_vec[3],
-                quat_vec[0],
-                quat_vec[1],
-                quat_vec[2],
+                res.quat[3] as f64,
+                res.quat[0] as f64,
+                res.quat[1] as f64,
+                res.quat[2] as f64,
             ));
 
         let extrinsic: nalgebra::Matrix3<f64> = quat.to_rotation_matrix().inverse().into_inner();
@@ -227,7 +221,7 @@ impl AttitudeEstimation {
         }
 
         Ok(AttitudeEstimationResult {
-            quat: quat_vec,
+            quat: quat,
             n_matches: res.n_matches as u32,
             obs_xy: obs_xy_f32,
             obs_xyz: obs_xyz,
@@ -416,7 +410,7 @@ impl AxisCalibration {
         let frame_points_radial = to_radial_vec(&frame_points_aligned);
 
         AttitudeEstimationPayload {
-            quat: res.quat,
+            quat: [res.quat.w, res.quat.i, res.quat.j, res.quat.k],
             n_matches: res.n_matches,
             alignment_error,
             matched_obs_radial: matched_obs_radial,

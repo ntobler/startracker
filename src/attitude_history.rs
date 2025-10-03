@@ -1,5 +1,8 @@
 use std::collections::VecDeque;
 
+const GYRO_DATA_READY_TO_UART_START_NS: u64 = 140_000;
+const LINUX_UART_RX_DELAY_NS: u64 = 2_000_000; //estimate
+
 fn ns_to_s(ns: u64) -> f64 {
     (ns as f64) * 1e-9
 }
@@ -61,10 +64,13 @@ impl AttitudeHistory {
             }
         }
 
+        // Find time difference to reference point in time
+        let gyro_time_estimate =
+            rx_time_ns - GYRO_DATA_READY_TO_UART_START_NS - LINUX_UART_RX_DELAY_NS;
         let delta_t = if let Some(r) = self.reference_instant_ns {
-            ns_to_s(rx_time_ns - r)
+            ns_to_s(gyro_time_estimate - r)
         } else {
-            self.reference_instant_ns = Some(rx_time_ns);
+            self.reference_instant_ns = Some(gyro_time_estimate);
             0.0
         };
 

@@ -602,6 +602,10 @@ def generate_test_set():
         for t in it:
             instance.t = t
             img = instance.capture()
+
+            h, w = img.shape[:2]
+            img = cv2.resize(img, (w * 2, h * 2), interpolation=cv2.INTER_NEAREST)
+
             cv2.imwrite(str(folder / f"frame_{t:002d}.png"), img)
 
 
