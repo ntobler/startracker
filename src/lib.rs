@@ -11,6 +11,7 @@ use crate::optim::OptimizableProblem;
 mod common_axis;
 mod optim;
 mod poisson_disk;
+mod quat_optim;
 mod starcal;
 mod stargradcal;
 mod testingutils;
@@ -29,6 +30,8 @@ fn libstartracker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StarcalCalibrationResult>()?;
     m.add_class::<CameraConfig>()?;
     m.add_class::<Camera>()?;
+    m.add_function(wrap_pyfunction!(estimate_gyro_params, m)?)?;
+    m.add_function(wrap_pyfunction!(filter_step, m)?)?;
     Ok(())
 }
 
@@ -366,4 +369,64 @@ impl Camera {
             .expect("Shape mismatch in reshape");
         Ok(np_array)
     }
+}
+
+#[pyfunction]
+fn estimate_gyro_params<'py>(
+    py: Python<'py>,
+    q_0: [f64; 4],
+    q_1: [f64; 4],
+    omega_t: numpy::PyReadonlyArray2<'py, f64>,
+    scales: [f64; 3],
+    biases: [f64; 3],
+    delta_t: f64,
+) -> PyResult<(
+    Bound<'py, numpy::PyArray1<f64>>,
+    Bound<'py, numpy::PyArray2<f64>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+)> {
+    let omega_t_view: &[[f64; 3]] = numpy_to_slice_2d(&omega_t)?;
+    let (residuals, jacobian, q_x) =
+        quat_optim::objective_function(&q_0, &q_1, omega_t_view, scales, biases, delta_t);
+
+    let residuals_np = residuals.as_slice().to_pyarray_bound(py);
+    let jacobian_np = jacobian.transpose().as_slice().to_pyarray_bound(py);
+    let jacobian_np = jacobian_np.reshape((jacobian.nrows(), jacobian.ncols()))?;
+    let q_x_np = q_x.as_slice().to_pyarray_bound(py);
+
+    Ok((residuals_np, jacobian_np, q_x_np))
+}
+
+#[pyfunction]
+fn filter_step<'py>(
+    py: Python<'py>,
+    q_0: [f64; 4],
+    q_1: [f64; 4],
+    omega_t: numpy::PyReadonlyArray2<'py, f64>,
+    scales: [f64; 3],
+    biases: [f64; 3],
+    delta_t: f64,
+    lamb: f64,
+    alpha: f64,
+    trust_region: f64,
+) -> PyResult<(
+    Bound<'py, numpy::PyArray1<f64>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+)> {
+    let omega_t_view: &[[f64; 3]] = numpy_to_slice_2d(&omega_t)?;
+    let (scales, biases) = quat_optim::filter_step(
+        &q_0,
+        &q_1,
+        omega_t_view,
+        scales,
+        biases,
+        delta_t,
+        lamb,
+        alpha,
+        trust_region,
+    );
+
+    let scales_np = scales.as_slice().to_pyarray_bound(py);
+    let biases_np = biases.as_slice().to_pyarray_bound(py);
+    Ok((scales_np, biases_np))
 }
