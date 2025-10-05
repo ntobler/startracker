@@ -1,7 +1,10 @@
 
-import { api, HelpDisplay, unflatten3x3, matmul3x3, matToLaTeX, vecToLaTeX, parseSize, toF32Array } from './util.js';
+import { api, HelpDisplay, matToLaTeX, vecToLaTeX, parseSize, toF32Array } from './util.js';
+import { mat_apply_vec, quat_to_mat, create_fast_params, fast_obj_to_pix } from './geom.js';
+
+
 import { ref } from './vue.esm-browser.prod.min.js';
-import { pack, unpack } from './msgpackr.js'
+import { unpack } from './msgpackr.js'
 
 
 let katexPromise;
@@ -134,7 +137,7 @@ export default {
         },
         toggleImageType() {
             this.view_settings.image_type = {
-                "Raw": "Processed", "Processed": "Crop2x", "Crop2x": "Raw",
+                "Raw": "Processed", "Processed": "Crop2x", "Crop2x": "Motion", "Motion": "Raw",
             }[this.view_settings.image_type];
             this.setSettings()
         },
@@ -207,9 +210,9 @@ export default {
                 this.drawStars(ctx, this.stream.attitude_estimation)
             }
 
-            if (this.stream.motion_xy) {
-                this.drawMotion(ctx, this.stream.motion_xy)
-            }
+            // if (this.stream.motion_xy) {
+            //     this.drawMotion(ctx, this.stream.motion_quat)
+            // }
 
             this.showAutoCalibrationInfo(this.stream.auto_calibrator);
 
@@ -269,14 +272,24 @@ export default {
             }
             ctx.restore()
         },
-        drawMotion(ctx, motion_raw) {
-            if (motion_raw === undefined) return
-            let motion_xy = toF32Array(motion_raw);
+        drawMotion(ctx, motion_quat_raw) {
+
+            const extrinsic = state.extrinsic;
+            const center_vec = [extrinsic[7], extrinsic[8], extrinsic[9]]
+            const fast_params = create_fast_params(state.intrinsic, state.dist_coeffs)
+
+
+            if (motion_quat_raw === undefined) return
+            let motion_quat = toF32Array(motion_quat_raw);
             ctx.save()
             ctx.lineCap = "round"
             ctx.beginPath()
-            for (let i = 0; i < motion_xy.length; i += 2) {
-                ctx.lineTo(motion_xy[i], motion_xy[i + 1])
+            for (let i = 0; i < motion_quat.length; i += 4) {
+                let quat = motion_quat.subarray(i, i + 4);
+                let mat = quat_to_mat(quat);
+                const camera_xyz = mat_apply_vec(mat, center_vec)
+                const xy_dist = fast_obj_to_pix(camera_xyz, fast_params);
+                ctx.lineTo(xy_dist[0], xy_dist[0])
             }
             ctx.stroke()
             ctx.restore()
@@ -303,8 +316,8 @@ export default {
         },
         drawCelestialCoordinateFrame(ctx, state) {
 
-            const extrinsic = unflatten3x3(state.extrinsic);
-            const intrinsic = unflatten3x3(state.intrinsic);
+            const extrinsic = state.extrinsic;
+            const intrinsic = state.intrinsic;
             const dist_coeffs = state.dist_coeffs;
 
             // Return early if data is missing
@@ -312,30 +325,19 @@ export default {
                 return;
             }
 
-            ctx.save()
-            ctx.strokeStyle = "#333F"
-            ctx.setLineDash([6, 6]);
-            ctx.lineWidth = 1;
-
-            // Extract intrinsic parameters
-            const projection_matrix = matmul3x3(intrinsic, extrinsic);
-            const fx = intrinsic[0][0];
-            const fy = intrinsic[1][1];
-            const tx = intrinsic[0][2];
-            const ty = intrinsic[1][2];
-            const k1 = dist_coeffs[0];
-            const k2 = dist_coeffs[1];
-            const p1 = dist_coeffs[2];
-            const p2 = dist_coeffs[3];
-            const k3 = dist_coeffs[4];
-
             // Pre-calculate variable used for culling
             const width = state.image_size[0];
             const height = state.image_size[1];
             const diagonal = Math.sqrt(width * width + height * height);
             const angle_margin_factor = 1.4;
-            const cos_phi = Math.cos(angle_margin_factor * Math.atan(diagonal / intrinsic[0][0] / 2));
-            const target_vector = extrinsic[2];
+            const cos_phi = Math.cos(angle_margin_factor * Math.atan(diagonal / intrinsic[0] / 2));
+            const target_vector = [extrinsic[6], extrinsic[7], extrinsic[8]];
+            const fast_params = create_fast_params(state.intrinsic, state.dist_coeffs)
+
+            ctx.save()
+            ctx.strokeStyle = "#333F"
+            ctx.setLineDash([6, 6]);
+            ctx.lineWidth = 1;
 
             // Keep track of line drawing state (whether a line has been stared or not)
             let drawing = false;
@@ -343,8 +345,8 @@ export default {
             // Define plot function for a point
             function plot_point(lat_rad, lon_rad) {
                 const cos_lat = Math.cos(lat_rad);
-                let x = Math.cos(lon_rad) * cos_lat;
-                let y = Math.sin(lon_rad) * cos_lat;
+                const x = Math.cos(lon_rad) * cos_lat;
+                const y = Math.sin(lon_rad) * cos_lat;
                 const z = Math.sin(lat_rad);
 
                 // Check if point is roughly in frame
@@ -356,31 +358,16 @@ export default {
                     return true;
                 }
 
-                // Perspective projection
-                const p = projection_matrix
-                const diviser = p[2][0] * x + p[2][1] * y + p[2][2] * z;
-                const img_x = (p[0][0] * x + p[0][1] * y + p[0][2] * z) / diviser;
-                const img_y = (p[1][0] * x + p[1][1] * y + p[1][2] * z) / diviser;
-
-                // Distortion
-                x = (img_x - tx) / fx
-                y = (img_y - ty) / fy
-                const r2 = x ** 2 + y ** 2
-                const r4 = r2 * r2
-                const r6 = r2 * r4
-                const d = 1 + k1 * r2 + k2 * r4 + k3 * r6
-                let x_dist = x * d + (2 * p1 * x * y + p2 * (r2 + 2 * x ** 2))
-                let y_dist = y * d + (2 * p2 * x * y + p1 * (r2 + 2 * y ** 2))
-                x_dist = (x_dist * fx) + tx
-                y_dist = (y_dist * fy) + ty
+                const camera_xyz = mat_apply_vec(extrinsic, [x, y, z])
+                const xy_dist = fast_obj_to_pix(camera_xyz, fast_params);
 
                 // Draw line
                 if (!drawing) {
                     ctx.beginPath();
-                    ctx.moveTo(x_dist, y_dist);
+                    ctx.moveTo(xy_dist[0], xy_dist[1]);
                     drawing = true;
                 } else {
-                    ctx.lineTo(x_dist, y_dist);
+                    ctx.lineTo(xy_dist[0], xy_dist[1]);
                 }
                 return false
             }

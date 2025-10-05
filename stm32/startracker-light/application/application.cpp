@@ -115,8 +115,12 @@ void Application::check_packets() {
             case Cmd::STARQUAT: {
                 Quaternion q;
                 std::memcpy(&q.q_, &data[0], sizeof(float) * 4);
-                uint16_t id = *((uint16_t *)&data[16]);
-                rpi_.star_quat(q, id);
+                Vec3 gyro_scale;
+                std::memcpy(&gyro_scale.x, &data[16], sizeof(float) * 3);
+                Vec3 gyro_bias;
+                std::memcpy(&gyro_bias.x, &data[28], sizeof(float) * 3);
+                uint16_t id = *((uint16_t *)&data[40]);
+                rpi_.star_quat(q, gyro_scale, gyro_bias, id);
             } break;
             case Cmd::SHUT_DOWN_REQUEST:
                 // Command never sent by Rpi

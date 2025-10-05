@@ -41,15 +41,16 @@ Gyro::Gyro(SPI_HandleTypeDef *hspi)
       write_index_{0},
       read_index_{0},
       hspi_(hspi),
-      gyro_bias_filters_{{HpFilter{0.999f}, HpFilter{0.999f}, HpFilter{0.999f}}},
-      accel_bias_filters_{{HpFilter{0.999f}, HpFilter{0.999f}, HpFilter{0.999f}}},
+      gyro_scale_{0, 0, 0},
+      gyro_bias_{0, 0, 0},
       gyro_{0, 0, 0},
       accel_{0, 0, 0},
       q_{},
-      q_correction_{},
+      accel_bias_filters_{{HpFilter{0.999f}, HpFilter{0.999f}, HpFilter{0.999f}}},
       pos_filters_{{LpIntFilter{0.999f}, LpIntFilter{0.999f}, LpIntFilter{0.999f}}},
       pos_{0, 0, 0},
-      id_{0} {}
+      id_{0},
+      gyro_raw_history_{} {}
 
 void Gyro::start() {
     uint8_t config;
@@ -108,20 +109,24 @@ void Gyro::tick() {
                                  (((uint16_t)payload.accel_z_higher) << 8))) *
                SCALE_MPSS_PER_DIGIT;
 
-    Vec3 filtered_gyro;
-    filtered_gyro.x = gyro_bias_filters_[0].process(gyro_.x);
-    filtered_gyro.y = gyro_bias_filters_[1].process(gyro_.y);
-    filtered_gyro.z = gyro_bias_filters_[2].process(gyro_.z);
+    gyro_raw_history_[id_ % GYRO_RAW_HISTORY_LEN] = gyro_;
+
+    gyro_.x *= 1.0 + gyro_scale_.x;
+    gyro_.y *= 1.0 + gyro_scale_.y;
+    gyro_.z *= 1.0 + gyro_scale_.z;
+
+    gyro_.x += gyro_bias_.x;
+    gyro_.y += gyro_bias_.y;
+    gyro_.z += gyro_bias_.z;
+
+    Quaternion q = Quaternion::from_angular_velocities(gyro_.x, gyro_.y, gyro_.z, DELTA_T);
+    q_.multiply_right(q);
+    q_.normalize();
 
     Vec3 filtered_accel;
     filtered_accel.x = accel_bias_filters_[0].process(accel_.x);
     filtered_accel.y = accel_bias_filters_[1].process(accel_.y);
     filtered_accel.z = accel_bias_filters_[2].process(accel_.z);
-
-    Quaternion q = Quaternion::from_angular_velocities(filtered_gyro.x, filtered_gyro.y,
-                                                       filtered_gyro.z, DELTA_T);
-    q_.multiply_right(q);
-    q_.normalize();
 
     pos_.x = pos_filters_[0].process(filtered_accel.x * DELTA_T);
     pos_.y = pos_filters_[1].process(filtered_accel.y * DELTA_T);
@@ -130,11 +135,37 @@ void Gyro::tick() {
     read_index_ = (read_index_ + 1) % N_ELEMENTS;
 }
 
+void Gyro::adjust(Quaternion &q, Vec3 &scale, Vec3 &bias, uint16_t t) {
+    gyro_scale_ = scale;
+    gyro_bias_ = bias;
+    q_ = q;
+
+    t = t % GYRO_RAW_HISTORY_LEN;
+
+    while (t != id_ % GYRO_RAW_HISTORY_LEN) {
+        Vec3 omega_raw = gyro_raw_history_[t];
+
+        omega_raw.x *= 1.0 + gyro_scale_.x;
+        omega_raw.y *= 1.0 + gyro_scale_.y;
+        omega_raw.z *= 1.0 + gyro_scale_.z;
+
+        omega_raw.x += gyro_bias_.x;
+        omega_raw.y += gyro_bias_.y;
+        omega_raw.z += gyro_bias_.z;
+
+        Quaternion delta_q =
+            Quaternion::from_angular_velocities(omega_raw.x, omega_raw.y, omega_raw.z, DELTA_T);
+        q.multiply_right(delta_q);
+        q_.normalize();
+
+        t = (t + 1) % GYRO_RAW_HISTORY_LEN;
+    }
+}
+
 void Gyro::get_xy_images(float &x, float &y) {
     // Rotate z vector with internal quaternion and return x and y images.
     float v[3] = {0.0, 0.0, 1.0};
-    Quaternion q = Quaternion::multiply(q_correction_, q_);
-    q.rotate_vec(v);
+    q_.rotate_vec(v);
     x = v[0];
     y = v[1];
 }

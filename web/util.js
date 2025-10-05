@@ -114,29 +114,6 @@ export class HelpDisplay {
     }
 }
 
-export function unflatten3x3(a) {
-    return [
-        [a[0], a[1], a[2]],
-        [a[3], a[4], a[5]],
-        [a[6], a[7], a[8]],
-    ]
-}
-
-export function matmul3x3(a, b) {
-    const result = [];
-    for (let i = 0; i < 3; i++) {
-        result[i] = [];
-        for (let j = 0; j < 3; j++) {
-            let sum = 0;
-            for (let k = 0; k < 3; k++) {
-                sum += a[i][k] * b[k][j];
-            }
-            result[i][j] = sum;
-        }
-    }
-    return result;
-}
-
 export function matToLaTeX(m, digits = 2) {
     let str = String.raw`\begin{bmatrix}`;
     for (let line of m) {

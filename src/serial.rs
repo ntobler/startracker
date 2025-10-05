@@ -24,26 +24,26 @@ fn calc_crc_ibm(data: &[u8]) -> u16 {
     crc & 0xFFFF
 }
 
-pub struct RxPacket {
+pub struct TxRawPacket {
+    pub cmd: u8,
+    pub payload: Vec<u8>,
+}
+
+pub struct RxRawPacket {
     pub cmd: u8,
     pub payload: Vec<u8>,
     pub rx_time_ns: u64,
 }
 
-pub struct TxPacket {
-    pub cmd: u8,
-    pub payload: Vec<u8>,
-}
-
 struct PacketReader {
     buffer: Vec<u8>,
     rx_time_ns: u64,
-    callback: Arc<dyn Fn(RxPacket) + Send + Sync>,
+    callback: Arc<dyn Fn(RxRawPacket) + Send + Sync>,
     ns_per_byte: u64,
 }
 
 impl PacketReader {
-    fn new(baudrate: u32, callback: Arc<dyn Fn(RxPacket) + Send + Sync>) -> Self {
+    fn new(baudrate: u32, callback: Arc<dyn Fn(RxRawPacket) + Send + Sync>) -> Self {
         let ns_per_byte = (1_000_000_000 * 10) / baudrate as u64;
         PacketReader {
             buffer: Vec::with_capacity(255 + 4),
@@ -83,7 +83,7 @@ impl PacketReader {
             }
             let crc = calc_crc_ibm(&self.buffer[0..(2 + len)]);
             if crc == ((self.buffer[2 + len] as u16) << 8 | (self.buffer[2 + len + 1] as u16)) {
-                let packet = RxPacket {
+                let packet = RxRawPacket {
                     cmd: self.buffer[0],
                     payload: self.buffer[2..(2 + len)].to_vec(),
                     rx_time_ns: self.rx_time_ns,
@@ -111,7 +111,7 @@ fn serial_thread(
     port: String,
     baudrate: u32,
     tx_channel: crossbeam_channel::Receiver<Vec<u8>>,
-    rx_callback: Arc<dyn Fn(RxPacket) + Send + Sync>,
+    rx_callback: Arc<dyn Fn(RxRawPacket) + Send + Sync>,
 ) -> Result<(), String> {
     let mut reader = serialport::new(port, baudrate)
         .timeout(Duration::from_millis(10))
@@ -170,7 +170,7 @@ impl Serial {
     pub fn new(
         port: String,
         baudrate: u32,
-        callback: Arc<dyn Fn(RxPacket) + Send + Sync>,
+        callback: Arc<dyn Fn(RxRawPacket) + Send + Sync>,
     ) -> Result<Self, String> {
         let (tx_channel_tx, tx_channel_rx) = crossbeam_channel::bounded::<Vec<u8>>(10); // unbuffered: strictly 1:1 signal
 
@@ -202,7 +202,7 @@ impl Serial {
         err
     }
 
-    pub fn send(&mut self, packet: &TxPacket) -> Result<(), String> {
+    pub fn send(&mut self, packet: &TxRawPacket) -> Result<(), String> {
         let mut buffer = Vec::with_capacity(2 + packet.payload.len() + 2);
         buffer.push(packet.cmd);
         buffer.push(packet.payload.len() as u8);

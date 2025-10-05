@@ -20,10 +20,13 @@ mod attitude_estimation;
 mod attitude_history;
 mod cam;
 mod cam_cal;
+mod commands;
 mod common_axis;
-mod motion;
+mod gyro_calibrator;
+mod motion_decorelation;
 mod opencvutils;
 mod optim;
+mod quat_optim;
 mod serial;
 mod testingutils;
 mod utils;
@@ -81,6 +84,11 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    println!(
+        "Main reached after {:?}s",
+        utils::duration_since_process_start().as_secs_f32()
+    );
+
     let application = Arc::new(app::App::load_or_default("config.json"));
 
     //Start camera thread

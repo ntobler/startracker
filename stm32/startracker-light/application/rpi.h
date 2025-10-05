@@ -85,14 +85,13 @@ class Rpi {
         HAL_GPIO_WritePin(RPI_ENABLE_GPIO_Port, RPI_ENABLE_Pin, GPIO_PIN_RESET);
         power_ = false;
     };
-    void send_quat(const Quaternion& quat, uint16_t id) {
-        uint8_t buffer[18];
-        *((float*)&buffer[0]) = quat.w();
-        *((float*)&buffer[4]) = quat.x();
-        *((float*)&buffer[8]) = quat.y();
-        *((float*)&buffer[12]) = quat.z();
-        *((uint16_t*)&buffer[16]) = id;
-        rpi_serial_->write_command(QUAT, buffer, sizeof(quat.q_) + 2);
+    void send_quat(const Vec3& raw_gyro, uint16_t id) {
+        uint8_t buffer[14];
+        *((float*)&buffer[0]) = raw_gyro.x;
+        *((float*)&buffer[4]) = raw_gyro.y;
+        *((float*)&buffer[8]) = raw_gyro.z;
+        *((uint16_t*)&buffer[12]) = id;
+        rpi_serial_->write_command(QUAT, buffer, sizeof(raw_gyro) + 2);
     };
     void send_shutdown_request() {
         uint8_t payload = 31;
@@ -139,10 +138,10 @@ class Rpi {
             case State::BOOT_RPI: {
             } break;
             case State::NO_MATCH:
-                send_quat(gyro_->get_quat(), gyro_->get_id());
+                send_quat(gyro_->get_raw_gyro(), gyro_->get_id());
                 break;
             case State::MATCH:
-                send_quat(gyro_->get_quat(), gyro_->get_id());
+                send_quat(gyro_->get_raw_gyro(), gyro_->get_id());
                 break;
             case State::SHUTDOWN: {
             } break;
@@ -151,11 +150,9 @@ class Rpi {
         }
     }
 
-    void star_quat(Quaternion& q_req, uint16_t id) {
+    void star_quat(Quaternion& q_req, Vec3& scale, Vec3& bias, uint16_t id) {
         if (q_req.is_non_zero()) {
-            Quaternion q = gyro_->get_quat().inv();
-            q.multiply_left(q_req);
-            gyro_->set_correction_quat(q);
+            gyro_->adjust(q_req, scale, bias, id);
         } else {
             __NOP();
         }

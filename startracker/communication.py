@@ -112,7 +112,8 @@ class PacketHandler(serial.Serial):
         cmd_len_and_payload = cmd_len + payload
         if crc != (crc_expected := calc_crc_ibm(cmd_len_and_payload).to_bytes(2, "big")):
             raise CRCError(
-                f"Crc mismatch: {crc} instead of {crc_expected}. Data: {cmd} {length} {payload}"
+                f"Crc mismatch: {crc!r} instead of {crc_expected!r}. "
+                f"Data: {cmd!r} {length!r} {payload!r}"
             )
 
         return cmd, payload

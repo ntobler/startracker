@@ -111,6 +111,21 @@ impl CameraParameters {
         2.0 * f64::atan(diagonal / f64::min(self.fx, self.fy) / 2.0)
     }
 
+    pub fn max_cos_phi(self, margin_factor: f64) -> f64 {
+        // Calculate top, left, right, bottom coordinates in a focal length = 1 system
+        let t = margin_factor * (self.tx + 0.5) / self.fx;
+        let l = margin_factor * (self.ty + 0.5) / self.fy;
+        let r = margin_factor * (self.width() as f64 - self.tx - 0.5) / self.fx;
+        let b = margin_factor * (self.height() as f64 - self.ty - 0.5) / self.fy;
+
+        // Get maximum diagonal from center
+        let squared_distances = [t * t + l * l, t * t + r * r, b * b + l * l, b * b + r * r];
+        let max_squared = squared_distances.iter().copied().reduce(f64::max).unwrap();
+
+        // Fraction between diagonal and the hypotenuse is cos_phi
+        1.0 / (1.0 + max_squared).sqrt()
+    }
+
     /// Conservative higher estimate of angle per pixels
     pub fn max_angle_per_pixel(&self) -> f64 {
         f64::atan(1.0 / f64::min(self.fx, self.fy))

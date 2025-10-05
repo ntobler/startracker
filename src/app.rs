@@ -11,7 +11,9 @@ use crate::attitude_estimation;
 use crate::attitude_history;
 use crate::cam;
 use crate::cam_cal;
-use crate::motion;
+use crate::commands::{self, RxCommand, TxCommand};
+use crate::gyro_calibrator;
+use crate::motion_decorelation;
 use crate::opencvutils;
 use crate::serial;
 use crate::utils;
@@ -45,6 +47,7 @@ enum ImageType {
     Raw,
     Processed,
     Crop2x,
+    Motion,
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
@@ -233,7 +236,12 @@ pub struct App {
     state: Mutex<State>,
     pub stream_dispatcher: webutils::DataDispatcher<Vec<u8>>,
     pub running: AtomicBool,
-    attitude_estimation: ArcSwap<Option<attitude_estimation::AttitudeEstimation>>,
+    attitude_estimation: ArcSwap<
+        Option<(
+            attitude_estimation::AttitudeEstimation,
+            motion_decorelation::MotionDecorelator,
+        )>,
+    >,
     returncode: AtomicU8,
 }
 
@@ -378,10 +386,15 @@ impl App {
         };
 
         self.attitude_estimation.store(Arc::new(match cal {
-            Some(cal) => Some(
-                attitude_estimation::AttitudeEstimation::new(att_config, cal)
-                    .map_err(|e| format!("Error initializing attitude estimation: {}.", e))?,
-            ),
+            Some(cal) => {
+                let ae = attitude_estimation::AttitudeEstimation::new(att_config, cal)
+                    .map_err(|e| format!("Error initializing attitude estimation: {}.", e))?;
+
+                let (relevant_stars_xyz, _) = ae.extract_cat_stars(4.5);
+                let md = motion_decorelation::MotionDecorelator::new(cal, &relevant_stars_xyz);
+
+                Some((ae, md))
+            }
             None => None,
         }));
         Ok(())
@@ -413,7 +426,9 @@ struct StreamObject {
     attitude_estimation: Result<attitude_estimation::AttitudeEstimationPayload, String>,
     pre_processing_time: f32,
     #[serde(serialize_with = "utils::contiguous_serialize_2d")]
-    motion_xy: Vec<[f32; 2]>,
+    motion_quat: Vec<[f32; 4]>,
+    motion_start_id: u64,
+    gyro_calibrator_status: Option<gyro_calibrator::GyroCalibratorStatus>,
 }
 
 impl StreamObject {
@@ -424,7 +439,9 @@ impl StreamObject {
         image_quality: String,
         attitude_estimation: Result<attitude_estimation::AttitudeEstimationPayload, String>,
         pre_processing_time: f32,
-        motion_xy: Vec<[f32; 2]>,
+        motion_quat: Vec<[f32; 4]>,
+        motion_start_id: u64,
+        gyro_calibrator_status: Option<gyro_calibrator::GyroCalibratorStatus>,
     ) -> Self {
         let auto_calibrator = AutoCalibrationState { active: false };
         StreamObject {
@@ -435,7 +452,9 @@ impl StreamObject {
             auto_calibrator: auto_calibrator,
             attitude_estimation: attitude_estimation,
             pre_processing_time: pre_processing_time,
-            motion_xy,
+            motion_quat,
+            motion_start_id,
+            gyro_calibrator_status,
         }
     }
 }
@@ -459,17 +478,8 @@ where
     }
 }
 
-enum Cmd {
-    Quat = 0x00,
-    StarQuat = 0x01,
-    ShutdownRequest = 0x02,
-}
-
 pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
     let app = app_arc.as_ref();
-
-    let stream_dispatcher = &app.stream_dispatcher;
-    let running = &app.running;
 
     println!("Setup Camera");
 
@@ -482,32 +492,33 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             .clone()
     };
 
-    let camera_device_quat =
-        nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(0.0, 0.0, 0.0, 1.0));
-
     let mut camera =
         cam::Camera::new(&cam_config).map_err(|e| format!("Error initializing camera: {}.", e))?;
 
-    let attitude_history = Arc::new(Mutex::new(attitude_history::AttitudeHistory::new()));
+    println!(
+        "Camera initialized loop reached after {:?}s",
+        utils::duration_since_process_start().as_secs_f32()
+    );
 
+    let camera_device_quat = motion_decorelation::DeviceCameraTransform::new();
+    let gyro_parameters = gyro_calibrator::GyroParameters::zero();
+    let attitude_history = Arc::new(Mutex::new(attitude_history::AttitudeHistory::new(
+        gyro_parameters,
+    )));
+
+    // Serial receive callback
     let serial_rx_callback = {
         let app_arc = app_arc.clone();
         let attitude_history = attitude_history.clone();
-        move |packet: serial::RxPacket| {
-            if packet.cmd == Cmd::Quat as u8 && packet.payload.len() == 18 {
-                let mut quat = [0f64; 4];
-                for (i, chunk) in packet.payload.chunks_exact(4).enumerate() {
-                    let f32_val = f32::from_ne_bytes(chunk.try_into().unwrap());
-                    quat[i] = f32_val as f64;
-                }
-                let id: u16 = u16::from_ne_bytes(packet.payload[16..18].try_into().unwrap());
-
-                attitude_history
-                    .lock()
-                    .unwrap()
-                    .add(&quat, id, packet.rx_time_ns);
-            } else if packet.cmd == Cmd::ShutdownRequest as u8 && packet.payload.len() == 1 {
-                if packet.payload[0] == 31 {
+        move |packet: serial::RxRawPacket| {
+            if let Some(rx) = commands::Gyro::from_rx_packet(&packet) {
+                attitude_history.lock().unwrap().push_raw(
+                    std::array::from_fn(|i| rx.raw_gyro[i] as f64),
+                    rx.id,
+                    packet.rx_time_ns,
+                );
+            } else if let Some(rx) = commands::ShutdownRequest::from_rx_packet(&packet) {
+                if rx.code == 31 {
                     println!("Received shutdown request from serial.");
                     app_arc.set_returncode(31);
                     app_arc.running.store(false, Ordering::Release);
@@ -534,21 +545,25 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
 
     // Send keepalive
     {
-        let payload: Vec<u8> = vec![0; 16]; // Send zeros if attitude invalid
-        let packet = serial::TxPacket {
-            cmd: Cmd::StarQuat as u8,
-            payload: payload,
-        };
+        // Send zeros if attitude invalid
+        let packet = commands::StarQuat::empty().to_tx_packet();
         if let Err(e) = serial.send(&packet) {
             eprintln!("Error sending attitude packet over serial: {}", e);
         }
     }
 
+    let mut gyro_calibrator = gyro_calibrator::GyroCalibrator::new();
+
     app.init_attitude_estimation()?;
 
     let mut ie = opencvutils::ImageEncoder::new(Some(30.0));
 
-    while running.load(Ordering::Acquire) {
+    println!(
+        "Process loop reached after {:?}s",
+        utils::duration_since_process_start().as_secs_f32()
+    );
+
+    while app.running.load(Ordering::Acquire) {
         //Update config
         let (acquisition_request, image_type, send_image) = {
             let mut state_ref = app.state.lock().map_err(|e| e.to_string())?;
@@ -613,7 +628,7 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
 
         // Find attitude estimation result
         let (att_payload, quat) = match app.attitude_estimation.load_full().as_ref() {
-            Some(att_est) => match att_est.estimate_attitude_from_image(&preprocessed) {
+            Some((att_est, _)) => match att_est.estimate_attitude_from_image(&preprocessed) {
                 Ok(r) => {
                     let mut state = app.state.lock().map_err(|e| e.to_string())?;
                     state.attitude = Some(nalgebra::Rotation3::from_matrix_unchecked(
@@ -636,65 +651,83 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             None => (Err("attitude estimation not available".to_string()), None),
         };
 
-        // Send attitude over serial
-        {
-            let payload: Vec<u8> = match &quat {
-                Some(q) => {
-                    let q = camera_device_quat * q * camera_device_quat.inverse();
-                    [q.w, q.i, q.j, q.k]
-                        .map(|x| x as f32)
-                        .iter()
-                        .flat_map(|f| f.to_ne_bytes())
-                        .collect()
-                }
-                None => vec![0; 16], // Send zeros if attitude invalid
-            };
-            let packet = serial::TxPacket {
-                cmd: Cmd::StarQuat as u8,
-                payload: payload,
-            };
-            if let Err(e) = serial.send(&packet) {
-                eprintln!("Error sending attitude packet over serial: {}", e);
-            }
-        }
-
         // Extract motion during camera exposure
-        let (motion_quats, fs, exposure_us) = {
-            let a = attitude_history.lock().unwrap();
+        let (motion_quats, motion_start_id) = {
+            let attitude_history = attitude_history.lock().unwrap();
             let state_ref = app.state.lock().map_err(|e| e.to_string())?;
 
             let exposure_us = state_ref.persistent.camera_config.exposure_us as u64;
 
-            let quats = a.get_between(raw.timestamp_ns - (exposure_us * 1000), raw.timestamp_ns);
-            (quats, a.fs(), exposure_us)
+            let (mut quats, start_id) = match attitude_history
+                .get_quats_between(raw.timestamp_ns - (exposure_us * 1000), raw.timestamp_ns)
+            {
+                Some(x) => x,
+                None => (Vec::new(), 0),
+            };
+
+            // Transform quaternions into the camera frame
+            for q in quats.iter_mut() {
+                *q = camera_device_quat.quat_device_to_camera(q);
+            }
+
+            (quats, start_id)
         };
 
         // Convert to trace on camera
-        let motion_xy = {
-            let state_ref = app.state.lock().map_err(|e| e.to_string())?;
-            match state_ref.persistent.cal {
-                Some(cal) => motion::motion_to_pixels(&motion_quats, cal, camera_device_quat),
-                None => Vec::new(),
+        let motion_img = match app.attitude_estimation.load_full().as_ref() {
+            Some((_, motion_drawer)) => Some(motion_drawer.draw_motion(&motion_quats)),
+            None => None,
+        };
+
+        // Improve gyro scale and bias
+        let gyro_calibrator_status = {
+            let id = {
+                attitude_history
+                    .lock()
+                    .unwrap()
+                    .get_id_floor(raw.timestamp_ns)
+                    .ok_or("Failed to get index of time")?
+            };
+            match quat {
+                Some(q) => {
+                    let q_device = camera_device_quat.quat_camera_to_device(&q);
+                    gyro_calibrator.calibrate(q_device, id, &attitude_history)
+                }
+                None => Err("Quat not available".to_string()),
             }
         };
 
-        println!(
-            "len(motion_xy) = {:?}, exposure={:?}, fs={:?}",
-            motion_xy.len(),
-            exposure_us,
-            fs
-        );
+        match &gyro_calibrator_status {
+            Ok(s) => {
+                println!("Success! {:?}", s);
+            }
+            Err(s) => {
+                println!("Error :( {:?}", s);
+            }
+        };
+
+        // Send attitude over serial
+        {
+            let payload = match &gyro_calibrator_status {
+                Ok(p) => &p.to_payload(),
+                Err(_) => &commands::StarQuat::empty(),
+            };
+            if let Err(e) = serial.send(&payload.to_tx_packet()) {
+                eprintln!("Error sending attitude packet over serial: {}", e);
+            }
+        }
 
         // Prepare image for streaming
         let encoded_frame = if send_image {
             // Chose image to send
-            let send_image = match image_type {
+            let send_image: &cam::Frame<u8> = match image_type {
                 ImageType::Raw => &raw,
                 ImageType::Processed => &preprocessed,
                 ImageType::Crop2x => {
                     let (w, h) = (raw.width, raw.height);
                     &raw.crop(w / 4, h / 4, w / 2, h / 2)?
                 }
+                ImageType::Motion => motion_img.as_ref().unwrap_or(&raw),
             };
 
             // Encode image
@@ -714,11 +747,16 @@ pub fn tick(app_arc: Arc<App>) -> Result<(), String> {
             ie.quality_str(),
             att_payload,
             pre_processing_time,
-            motion_xy,
+            motion_quats
+                .iter()
+                .map(|x| [x.w as f32, x.i as f32, x.j as f32, x.k as f32])
+                .collect(),
+            motion_start_id,
+            gyro_calibrator_status.ok(),
         );
         let encoded = rmp_serde::to_vec_named(&stream_object)
             .expect("Failed to serialize stream in MessagePack format");
-        stream_dispatcher.put(encoded);
+        app.stream_dispatcher.put(encoded);
     }
 
     println!("Camera thread stopped gracefully");

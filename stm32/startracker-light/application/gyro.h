@@ -17,9 +17,8 @@
 #include "stdint.h"
 #include "stm32_hal.h"
 
-enum {
-    N_ELEMENTS = 16,
-};
+constexpr size_t N_ELEMENTS = 16;
+constexpr size_t GYRO_RAW_HISTORY_LEN = 128;
 
 struct __packed DataPayload {
     uint8_t dummy;
@@ -80,15 +79,16 @@ class Gyro {
     size_t read_index_;
     SPI_HandleTypeDef *hspi_;
 
-    std::array<HpFilter, 3> gyro_bias_filters_;
-    std::array<HpFilter, 3> accel_bias_filters_;
+    Vec3 gyro_scale_;
+    Vec3 gyro_bias_;
     Vec3 gyro_;
     Vec3 accel_;
     Quaternion q_;
-    Quaternion q_correction_;
+    std::array<HpFilter, 3> accel_bias_filters_;
     std::array<LpIntFilter, 3> pos_filters_;
     Vec3 pos_;
     uint16_t id_;
+    std::array<Vec3, GYRO_RAW_HISTORY_LEN> gyro_raw_history_;
 
     void write(uint8_t address, const uint8_t *data, size_t len);
 
@@ -97,12 +97,13 @@ class Gyro {
     void start();
     void tick();
     void get_xy_images(float &x, float &y);
+    const Vec3 &get_raw_gyro() const { return gyro_raw_history_[id_ % GYRO_RAW_HISTORY_LEN]; };
     const Vec3 &get_gyro() const { return gyro_; };
     const Vec3 &get_accel() const { return accel_; };
     const Vec3 &get_pos() const { return pos_; };
     const uint16_t get_id() const { return id_; };
     const Quaternion &get_quat() const { return q_; };
-    void set_correction_quat(Quaternion &q) { q_correction_ = q; }
+    void adjust(Quaternion &q, Vec3 &scale, Vec3 &bias, uint16_t t);
     void fetch_next();
     void spi_tx_rx_complete_callback(SPI_HandleTypeDef *hspi);
 };
